@@ -1,0 +1,4 @@
+enum MetodoDistribuicaoCubagem {
+  fixoPorTalhao,
+  proporcionalPorArea,
+}
