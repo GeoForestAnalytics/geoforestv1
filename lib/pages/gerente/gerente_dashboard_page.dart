@@ -1,13 +1,27 @@
-// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO COMPLETA COM FILTRO MULTISSELEÇÃO)
+// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO CORRIGIDA PARA MOSTRAR PENDENTES)
 
 import 'package:flutter/material.dart';
+import 'package:geoforestv1/models/parcela_model.dart'; // <<< VERIFIQUE SE ESTE IMPORT ESTÁ CORRETO
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 
-
-class GerenteDashboardPage extends StatelessWidget {
+class GerenteDashboardPage extends StatefulWidget {
   const GerenteDashboardPage({super.key});
+
+  @override
+  State<GerenteDashboardPage> createState() => _GerenteDashboardPageState();
+}
+
+class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<GerenteProvider>().iniciarMonitoramento();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,8 +35,18 @@ class GerenteDashboardPage extends StatelessWidget {
           return Center(child: Text('Ocorreu um erro:\n${provider.error}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)));
         }
 
-        final progressoGeral = provider.parcelasFiltradas.isNotEmpty ? provider.parcelasFiltradas.where((p) => p.status.name == 'concluida').length / provider.parcelasFiltradas.length : 0.0;
-        final concluido = provider.parcelasFiltradas.where((p) => p.status.name == 'concluida').length;
+        // =======================================================
+        // <<< INÍCIO DA MUDANÇA >>>
+        // =======================================================
+        
+        // A lógica agora considera o total de parcelas, não apenas as concluídas.
+        final totalPlanejado = provider.parcelasFiltradas.length;
+        final concluidas = provider.parcelasFiltradas.where((p) => p.status == StatusParcela.concluida).length;
+        final progressoGeral = totalPlanejado > 0 ? concluidas / totalPlanejado : 0.0;
+        
+        // =======================================================
+        // <<< FIM DA MUDANÇA >>>
+        // =======================================================
 
         return Scaffold(
           body: RefreshIndicator(
@@ -37,7 +61,8 @@ class GerenteDashboardPage extends StatelessWidget {
                   context: context,
                   title: 'Progresso Geral',
                   value: '${(progressoGeral * 100).toStringAsFixed(0)}%',
-                  subtitle: '$concluido de ${provider.parcelasFiltradas.length} parcelas concluídas',
+                  // O subtítulo agora mostra o total correto
+                  subtitle: '$concluidas de $totalPlanejado parcelas concluídas',
                   progress: progressoGeral,
                   color: Theme.of(context).colorScheme.primary,
                 ),
@@ -51,6 +76,7 @@ class GerenteDashboardPage extends StatelessWidget {
                   _buildBarChartWithTrendLineCard(context, provider.coletasPorMes),
                 const SizedBox(height: 24),
                 
+                // A tabela de desempenho por fazenda já mostra os pendentes, então está correta.
                 if (provider.desempenhoPorFazenda.isNotEmpty)
                   _buildFazendaDataTableCard(context, provider.desempenhoPorFazenda),
               ],
@@ -66,7 +92,9 @@ class GerenteDashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildMultiSelectProjectFilter(BuildContext context, GerenteProvider provider) {
+  // O resto do arquivo (os métodos _build...) permanece exatamente o mesmo.
+  // ... cole aqui o resto dos seus métodos _buildMultiSelectProjectFilter, _buildSummaryCard, etc. ...
+    Widget _buildMultiSelectProjectFilter(BuildContext context, GerenteProvider provider) {
     String displayText;
     if (provider.selectedProjetoIds.isEmpty) {
       displayText = 'Todos os Projetos';
@@ -163,32 +191,71 @@ class GerenteDashboardPage extends StatelessWidget {
   }
 
   Widget _buildRadarChartCard(BuildContext context, Map<String, int> data) {
-  
-  // =======================================================
-  // ================ INÍCIO DA CORREÇÃO ===================
-  // =======================================================
-  
-  // VERIFICAÇÃO DE SEGURANÇA:
-  // Se o mapa de dados tiver menos de 3 entradas,
-  // não tentamos construir o gráfico e mostramos um aviso.
-  if (data.length < 3) {
+    if (data.length < 3) {
+      return Card(
+        elevation: 2,
+        child: Container(
+          padding: const EdgeInsets.all(16.0),
+          height: 350,
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text("Desempenho por Equipe", style: Theme.of(context).textTheme.titleLarge),
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    'Dados insuficientes para gerar o gráfico.\n(São necessárias no mínimo 3 equipes com dados)',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final entries = data.entries.toList();
+    final dataSets = [
+      RadarDataSet(
+        fillColor: Colors.teal.withOpacity(0.4),
+        borderColor: Colors.teal,
+        borderWidth: 2,
+        entryRadius: 3,
+        dataEntries: entries.map((e) => RadarEntry(value: e.value.toDouble())).toList(),
+      ),
+    ];
+
     return Card(
       elevation: 2,
-      child: Container(
+      child: Padding(
         padding: const EdgeInsets.all(16.0),
-        height: 350, // Altura similar à do seu card original
-        alignment: Alignment.center,
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text("Desempenho por Equipe", style: Theme.of(context).textTheme.titleLarge),
-            const Expanded(
-              child: Center(
-                child: Text(
-                  'Dados insuficientes para gerar o gráfico.\n(São necessárias no mínimo 3 equipes com dados)',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 250,
+              child: RadarChart(
+                RadarChartData(
+                  dataSets: dataSets,
+                  radarBackgroundColor: Colors.transparent,
+                  borderData: FlBorderData(show: false),
+                  radarBorderData: const BorderSide(color: Colors.grey, width: 1),
+                  getTitle: (index, angle) {
+                    if (index >= entries.length) return const RadarChartTitle(text: '');
+                    return RadarChartTitle(text: entries[index].key);
+                  },
+                  titleTextStyle: const TextStyle(color: Colors.black, fontSize: 12),
+                  tickCount: 5,
+                  ticksTextStyle: const TextStyle(color: Colors.grey, fontSize: 10),
+                  tickBorderData: const BorderSide(color: Colors.grey, width: 1),
+                  gridBorderData: const BorderSide(color: Colors.grey, width: 1),
+                  radarShape: RadarShape.polygon,
                 ),
+                swapAnimationDuration: const Duration(milliseconds: 400),
               ),
             ),
           ],
@@ -197,59 +264,6 @@ class GerenteDashboardPage extends StatelessWidget {
     );
   }
 
-  // =======================================================
-  // ================= FIM DA CORREÇÃO =====================
-  // =======================================================
-
-  // Se a verificação passar, o resto do seu código original é executado
-  // sem nenhuma alteração.
-
-  final entries = data.entries.toList();
-  final dataSets = [
-    RadarDataSet(
-      fillColor: Colors.teal.withOpacity(0.4),
-      borderColor: Colors.teal,
-      borderWidth: 2,
-      entryRadius: 3,
-      dataEntries: entries.map((e) => RadarEntry(value: e.value.toDouble())).toList(),
-    ),
-  ];
-
-  return Card(
-    elevation: 2,
-    child: Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          Text("Desempenho por Equipe", style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 250,
-            child: RadarChart(
-              RadarChartData(
-                dataSets: dataSets,
-                radarBackgroundColor: Colors.transparent,
-                borderData: FlBorderData(show: false),
-                radarBorderData: const BorderSide(color: Colors.grey, width: 1),
-                getTitle: (index, angle) {
-                  if (index >= entries.length) return const RadarChartTitle(text: '');
-                  return RadarChartTitle(text: entries[index].key);
-                },
-                titleTextStyle: const TextStyle(color: Colors.black, fontSize: 12),
-                tickCount: 5,
-                ticksTextStyle: const TextStyle(color: Colors.grey, fontSize: 10),
-                tickBorderData: const BorderSide(color: Colors.grey, width: 1),
-                gridBorderData: const BorderSide(color: Colors.grey, width: 1),
-                radarShape: RadarShape.polygon,
-              ),
-              swapAnimationDuration: const Duration(milliseconds: 400),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
    Widget _buildBarChartWithTrendLineCard(BuildContext context, Map<String, int> data) {
     final entries = data.entries.toList();
     final barGroups = entries.asMap().entries.map((entry) {
@@ -277,20 +291,13 @@ class GerenteDashboardPage extends StatelessWidget {
                   titlesData: FlTitlesData(
                     topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    // =======================================================
-                    // === CORREÇÃO APLICADA AQUI ===
-                    // =======================================================
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 22, // Adiciona um espaço reservado para os títulos
+                        reservedSize: 22,
                         getTitlesWidget: (double value, TitleMeta meta) {
-                          // Garante que o índice está dentro dos limites da lista
                           if (value.toInt() >= entries.length) return const SizedBox.shrink();
-                          
                           final String text = entries[value.toInt()].key;
-                          
-                          // Retorna diretamente o widget de texto, sem o SideTitleWidget
                           return Padding(
                             padding: const EdgeInsets.only(top: 4.0),
                             child: Text(text, style: const TextStyle(fontSize: 10)),
@@ -298,7 +305,6 @@ class GerenteDashboardPage extends StatelessWidget {
                         },
                       ),
                     ),
-                    // =======================================================
                   ),
                   extraLinesData: ExtraLinesData(
                     horizontalLines: [

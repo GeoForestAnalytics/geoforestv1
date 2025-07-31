@@ -1,4 +1,4 @@
-// lib/providers/gerente_provider.dart (VERSÃO COMPLETA PARA MULTISSELEÇÃO)
+// lib/providers/gerente_provider.dart (VERSÃO FINAL COMPLETA E CORRIGIDA)
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -36,9 +36,9 @@ class GerenteProvider with ChangeNotifier {
   List<Parcela> _parcelasSincronizadas = [];
   List<Projeto> _projetos = [];
   
-  // Variável para lidar com múltiplos IDs
   Set<int> _selectedProjetoIds = {};
 
+  // GETTERS
   bool get isLoading => _isLoading;
   String? get error => _error;
   List<Projeto> get projetosDisponiveis => _projetos.where((p) => p.status == 'ativo').toList();
@@ -49,12 +49,10 @@ class GerenteProvider with ChangeNotifier {
 
     List<Parcela> parcelasVisiveis;
     if (_selectedProjetoIds.isEmpty) {
-      // Se NENHUM projeto estiver selecionado, mostra parcelas de TODOS os projetos ATIVOS.
       parcelasVisiveis = _parcelasSincronizadas
           .where((p) => idsProjetosAtivos.contains(p.projetoId))
           .toList();
     } else {
-      // Se UM OU MAIS projetos estiverem selecionados, mostra apenas as parcelas daqueles projetos.
       parcelasVisiveis = _parcelasSincronizadas
           .where((p) => _selectedProjetoIds.contains(p.projetoId))
           .toList();
@@ -113,12 +111,12 @@ class GerenteProvider with ChangeNotifier {
     }).toList()..sort((a,b) => a.nome.compareTo(b.nome));
   }
 
+  // CONSTRUTOR SIMPLIFICADO
   GerenteProvider() {
-    initializeDateFormatting('pt_BR', null).then((_) {
-      iniciarMonitoramento();
-    });
+    initializeDateFormatting('pt_BR', null);
   }
 
+  // MÉTODOS DE CONTROLE
   void toggleProjetoSelection(int projetoId) {
     if (_selectedProjetoIds.contains(projetoId)) {
       _selectedProjetoIds.remove(projetoId);
@@ -141,7 +139,7 @@ class GerenteProvider with ChangeNotifier {
     try {
       _projetos = await _gerenteService.getTodosOsProjetosStream();
       _projetos.sort((a, b) => a.nome.compareTo(b.nome));
-      notifyListeners();
+      
       _dadosColetaSubscription = _gerenteService.getDadosColetaStream().listen(
         (listaDeParcelas) {
           _parcelasSincronizadas = listaDeParcelas;

@@ -7,6 +7,7 @@ import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/pages/atividades/form_atividade_page.dart';
 import 'package:geoforestv1/pages/atividades/detalhes_atividade_page.dart';
+import 'package:geoforestv1/utils/navigation_helper.dart';
 
 class DetalhesProjetoPage extends StatefulWidget {
   final Projeto projeto;
@@ -141,7 +142,7 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
           tooltip: 'Voltar para o Início',
           // <<< CORREÇÃO DA NAVEGAÇÃO >>>
           // Em vez de recriar a HomePage, ele "desempilha" as telas até chegar na primeira.
-          onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+          onPressed: () => NavigationHelper.goBackToHome(context),
         ),
       ],
     );

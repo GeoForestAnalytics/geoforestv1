@@ -9,6 +9,7 @@ import 'package:proj4dart/proj4dart.dart' as proj4;
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+
 // Imports de Modelos
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
@@ -39,6 +40,13 @@ final Map<int, String> proj4Definitions = {
   31985: '+proj=utm +zone=25 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
 };
 
+void _initializeProj4InIsolate(Map<int, String> definitions) {
+  proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+  definitions.forEach((epsg, def) {
+    proj4.Projection.add('EPSG:$epsg', def);
+  });
+}
+
 enum TipoImportacao { inventario, cubagem, desconhecido }
 
 class DatabaseHelper {
@@ -51,12 +59,12 @@ class DatabaseHelper {
 
   Future<Database> get database async => _database ??= await _initDatabase();
 
-  Future<Database> _initDatabase() async {
-    proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
-    proj4Definitions.forEach((epsg, def) {
-      proj4.Projection.add('EPSG:$epsg', def);
-    });
+Future<Database> _initDatabase() async {
+    // Agora, a parte pesada é executada em background com 'compute'.
+    // A thread principal fica livre enquanto isso acontece.
+    await compute(_initializeProj4InIsolate, proj4Definitions);
 
+    // O resto da função continua normalmente depois que o isolate termina.
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
       version: 30,
@@ -65,7 +73,6 @@ class DatabaseHelper {
       onUpgrade: _onUpgrade,
     );
   }
-
   Future<void> _onConfigure(Database db) async => await db.execute('PRAGMA foreign_keys = ON');
 
   Future<void> _onCreate(Database db, int version) async {
@@ -748,12 +755,23 @@ class DatabaseHelper {
               if (parcelaIdCache.containsKey(parcelaKey)) {
                   parcelaDbId = parcelaIdCache[parcelaKey]!;
               } else {
-                  final parcelasDoBanco = await txn.query('parcelas', where: 'idParcela = ? AND talhaoId = ?', whereArgs: [idParcelaColeta, talhao.id!]);
-                  if (parcelasDoBanco.isEmpty) {
-                      final novaParcela = Parcela(talhaoId: talhao.id!, idParcela: idParcelaColeta, areaMetrosQuadrados: double.tryParse(getValue(row, ['area_m2'])?.replaceAll(',', '.') ?? '0') ?? 0, status: StatusParcela.concluida, dataColeta: DateTime.now(), nomeFazenda: fazenda.nome, nomeTalhao: talhao.nome, isSynced: false);
-                      parcelaDbId = await txn.insert('parcelas', novaParcela.toMap());
-                      parcelasCriadas++;
-                  } else {
+              final parcelasDoBanco = await txn.query('parcelas', where: 'idParcela = ? AND talhaoId = ?', whereArgs: [idParcelaColeta, talhao.id!]);
+              if (parcelasDoBanco.isEmpty) {
+              final novaParcela = Parcela(
+              talhaoId: talhao.id!,
+            idParcela: idParcelaColeta,
+            areaMetrosQuadrados: double.tryParse(getValue(row, ['area_m2'])?.replaceAll(',', '.') ?? '0') ?? 0,
+            status: StatusParcela.concluida,
+            dataColeta: DateTime.now(),
+            nomeFazenda: fazenda.nome,
+            nomeTalhao: talhao.nome,
+            isSynced: false,
+            projetoId: projeto.id 
+    );
+    parcelaDbId = await txn.insert('parcelas', novaParcela.toMap());
+    parcelasCriadas++;
+} 
+                  else {
                       parcelaDbId = Parcela.fromMap(parcelasDoBanco.first).dbId!;
                   }
                   parcelaIdCache[parcelaKey] = parcelaDbId;

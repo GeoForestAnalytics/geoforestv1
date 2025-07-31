@@ -21,8 +21,9 @@ class LicensingService {
   // =======================================================================
   /// Busca na coleção 'clientes' por um documento que contenha o UID do usuário no mapa 'usuariosPermitidos'.
   Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User user) async {
+    // ESTE PRINT JÁ ESTÁ LÁ, MAS CONFIRME
     print('--- DEBUG: Buscando licença para o UID: ${user.uid}');
-    // A consulta usa a notação de ponto para verificar se a chave (o UID do usuário) existe no mapa.
+    
     final query = _firestore
         .collection('clientes')
         .where('usuariosPermitidos.${user.uid}', isNotEqualTo: null)
@@ -31,9 +32,14 @@ class LicensingService {
     final snapshot = await query.get();
 
     if (snapshot.docs.isNotEmpty) {
-      return snapshot.docs.first; // Retorna o documento da licença encontrado
+      // <<< ADICIONE ESTE PRINT >>>
+      print('--- DEBUG: Licença encontrada! Documento ID: ${snapshot.docs.first.id}');
+      return snapshot.docs.first;
     }
-    return null; // Retorna nulo se o usuário não estiver em nenhuma licença
+    
+    // <<< E ADICIONE ESTE PRINT >>>
+    print('--- DEBUG: NENHUMA licença encontrada para este UID.');
+    return null;
   }
 
   // =======================================================================
@@ -147,6 +153,17 @@ class LicensingService {
     }
     return null;
   }
+  Future<List<DocumentSnapshot<Map<String, dynamic>>>> findAllLicenseDocumentsForUser(User user) async {
+  print('--- DEBUG: Buscando TODAS as licenças para o UID: ${user.uid}');
+  final query = _firestore
+      .collection('clientes')
+      .where('usuariosPermitidos.${user.uid}', isNotEqualTo: null);
+
+  final snapshot = await query.get();
+
+  print('--- DEBUG: ${snapshot.docs.length} licenças encontradas para este UID.');
+  return snapshot.docs; // Retorna a lista completa
+}
 
   Future<String> _getDeviceName() async {
      final deviceInfo = DeviceInfoPlugin();

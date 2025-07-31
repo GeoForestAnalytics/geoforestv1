@@ -10,8 +10,8 @@ import 'package:geoforestv1/models/fazenda_model.dart';
 // import 'package:geoforestv1/models/talhao_model.dart'; // <<< REMOVIDO
 import 'package:geoforestv1/pages/fazenda/form_fazenda_page.dart';
 import 'package:geoforestv1/pages/fazenda/detalhes_fazenda_page.dart';
-import 'package:geoforestv1/pages/menu/home_page.dart';
 // import 'package:geoforestv1/pages/dashboard/relatorio_comparativo_page.dart'; // <<< REMOVIDO
+import 'package:geoforestv1/utils/navigation_helper.dart';
 
 class DetalhesAtividadePage extends StatefulWidget {
   final Atividade atividade;
@@ -164,10 +164,7 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
         IconButton(
           icon: const Icon(Icons.home_outlined),
           tooltip: 'Voltar para o Início',
-          onPressed: () => Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const HomePage(title: 'Geo Forest Analytics')),
-            (Route<dynamic> route) => false,
-          ),
+          onPressed: () => NavigationHelper.goBackToHome(context),
         ),
       ],
     );

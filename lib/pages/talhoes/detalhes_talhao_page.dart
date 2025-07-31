@@ -10,6 +10,7 @@ import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/pages/dashboard/talhao_dashboard_page.dart';
 import 'package:geoforestv1/pages/amostra/coleta_dados_page.dart';
 import 'package:geoforestv1/pages/cubagem/cubagem_dados_page.dart';
+import 'package:geoforestv1/utils/navigation_helper.dart';
 
 class DetalhesTalhaoPage extends StatefulWidget {
   final Talhao talhao;
@@ -223,7 +224,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
           icon: const Icon(Icons.home_outlined),
           tooltip: 'Voltar para o Início',
           // <<< CORREÇÃO DA NAVEGAÇÃO >>>
-          onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+          onPressed: () => NavigationHelper.goBackToHome(context),
         ),
       ],
     );

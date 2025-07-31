@@ -96,74 +96,91 @@ class SyncService {
 
   /// Envia coletas, direcionando para a licença correta (própria ou do cliente).
   Future<void> _uploadColetasNaoSincronizadas(String licenseIdDoUsuarioLogado) async {
-    // ---- UPLOAD DE PARCELAS ----
-    final List<Parcela> parcelasNaoSincronizadas = await _dbHelper.getUnsyncedParcelas();
-    if (parcelasNaoSincronizadas.isNotEmpty) {
-      final batch = _firestore.batch();
-      final prefs = await SharedPreferences.getInstance();
-      final nomeLider = prefs.getString('nome_lider');
+  // ---- UPLOAD DE PARCELAS ----
+  final List<Parcela> parcelasNaoSincronizadas = await _dbHelper.getUnsyncedParcelas();
+  if (parcelasNaoSincronizadas.isNotEmpty) {
+    final batch = _firestore.batch();
+    final prefs = await SharedPreferences.getInstance();
+    final nomeLider = prefs.getString('nome_lider');
 
-      for (final parcela in parcelasNaoSincronizadas) {
-        final projetoPai = await _dbHelper.getProjetoPelaParcela(parcela);
-        String licenseIdDeDestino;
+    for (final parcela in parcelasNaoSincronizadas) {
+      final projetoPai = await _dbHelper.getProjetoPelaParcela(parcela);
+      String? licenseIdDeDestino; // <<< MUDANÇA 1: Torna a variável nula por segurança
 
-        if (projetoPai != null && projetoPai.delegadoPorLicenseId != null) {
+      if (projetoPai != null) {
+        if (projetoPai.delegadoPorLicenseId != null) {
+          // Cenário 1: Projeto delegado -> Usa a licença do cliente
           licenseIdDeDestino = projetoPai.delegadoPorLicenseId!;
-          debugPrint("DIRECIONANDO Parcela ${parcela.idParcela} para licença delegada: $licenseIdDeDestino");
+          debugPrint("DIRECIONANDO Parcela ${parcela.idParcela} para licença DELEGADA: $licenseIdDeDestino");
         } else {
-          licenseIdDeDestino = licenseIdDoUsuarioLogado;
-        }
-
-        final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('dados_coleta').doc(parcela.uuid);
-        final parcelaMap = parcela.toMap();
-        parcelaMap['nomeLider'] = nomeLider;
-        batch.set(docRef, parcelaMap, firestore.SetOptions(merge: true));
-
-        final arvores = await _dbHelper.getArvoresDaParcela(parcela.dbId!);
-        for (final arvore in arvores) {
-          final arvoreRef = docRef.collection('arvores').doc(arvore.id.toString());
-          batch.set(arvoreRef, arvore.toMap());
+          // <<< MUDANÇA 2: Cenário 2: Projeto da própria empresa -> Usa a licenseId DO PROJETO
+          licenseIdDeDestino = projetoPai.licenseId;
+          debugPrint("DIRECIONANDO Parcela ${parcela.idParcela} para licença DO PROJETO: $licenseIdDeDestino");
         }
       }
-      await batch.commit();
-      for (final parcela in parcelasNaoSincronizadas) {
-        await _dbHelper.markParcelaAsSynced(parcela.dbId!);
+
+      // <<< MUDANÇA 3: Adiciona uma verificação de segurança
+      if (licenseIdDeDestino == null) {
+        debugPrint("AVISO: Não foi possível determinar a licença de destino para a parcela ${parcela.idParcela}. Pulando upload.");
+        continue; // Pula para a próxima parcela
       }
-      debugPrint("${parcelasNaoSincronizadas.length} parcelas locais foram sincronizadas.");
+
+      final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('dados_coleta').doc(parcela.uuid);
+      final parcelaMap = parcela.toMap();
+      parcelaMap['nomeLider'] = nomeLider;
+      batch.set(docRef, parcelaMap, firestore.SetOptions(merge: true));
+
+      final arvores = await _dbHelper.getArvoresDaParcela(parcela.dbId!);
+      for (final arvore in arvores) {
+        final arvoreRef = docRef.collection('arvores').doc(arvore.id.toString());
+        batch.set(arvoreRef, arvore.toMap());
+      }
     }
-
-    // ---- UPLOAD DE CUBAGENS ----
-    final List<CubagemArvore> cubagensNaoSincronizadas = await _dbHelper.getUnsyncedCubagens();
-    if (cubagensNaoSincronizadas.isNotEmpty) {
-      final batch = _firestore.batch();
-      for (final cubagem in cubagensNaoSincronizadas) {
-        if (cubagem.id == null) continue;
-        final projetoPai = await _dbHelper.getProjetoPelaCubagem(cubagem);
-        String licenseIdDeDestino;
-
-        if (projetoPai != null && projetoPai.delegadoPorLicenseId != null) {
-          licenseIdDeDestino = projetoPai.delegadoPorLicenseId!;
-          debugPrint("DIRECIONANDO Cubagem ${cubagem.identificador} para licença delegada: $licenseIdDeDestino");
-        } else {
-          licenseIdDeDestino = licenseIdDoUsuarioLogado;
-        }
-        
-        final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('dados_cubagem').doc(cubagem.id.toString());
-        batch.set(docRef, cubagem.toMap(), firestore.SetOptions(merge: true));
-
-        final secoes = await _dbHelper.getSecoesPorArvoreId(cubagem.id!);
-        for (final secao in secoes) {
-          final secaoRef = docRef.collection('secoes').doc(secao.id.toString());
-          batch.set(secaoRef, secao.toMap());
-        }
-      }
-      await batch.commit();
-      for (final cubagem in cubagensNaoSincronizadas) {
-        await _dbHelper.markCubagemAsSynced(cubagem.id!);
-      }
-      debugPrint("${cubagensNaoSincronizadas.length} cubagens locais foram sincronizadas.");
+    await batch.commit();
+    for (final parcela in parcelasNaoSincronizadas) {
+      await _dbHelper.markParcelaAsSynced(parcela.dbId!);
     }
+    debugPrint("${parcelasNaoSincronizadas.length} parcelas locais foram sincronizadas.");
   }
+
+  // ---- UPLOAD DE CUBAGENS (APLIQUE A MESMA LÓGICA) ----
+  final List<CubagemArvore> cubagensNaoSincronizadas = await _dbHelper.getUnsyncedCubagens();
+  if (cubagensNaoSincronizadas.isNotEmpty) {
+    final batch = _firestore.batch();
+    for (final cubagem in cubagensNaoSincronizadas) {
+      if (cubagem.id == null) continue;
+      final projetoPai = await _dbHelper.getProjetoPelaCubagem(cubagem);
+      String? licenseIdDeDestino; // <<< MUDANÇA 1
+
+      if (projetoPai != null) {
+        if (projetoPai.delegadoPorLicenseId != null) {
+          licenseIdDeDestino = projetoPai.delegadoPorLicenseId!;
+        } else {
+          licenseIdDeDestino = projetoPai.licenseId; // <<< MUDANÇA 2
+        }
+      }
+      
+      if (licenseIdDeDestino == null) { // <<< MUDANÇA 3
+          debugPrint("AVISO: Não foi possível determinar a licença de destino para a cubagem ${cubagem.id}. Pulando upload.");
+          continue;
+      }
+      
+      final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('dados_cubagem').doc(cubagem.id.toString());
+      batch.set(docRef, cubagem.toMap(), firestore.SetOptions(merge: true));
+
+      final secoes = await _dbHelper.getSecoesPorArvoreId(cubagem.id!);
+      for (final secao in secoes) {
+        final secaoRef = docRef.collection('secoes').doc(secao.id.toString());
+        batch.set(secaoRef, secao.toMap());
+      }
+    }
+    await batch.commit();
+    for (final cubagem in cubagensNaoSincronizadas) {
+      await _dbHelper.markCubagemAsSynced(cubagem.id!);
+    }
+    debugPrint("${cubagensNaoSincronizadas.length} cubagens locais foram sincronizadas.");
+  }
+}
   
   /// Baixa a hierarquia da PRÓPRIA licença.
   Future<void> _downloadHierarquiaCompleta(String licenseId) async {

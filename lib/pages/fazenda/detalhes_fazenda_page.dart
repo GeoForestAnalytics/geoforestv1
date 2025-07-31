@@ -8,6 +8,7 @@ import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/pages/talhoes/form_talhao_page.dart';
 import 'package:geoforestv1/pages/talhoes/detalhes_talhao_page.dart';
+import 'package:geoforestv1/utils/navigation_helper.dart';
 
 class DetalhesFazendaPage extends StatefulWidget {
   final Fazenda fazenda;
@@ -176,7 +177,7 @@ class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
           tooltip: 'Voltar para o Início',
           // <<< CORREÇÃO DA NAVEGAÇÃO >>>
           // Em vez de recriar a HomePage, ele "desempilha" as telas até chegar na primeira.
-          onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+          onPressed: () => NavigationHelper.goBackToHome(context)
         ),
       ],
     );

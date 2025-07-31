@@ -7,6 +7,7 @@ import 'package:geoforestv1/services/auth_service.dart';
 import 'package:geoforestv1/pages/menu/register_page.dart';
 import 'package:geoforestv1/pages/menu/forgot_password_page.dart';
 
+
 const Color primaryColor = Color(0xFF1D4433);
 const Color secondaryTextColor = Color(0xFF617359);
 const Color backgroundColor = Color(0xFFF3F3F4);
@@ -85,6 +86,7 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro no login teste: ${e.toString()}')),
+        
       );
     } finally {
       if (mounted) {
@@ -182,6 +184,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
+
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -227,14 +230,14 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    if (kDebugMode)
-                      TextButton(
-                        onPressed: _isLoading ? null : _loginTeste,
-                        child: const Text(
-                          'Login Teste (Dev)',
-                          style: TextStyle(color: Colors.grey),
-                        ),
+                     if (kDebugMode)
+                        TextButton(
+                         onPressed: _isLoading ? null : _loginTeste,
+                              child: const Text(
+                        'Login Teste (Dev)',
+                         style: TextStyle(color: Colors.grey),
                       ),
+                   ),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(

@@ -11,40 +11,33 @@ class AuthService {
 
   // A função de login não precisa de alterações.
   Future<UserCredential> signInWithEmailAndPassword({
-    required String email,
-    required String password,
-  }) async {
-    if (email == 'teste@geoforest.com') {
-      print('Usuário super-dev detectado. Pulando verificação de licença.');
-      return _firebaseAuth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+  required String email,
+  required String password,
+}) async {
+  // O bloco 'if' foi removido. A execução agora sempre começa no 'try'.
+  try {
+    final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+
+    if (userCredential.user == null) {
+      throw FirebaseAuthException(code: 'user-not-found', message: 'Usuário não encontrado após o login.');
     }
 
-    try {
-      final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+    // Esta linha agora será executada para TODOS os usuários, incluindo o de teste.
+    await _licensingService.checkAndRegisterDevice(userCredential.user!); 
+    
+    return userCredential;
 
-      if (userCredential.user == null) {
-        throw FirebaseAuthException(code: 'user-not-found', message: 'Usuário não encontrado após o login.');
-      }
-
-      await _licensingService.checkAndRegisterDevice(userCredential.user!);
-      
-      return userCredential;
-
-    } on LicenseException catch (e) {
-      print('Erro de licença: ${e.message}. Deslogando usuário.');
-      await signOut(); 
-      rethrow;
-
-    } on FirebaseAuthException {
-      rethrow;
-    }
+  } on LicenseException catch (e) {
+    print('Erro de licença: ${e.message}. Deslogando usuário.');
+    await signOut(); 
+    rethrow;
+  } on FirebaseAuthException {
+    rethrow;
   }
+}
 
   // <<< ESTA É A FUNÇÃO QUE FOI COMPLETAMENTE ATUALIZADA >>>
   Future<UserCredential> createUserWithEmailAndPassword({
