@@ -1,9 +1,15 @@
-// lib/pages/dashboard/dashboard_page.dart (VERSÃO COM FILTRO DE KPI E LÓGICA CORRETA)
+// lib/pages/dashboard/dashboard_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+
+// --- NOVO IMPORT DO REPOSITÓRIO ---
+import 'package:geoforestv1/data/repositories/analise_repository.dart';
+// ------------------------------------
+
+// O import do database_helper foi removido.
+// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class DashboardPage extends StatefulWidget {
   final int parcelaId;
@@ -14,6 +20,10 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
+  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
+  final _analiseRepository = AnaliseRepository();
+  // ---------------------------------------
+
   bool _isLoading = true;
   String _errorMessage = '';
 
@@ -32,13 +42,14 @@ class _DashboardPageState extends State<DashboardPage> {
     _loadDashboardData();
   }
 
+  // --- MÉTODO ATUALIZADO ---
   Future<void> _loadDashboardData() async {
     setState(() { _isLoading = true; _errorMessage = ''; });
     try {
-      final dbHelper = DatabaseHelper.instance;
+      // Usa o AnaliseRepository
       final results = await Future.wait([
-        dbHelper.getDistribuicaoPorCodigo(widget.parcelaId),
-        dbHelper.getValoresCAP(widget.parcelaId),
+        _analiseRepository.getDistribuicaoPorCodigo(widget.parcelaId),
+        _analiseRepository.getValoresCAP(widget.parcelaId),
       ]);
 
       final codigoData = results[0] as Map<String, double>;
@@ -61,6 +72,9 @@ class _DashboardPageState extends State<DashboardPage> {
       }
     }
   }
+
+  // O restante do arquivo (lógica de cálculo e widgets de build)
+  // não precisa de alterações.
 
   void _calculateKPIs() {
     _totalFustes = 0;
@@ -210,16 +224,9 @@ class _DashboardPageState extends State<DashboardPage> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 30,
-              // =======================================================
-              // === CORREÇÃO APLICADA AQUI ===
-              // =======================================================
               getTitlesWidget: (double value, TitleMeta meta) {
-                // Garante que o índice está dentro dos limites da lista
                 if (value.toInt() >= entries.length) return const SizedBox.shrink();
-                
                 final String text = entries[value.toInt()].key;
-                
-                // Retorna diretamente o widget de texto
                 return Padding(
                   padding: const EdgeInsets.only(top: 4.0),
                   child: Text(
@@ -228,7 +235,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                 );
               },
-              // =======================================================
             ),
           ),
           leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -319,9 +325,6 @@ class _DashboardPageState extends State<DashboardPage> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 30,
-              // =======================================================
-              // === CORREÇÃO APLICADA AQUI ===
-              // =======================================================
               getTitlesWidget: (double value, TitleMeta meta) {
                 if (value.toInt() >= binStarts.length) return const SizedBox.shrink();
                 final String text = binStarts[value.toInt()].toStringAsFixed(0);
@@ -330,7 +333,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: Text(text, style: const TextStyle(fontSize: 10)),
                 );
               },
-              // =======================================================
             ),
           ),
           leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),

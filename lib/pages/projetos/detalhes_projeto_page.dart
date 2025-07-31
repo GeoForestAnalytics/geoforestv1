@@ -1,13 +1,19 @@
-// lib/pages/projetos/detalhes_projeto_page.dart (VERSÃO COM NAVEGAÇÃO CORRIGIDA)
+// lib/pages/projetos/detalhes_projeto_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/pages/atividades/form_atividade_page.dart';
 import 'package:geoforestv1/pages/atividades/detalhes_atividade_page.dart';
 import 'package:geoforestv1/utils/navigation_helper.dart';
+
+// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
+import 'package:geoforestv1/data/repositories/atividade_repository.dart';
+// ------------------------------------
+
+// O import do database_helper foi removido.
+// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class DetalhesProjetoPage extends StatefulWidget {
   final Projeto projeto;
@@ -19,7 +25,10 @@ class DetalhesProjetoPage extends StatefulWidget {
 
 class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
   late Future<List<Atividade>> _atividadesFuture;
-  final dbHelper = DatabaseHelper.instance;
+  
+  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
+  final _atividadeRepository = AtividadeRepository();
+  // ---------------------------------------
 
   bool _isSelectionMode = false;
   final Set<int> _selectedAtividades = {};
@@ -30,17 +39,18 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
     _carregarAtividades();
   }
 
+  // --- MÉTODO ATUALIZADO ---
   void _carregarAtividades() {
     if (mounted) {
       setState(() {
         _isSelectionMode = false;
         _selectedAtividades.clear();
-        _atividadesFuture = dbHelper.getAtividadesDoProjeto(widget.projeto.id!);
+        // Usa o AtividadeRepository
+        _atividadesFuture = _atividadeRepository.getAtividadesDoProjeto(widget.projeto.id!);
       });
     }
   }
 
-  // --- MÉTODOS DE SELEÇÃO E EXCLUSÃO ---
   void _toggleSelectionMode(int? atividadeId) {
     setState(() {
       _isSelectionMode = !_isSelectionMode;
@@ -64,6 +74,7 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
     });
   }
 
+  // --- MÉTODO ATUALIZADO ---
   Future<void> _deleteSelectedAtividades() async {
     if (_selectedAtividades.isEmpty) return;
 
@@ -85,9 +96,10 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
 
     if (confirmar == true && mounted) {
       for (final id in _selectedAtividades) {
-        await dbHelper.deleteAtividade(id);
+        // Usa o AtividadeRepository
+        await _atividadeRepository.deleteAtividade(id);
       }
-      
+
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('${_selectedAtividades.length} atividades apagadas.'),
           backgroundColor: Colors.green));
@@ -95,7 +107,8 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
     }
   }
 
-  // --- MÉTODOS DE NAVEGAÇÃO ---
+  // O restante dos métodos (navegação, build, etc.) não precisa de alterações.
+  
   void _navegarParaNovaAtividade() async {
     final bool? atividadeCriada = await Navigator.push<bool>(
       context,
@@ -111,11 +124,11 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
   void _navegarParaDetalhesAtividade(Atividade atividade) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => DetalhesAtividadePage(atividade: atividade)),
+      MaterialPageRoute(
+          builder: (context) => DetalhesAtividadePage(atividade: atividade)),
     ).then((_) => _carregarAtividades());
   }
 
-  // --- WIDGETS DE CONSTRUÇÃO DA UI ---
   AppBar _buildSelectionAppBar() {
     return AppBar(
       title: Text('${_selectedAtividades.length} selecionada(s)'),
@@ -132,7 +145,7 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
       ],
     );
   }
-  
+
   AppBar _buildNormalAppBar() {
     return AppBar(
       title: Text(widget.projeto.nome),
@@ -140,8 +153,6 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
         IconButton(
           icon: const Icon(Icons.home_outlined),
           tooltip: 'Voltar para o Início',
-          // <<< CORREÇÃO DA NAVEGAÇÃO >>>
-          // Em vez de recriar a HomePage, ele "desempilha" as telas até chegar na primeira.
           onPressed: () => NavigationHelper.goBackToHome(context),
         ),
       ],
@@ -163,18 +174,17 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                   Text('Detalhes do Projeto', style: Theme.of(context).textTheme.titleLarge),
-                    const Divider(height: 20),
+                  Text('Detalhes do Projeto', style: Theme.of(context).textTheme.titleLarge),
+                  const Divider(height: 20),
                   Text("Empresa: ${widget.projeto.empresa}", style: Theme.of(context).textTheme.bodyLarge),
                   const SizedBox(height: 8),
                   Text("Responsável: ${widget.projeto.responsavel}", style: Theme.of(context).textTheme.bodyLarge),
                   const SizedBox(height: 8),
-                   Text('Data de Criação: ${DateFormat('dd/MM/yyyy').format(widget.projeto.dataCriacao)}', style: Theme.of(context).textTheme.bodyLarge),
+                  Text('Data de Criação: ${DateFormat('dd/MM/yyyy').format(widget.projeto.dataCriacao)}', style: Theme.of(context).textTheme.bodyLarge),
                 ],
               ),
             ),
           ),
-          
           Padding(
             padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 8.0),
             child: Text(
@@ -236,13 +246,16 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
                         ),
                         title: Text(atividade.tipo, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(atividade.descricao.isNotEmpty ? atividade.descricao : 'Sem descrição'),
-                        trailing: _isSelectionMode ? null : IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                          onPressed: () async {
-                             _toggleSelectionMode(atividade.id!);
-                             await _deleteSelectedAtividades();
-                          },
-                        ),
+                        trailing: _isSelectionMode
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                onPressed: () async {
+                                  // Seleciona e deleta em um passo só
+                                  _toggleSelectionMode(atividade.id!);
+                                  await _deleteSelectedAtividades();
+                                },
+                              ),
                         selected: isSelected,
                       ),
                     );
@@ -253,12 +266,14 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
           ),
         ],
       ),
-      floatingActionButton: _isSelectionMode ? null : FloatingActionButton.extended(
-        onPressed: _navegarParaNovaAtividade,
-        tooltip: 'Nova Atividade',
-        icon: const Icon(Icons.add_task),
-        label: const Text('Nova Atividade'),
-      ),
+      floatingActionButton: _isSelectionMode
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _navegarParaNovaAtividade,
+              tooltip: 'Nova Atividade',
+              icon: const Icon(Icons.add_task),
+              label: const Text('Nova Atividade'),
+            ),
     );
   }
 

@@ -1,15 +1,21 @@
-// lib/pages/planejamento/selecao_atividade_mapa_page.dart (VERSÃO AJUSTADA E COMPLETA)
+// lib/pages/planejamento/selecao_atividade_mapa_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-// Imports do projeto (verifique se todos estão corretos)
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+// --- NOVOS IMPORTS DOS REPOSITÓRIOS E MODELS ---
+import 'package:geoforestv1/data/repositories/projeto_repository.dart';
+import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
+// ---------------------------------------------
+
 import 'package:geoforestv1/pages/menu/map_import_page.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/providers/map_provider.dart';
+
+// O import do database_helper foi removido.
+// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class SelecaoAtividadeMapaPage extends StatefulWidget {
   const SelecaoAtividadeMapaPage({super.key});
@@ -19,8 +25,11 @@ class SelecaoAtividadeMapaPage extends StatefulWidget {
 }
 
 class _SelecaoAtividadeMapaPageState extends State<SelecaoAtividadeMapaPage> {
-  final dbHelper = DatabaseHelper.instance;
-  // A variável não é mais 'late' pois será inicializada após o build inicial
+  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS ---
+  final _projetoRepository = ProjetoRepository();
+  final _atividadeRepository = AtividadeRepository();
+  // ---------------------------------------
+
   Future<List<Projeto>>? _projetosFuture; 
   final Map<int, List<Atividade>> _atividadesPorProjeto = {};
   bool _isLoadingAtividades = false;
@@ -28,50 +37,41 @@ class _SelecaoAtividadeMapaPageState extends State<SelecaoAtividadeMapaPage> {
   @override
   void initState() {
     super.initState();
-    // Chamamos a função para carregar os projetos de forma segura,
-    // garantindo que o 'context' do Provider esteja disponível.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _carregarProjetos();
     });
   }
 
-  // Esta nova função é responsável por buscar os projetos de forma segura
+  // --- MÉTODO ATUALIZADO ---
   Future<void> _carregarProjetos() async {
-    // Usamos o Provider para descobrir qual licença está ativa
     final licenseProvider = context.read<LicenseProvider>();
     
-    // Verificação de segurança: se não houver dados da licença, não fazemos nada
     if (licenseProvider.licenseData == null) {
-      // Você pode mostrar uma mensagem de erro aqui se desejar
       if (mounted) {
         setState(() {
-          _projetosFuture = Future.value([]); // Retorna uma lista vazia
+          _projetosFuture = Future.value([]);
         });
       }
       return;
     }
 
-    // Pegamos o ID da licença do usuário logado
-    // (Isso depende do ajuste no LicenseProvider que discutimos)
     final licenseId = licenseProvider.licenseData!.id; 
 
-    // Atualizamos o estado da tela com a chamada correta ao banco de dados
     if (mounted) {
       setState(() {
-        // Chamamos a nova função 'getProjetos' passando o filtro 'licenseId'
-        _projetosFuture = dbHelper.getTodosProjetos(licenseId);
+        // Usa o ProjetoRepository
+        _projetosFuture = _projetoRepository.getTodosProjetos(licenseId);
       });
     }
   }
 
-  // NENHUMA MUDANÇA NECESSÁRIA A PARTIR DAQUI.
-  // As funções abaixo já estavam corretas e continuam funcionando.
-
+  // --- MÉTODO ATUALIZADO ---
   Future<void> _carregarAtividadesDoProjeto(int projetoId) async {
     if (_atividadesPorProjeto.containsKey(projetoId)) return;
 
     setState(() => _isLoadingAtividades = true);
-    final atividades = await dbHelper.getAtividadesDoProjeto(projetoId);
+    // Usa o AtividadeRepository
+    final atividades = await _atividadeRepository.getAtividadesDoProjeto(projetoId);
     if (mounted) {
       setState(() {
         _atividadesPorProjeto[projetoId] = atividades;
@@ -80,17 +80,15 @@ class _SelecaoAtividadeMapaPageState extends State<SelecaoAtividadeMapaPage> {
     }
   }
 
+  // O restante dos métodos (navegação, build) não precisa de alterações.
+
   void _navegarParaMapa(Atividade atividade) {
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
 
-    // 1. Limpa qualquer estado antigo do mapa.
     mapProvider.clearAllMapData();
-    // 2. Define a atividade atual no provider.
     mapProvider.setCurrentAtividade(atividade);
-    // 3. Carrega as amostras existentes para essa atividade, se houver.
     mapProvider.loadSamplesParaAtividade();
 
-    // 4. Navega para a página do mapa.
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -106,7 +104,7 @@ class _SelecaoAtividadeMapaPageState extends State<SelecaoAtividadeMapaPage> {
         title: const Text('Selecionar Atividade'),
       ),
       body: FutureBuilder<List<Projeto>>(
-        future: _projetosFuture, // Agora usa a variável de estado correta
+        future: _projetosFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting && _projetosFuture == null) {
             return const Center(child: CircularProgressIndicator());

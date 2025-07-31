@@ -1,12 +1,18 @@
-// lib/pages/analises/analise_selecao_page.dart (VERSÃO SEM CHAMADAS MORTAS)
+// lib/pages/analises/analise_selecao_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/pages/dashboard/relatorio_comparativo_page.dart';
 import 'package:geoforestv1/pages/analises/analise_volumetrica_page.dart';
-// O import da 'definicao_sortimento_page.dart' foi removido daqui.
+
+// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
+import 'package:geoforestv1/data/repositories/talhao_repository.dart';
+import 'package:geoforestv1/data/repositories/atividade_repository.dart';
+// ------------------------------------
+
+// O import do database_helper foi removido.
+// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class AnaliseSelecaoPage extends StatefulWidget {
   const AnaliseSelecaoPage({super.key});
@@ -16,7 +22,10 @@ class AnaliseSelecaoPage extends StatefulWidget {
 }
 
 class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
-  final dbHelper = DatabaseHelper.instance;
+  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS ---
+  final _talhaoRepository = TalhaoRepository();
+  final _atividadeRepository = AtividadeRepository();
+  // ---------------------------------------
 
   Atividade? _atividadeSelecionada;
   List<Atividade> _atividadesDisponiveis = [];
@@ -31,17 +40,23 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
   @override
   void initState() {
     super.initState();
-    _carregarAtividades();
+    _carregarDadosIniciais();
   }
 
-   Future<void> _carregarAtividades() async {
-    final talhoesCompletos = await dbHelper.getTalhoesComParcelasConcluidas();
+  // --- MÉTODO ATUALIZADO ---
+  Future<void> _carregarDadosIniciais() async {
+    // Usando o TalhaoRepository
+    final talhoesCompletos = await _talhaoRepository.getTalhoesComParcelasConcluidas();
     if (talhoesCompletos.isEmpty) {
       if(mounted) setState(() => _atividadesDisponiveis = []);
       return;
     }
+    
     final atividadeIds = talhoesCompletos.map((t) => t.fazendaAtividadeId).toSet();
-    final todasAtividades = await dbHelper.getTodasAsAtividades();
+    
+    // Usando o AtividadeRepository
+    final todasAtividades = await _atividadeRepository.getTodasAsAtividades();
+    
     if(mounted) {
       setState(() {
         _atividadesDisponiveis = todasAtividades.where((a) => atividadeIds.contains(a.id)).toList();
@@ -49,6 +64,7 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
     }
   }
 
+  // --- MÉTODO ATUALIZADO ---
   Future<void> _onAtividadeChanged(Atividade? novaAtividade) async {
     if (novaAtividade == null) return;
     
@@ -60,7 +76,8 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
       _talhoesSelecionados.clear();
     });
     
-    final todosTalhoesCompletos = await dbHelper.getTalhoesComParcelasConcluidas();
+    // Usando o TalhaoRepository
+    final todosTalhoesCompletos = await _talhaoRepository.getTalhoesComParcelasConcluidas();
     final talhoesFiltrados = todosTalhoesCompletos.where((t) => t.fazendaAtividadeId == novaAtividade.id).toList();
 
     if(mounted) {
@@ -71,6 +88,9 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
     }
   }
 
+  // O restante dos métodos da classe não interage com o banco de dados,
+  // então eles permanecem exatamente iguais.
+  
   void _toggleFazenda(String fazendaId, bool? isSelected) {
     if (isSelected == null) return; 
     setState(() {
@@ -84,7 +104,8 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
       } else {
         _fazendasSelecionadas.remove(fazendaId);
         _talhoesSelecionados.removeWhere((talhaoId) {
-          final talhao = _talhoesDaAtividade.firstWhere((t) => t.id == talhaoId, orElse: () => Talhao(fazendaId: '', fazendaAtividadeId: 0, nome: ''));
+          // A lógica aqui estava um pouco complexa, vamos simplificar para segurança
+          final talhao = _talhoesDaAtividade.firstWhere((t) => t.id == talhaoId, orElse: () => Talhao(fazendaId: '', fazendaAtividadeId: 0, nome: '', id: -1));
           return talhao.fazendaId == fazendaId;
         });
       }
@@ -204,7 +225,6 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
           ],
         ),
       ),
-      // <<< FLOATING ACTION BUTTON CORRIGIDO (REMOVIDO O BOTÃO DE SORTIMENTO) >>>
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.end,

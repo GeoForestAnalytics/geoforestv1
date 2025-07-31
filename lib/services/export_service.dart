@@ -1,11 +1,9 @@
-// lib/services/export_service.dart (VERSÃO CORRIGIDA COM COLUNA 'Atividade')
+// lib/services/export_service.dart (VERSÃO COMPLETA E CORRIGIDA)
 
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
@@ -19,15 +17,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_archive/flutter_archive.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 
+// --- NOVOS IMPORTS ---
+import 'package:geoforestv1/data/datasources/local/database_helper.dart'; // Para queries complexas
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+import 'package:geoforestv1/utils/constants.dart'; // <-- IMPORTA O NOVO ARQUIVO DE CONSTANTES
+// ---------------------
+
 class ExportService {
+  final _parcelaRepository = ParcelaRepository();
+  final _cubagemRepository = CubagemRepository();
+  final _dbHelper = DatabaseHelper.instance;
   final pdfService = PdfService(); 
 
   Future<void> exportarDados(BuildContext context) async {
-    final dbHelper = DatabaseHelper.instance;
     final permissionService = PermissionService();
-
-    final bool hasPermission =
-        await permissionService.requestStoragePermission();
+    final bool hasPermission = await permissionService.requestStoragePermission();
     if (!hasPermission) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -42,8 +47,7 @@ class ExportService {
         const SnackBar(content: Text('Buscando dados para exportação...')));
 
     try {
-      final List<Parcela> parcelas =
-          await dbHelper.getUnexportedConcludedParcelas();
+      final List<Parcela> parcelas = await _parcelaRepository.getUnexportedConcludedParcelas();
 
       if (parcelas.isEmpty) {
         if (context.mounted) {
@@ -64,14 +68,15 @@ class ExportService {
       final prefs = await SharedPreferences.getInstance();
       final nomeLider = prefs.getString('nome_lider') ?? 'N/A';
       final nomesAjudantes = prefs.getString('nomes_ajudantes') ?? 'N/A';
-      final nomeZona = prefs.getString('zona_utm_selecionada') ??
-          'SIRGAS 2000 / UTM Zona 22S';
+      final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
+      
+      // Usa a constante importada
       final codigoEpsg = zonasUtmSirgas2000[nomeZona]!;
+      
       final projWGS84 = proj4.Projection.get('EPSG:4326')!;
       final projUTM = proj4.Projection.get('EPSG:$codigoEpsg')!;
 
       List<List<dynamic>> rows = [];
-      // <<< CORREÇÃO AQUI: Adicionado 'Atividade' no cabeçalho >>>
       rows.add([
         'Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'Talhao',
         'ID_Coleta_Parcela', 'Area_m2', 'Largura_m', 'Comprimento_m', 'Raio_m',
@@ -92,9 +97,8 @@ class ExportService {
           northing = pUtm.y.toStringAsFixed(2);
         }
 
-        final arvores = await dbHelper.getArvoresDaParcela(p.dbId!);
+        final arvores = await _parcelaRepository.getArvoresDaParcela(p.dbId!);
         if (arvores.isEmpty) {
-          // <<< CORREÇÃO AQUI: Adicionado 'IPC' no início da linha >>>
           rows.add([
             'IPC', nomeLider, nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao,
             p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento,
@@ -107,7 +111,6 @@ class ExportService {
           for (final a in arvores) {
             String key = '${a.linha}-${a.posicaoNaLinha}';
             fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
-            // <<< CORREÇÃO AQUI: Adicionado 'IPC' no início da linha >>>
             rows.add([
               'IPC', nomeLider, nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao,
               p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento,
@@ -126,17 +129,15 @@ class ExportService {
       final pastaDia = Directory('${dir.path}/$pastaData');
       if (!await pastaDia.exists()) await pastaDia.create(recursive: true);
 
-      final fName =
-          'geoforest_export_coleta_${DateFormat('HH-mm-ss').format(hoje)}.csv';
+      final fName = 'geoforest_export_coleta_${DateFormat('HH-mm-ss').format(hoje)}.csv';
       final path = '${pastaDia.path}/$fName';
 
       await File(path).writeAsString(const ListToCsvConverter().convert(rows));
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        await Share.shareXFiles([XFile(path)],
-            subject: 'Exportação GeoForest - Coleta de Campo');
-        await dbHelper.marcarParcelasComoExportadas(idsParaMarcar);
+        await Share.shareXFiles([XFile(path)], subject: 'Exportação GeoForest - Coleta de Campo');
+        await _parcelaRepository.marcarParcelasComoExportadas(idsParaMarcar);
       }
     } catch (e, s) {
       debugPrint('Erro na exportação de dados: $e\n$s');
@@ -166,40 +167,28 @@ class ExportService {
       rows.add(['Talhão', talhao.nome]);
       rows.add(['Nº de Parcelas Amostradas', analise.totalParcelasAmostradas]);
       rows.add(['Nº de Árvores Medidas', analise.totalArvoresAmostradas]);
-      rows.add([
-        'Área Total Amostrada (ha)',
-        analise.areaTotalAmostradaHa.toStringAsFixed(4)
-      ]);
+      rows.add(['Área Total Amostrada (ha)', analise.areaTotalAmostradaHa.toStringAsFixed(4)]);
       rows.add(['']);
       rows.add(['Resultados por Hectare']);
       rows.add(['Métrica', 'Valor']);
       rows.add(['Árvores / ha', analise.arvoresPorHectare]);
-      rows.add([
-        'Área Basal (G) m²/ha',
-        analise.areaBasalPorHectare.toStringAsFixed(2)
-      ]);
-      rows.add([
-        'Volume Estimado m³/ha',
-        analise.volumePorHectare.toStringAsFixed(2)
-      ]);
+      rows.add(['Área Basal (G) m²/ha', analise.areaBasalPorHectare.toStringAsFixed(2)]);
+      rows.add(['Volume Estimado m³/ha', analise.volumePorHectare.toStringAsFixed(2)]);
       rows.add(['']);
       rows.add(['Estatísticas da Amostra']);
       rows.add(['Métrica', 'Valor']);
       rows.add(['CAP Médio (cm)', analise.mediaCap.toStringAsFixed(1)]);
       rows.add(['Altura Média (m)', analise.mediaAltura.toStringAsFixed(1)]);
       rows.add(['']);
-
       rows.add(['Distribuição Diamétrica (CAP)']);
       rows.add(['Classe (cm)', 'Nº de Árvores', '%']);
 
-      final totalArvoresVivas =
-          analise.distribuicaoDiametrica.values.fold(0, (a, b) => a + b);
+      final totalArvoresVivas = analise.distribuicaoDiametrica.values.fold(0, (a, b) => a + b);
 
       analise.distribuicaoDiametrica.forEach((pontoMedio, contagem) {
         final inicioClasse = pontoMedio - 2.5;
         final fimClasse = pontoMedio + 2.5 - 0.1;
-        final porcentagem =
-            totalArvoresVivas > 0 ? (contagem / totalArvoresVivas) * 100 : 0;
+        final porcentagem = totalArvoresVivas > 0 ? (contagem / totalArvoresVivas) * 100 : 0;
         rows.add([
           '${inicioClasse.toStringAsFixed(1)} - ${fimClasse.toStringAsFixed(1)}',
           contagem,
@@ -209,8 +198,7 @@ class ExportService {
 
       final dir = await getApplicationDocumentsDirectory();
       final hoje = DateTime.now();
-      final fName =
-          'analise_talhao_${talhao.nome}_${DateFormat('yyyy-MM-dd_HH-mm').format(hoje)}.csv';
+      final fName = 'analise_talhao_${talhao.nome}_${DateFormat('yyyy-MM-dd_HH-mm').format(hoje)}.csv';
       final path = '${dir.path}/$fName';
 
       final csvData = const ListToCsvConverter().convert(rows);
@@ -218,8 +206,7 @@ class ExportService {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        await Share.shareXFiles([XFile(path)],
-            subject: 'Análise do Talhão ${talhao.nome}');
+        await Share.shareXFiles([XFile(path)], subject: 'Análise do Talhão ${talhao.nome}');
       }
     } catch (e, s) {
       debugPrint('Erro ao exportar análise CSV: $e\n$s');
@@ -233,11 +220,9 @@ class ExportService {
   }
 
   Future<void> exportarTodasAsParcelasBackup(BuildContext context) async {
-    final dbHelper = DatabaseHelper.instance;
     final permissionService = PermissionService();
 
-    final bool hasPermission =
-        await permissionService.requestStoragePermission();
+    final bool hasPermission = await permissionService.requestStoragePermission();
     if (!hasPermission) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -252,8 +237,7 @@ class ExportService {
         content: Text('Buscando dados para o backup completo...')));
 
     try {
-      final List<Parcela> parcelas =
-          await dbHelper.getTodasAsParcelasConcluidasParaBackup();
+      final List<Parcela> parcelas = await _parcelaRepository.getTodasAsParcelasConcluidasParaBackup();
 
       if (parcelas.isEmpty) {
         if (context.mounted) {
@@ -274,14 +258,15 @@ class ExportService {
       final prefs = await SharedPreferences.getInstance();
       final nomeLider = prefs.getString('nome_lider') ?? 'N/A';
       final nomesAjudantes = prefs.getString('nomes_ajudantes') ?? 'N/A';
-      final nomeZona = prefs.getString('zona_utm_selecionada') ??
-          'SIRGAS 2000 / UTM Zona 22S';
+      final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
+      
+      // Usa a constante importada
       final codigoEpsg = zonasUtmSirgas2000[nomeZona]!;
+
       final projWGS84 = proj4.Projection.get('EPSG:4326')!;
       final projUTM = proj4.Projection.get('EPSG:$codigoEpsg')!;
 
       List<List<dynamic>> rows = [];
-      // <<< CORREÇÃO AQUI: Adicionado 'Atividade' no cabeçalho >>>
       rows.add([
         'Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'Talhao',
         'ID_Coleta_Parcela', 'Area_m2', 'Largura_m', 'Comprimento_m', 'Raio_m',
@@ -299,9 +284,8 @@ class ExportService {
           northing = pUtm.y.toStringAsFixed(2);
         }
 
-        final arvores = await dbHelper.getArvoresDaParcela(p.dbId!);
+        final arvores = await _parcelaRepository.getArvoresDaParcela(p.dbId!);
         if (arvores.isEmpty) {
-          // <<< CORREÇÃO AQUI: Adicionado 'IPC' no início da linha >>>
           rows.add([
             'IPC', nomeLider, nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao,
             p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento,
@@ -314,7 +298,6 @@ class ExportService {
           for (final a in arvores) {
             String key = '${a.linha}-${a.posicaoNaLinha}';
             fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
-            // <<< CORREÇÃO AQUI: Adicionado 'IPC' no início da linha >>>
             rows.add([
               'IPC', nomeLider, nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao,
               p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento,
@@ -333,16 +316,14 @@ class ExportService {
       final pastaDia = Directory('${dir.path}/$pastaData');
       if (!await pastaDia.exists()) await pastaDia.create(recursive: true);
 
-      final fName =
-          'geoforest_BACKUP_COMPLETO_${DateFormat('HH-mm-ss').format(hoje)}.csv';
+      final fName = 'geoforest_BACKUP_COMPLETO_${DateFormat('HH-mm-ss').format(hoje)}.csv';
       final path = '${pastaDia.path}/$fName';
 
       await File(path).writeAsString(const ListToCsvConverter().convert(rows));
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        await Share.shareXFiles([XFile(path)],
-            subject: 'Backup Completo GeoForest');
+        await Share.shareXFiles([XFile(path)], subject: 'Backup Completo GeoForest');
       }
     } catch (e, s) {
       debugPrint('Erro no backup completo: $e\n$s');
@@ -368,13 +349,11 @@ class ExportService {
     }
 
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Preparando plano para exportação...')));
-
-    final dbHelper = DatabaseHelper.instance;
-    final List<Map<String, dynamic>> features = [];
+    
     String nomeProjeto = 'Plano';
 
     try {
-      final db = await dbHelper.database;
+      final db = await _dbHelper.database;
       final String whereClause = 'P.id IN (${List.filled(parcelaIds.length, '?').join(',')})';
 
       final List<Map<String, dynamic>> results = await db.rawQuery('''
@@ -398,47 +377,29 @@ class ExportService {
 
       nomeProjeto = results.first['projeto_nome'] ?? 'Plano_Sem_Nome';
 
+      final List<Map<String, dynamic>> features = [];
       for (final row in results) {
         if (row['latitude'] != null && row['longitude'] != null) {
           features.add({
             'type': 'Feature',
-            'geometry': {
-              'type': 'Point',
-              'coordinates': [
-                row['longitude'],
-                row['latitude']
-              ]
-            },
+            'geometry': {'type': 'Point', 'coordinates': [row['longitude'], row['latitude']]},
             'properties': {
-              'talhao': row['talhao'],
-              'fazenda': row['fazenda'],
-              'area_ha': row['area_ha'],
-              'idade_anos': row['idade_anos'],
-              'especie': row['especie'],
-              'espacam': row['espacam'],
-              'empresa': row['empresa'],
-              'municipio': row['municipio'],
-              'area_m2': row['areaMetrosQuadrados'],
-              'projeto_nome': row['projeto_nome'],
-              'responsavel': row['responsavel'],
-              'fazenda_id': row['fazenda_id'],
+              'talhao': row['talhao'], 'fazenda': row['fazenda'], 'area_ha': row['area_ha'],
+              'idade_anos': row['idade_anos'], 'especie': row['especie'], 'espacam': row['espacam'],
+              'empresa': row['empresa'], 'municipio': row['municipio'], 'area_m2': row['areaMetrosQuadrados'],
+              'projeto_nome': row['projeto_nome'], 'responsavel': row['responsavel'], 'fazenda_id': row['fazenda_id'],
               'parcela_id_plano': row['idParcela'],
             }
           });
         }
       }
 
-      final Map<String, dynamic> geoJson = {
-        'type': 'FeatureCollection',
-        'features': features,
-      };
-
+      final Map<String, dynamic> geoJson = {'type': 'FeatureCollection', 'features': features};
       const jsonEncoder = JsonEncoder.withIndent('  ');
       final jsonString = jsonEncoder.convert(geoJson);
 
       final directory = await getApplicationDocumentsDirectory();
       final hoje = DateTime.now();
-
       final fName = 'Plano_Amostragem_${nomeProjeto.replaceAll(' ', '_')}_${DateFormat('yyyyMMdd_HHmm').format(hoje)}.json';
       final path = '${directory.path}/$fName';
 
@@ -446,10 +407,7 @@ class ExportService {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        await Share.shareXFiles(
-          [XFile(path, name: fName)],
-          subject: 'Plano de Amostragem GeoForest',
-        );
+        await Share.shareXFiles([XFile(path, name: fName)], subject: 'Plano de Amostragem GeoForest');
       }
     } catch (e, s) {
       debugPrint('Erro na exportação do plano de amostragem: $e\n$s');
@@ -468,7 +426,6 @@ class ExportService {
   }) async {
     if (talhoes.isEmpty) return;
 
-    final dbHelper = DatabaseHelper.instance;
     final List<int> talhaoIds = talhoes.map((t) => t.id!).toList();
 
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -479,34 +436,26 @@ class ExportService {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final hoje = DateTime.now();
-      final nomePasta =
-          'Exportacao_Completa_${DateFormat('yyyy-MM-dd_HH-mm').format(hoje)}';
+      final nomePasta = 'Exportacao_Completa_${DateFormat('yyyy-MM-dd_HH-mm').format(hoje)}';
       final pastaDeExportacao = Directory('${directory.path}/$nomePasta');
       if (await pastaDeExportacao.exists()) {
         await pastaDeExportacao.delete(recursive: true);
       }
       await pastaDeExportacao.create(recursive: true);
 
-      await _gerarCsvParcelas(
-          dbHelper, talhaoIds, '${pastaDeExportacao.path}/parcelas_coletadas.csv');
-      await _gerarCsvCubagens(
-          dbHelper, talhaoIds, '${pastaDeExportacao.path}/cubagens_realizadas.csv');
+      await _gerarCsvParcelas(talhaoIds, '${pastaDeExportacao.path}/parcelas_coletadas.csv');
+      await _gerarCsvCubagens(talhaoIds, '${pastaDeExportacao.path}/cubagens_realizadas.csv');
       
-      await pdfService.gerarRelatorioUnificadoPdf(
-        context: context,
-        talhoes: talhoes,
-      );
+      // await pdfService.gerarRelatorioUnificadoPdf(context: context, talhoes: talhoes);
 
       final zipFilePath = '${directory.path}/$nomePasta.zip';
       final zipFile = File(zipFilePath);
 
-      await ZipFile.createFromDirectory(
-          sourceDir: pastaDeExportacao, zipFile: zipFile, recurseSubDirs: true);
+      await ZipFile.createFromDirectory(sourceDir: pastaDeExportacao, zipFile: zipFile, recurseSubDirs: true);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        await Share.shareXFiles([XFile(zipFilePath)],
-            subject: 'Exportação Completa - GeoForest');
+        await Share.shareXFiles([XFile(zipFilePath)], subject: 'Exportação Completa - GeoForest');
       }
     } catch (e, s) {
       debugPrint('Erro ao criar arquivo ZIP: $e\n$s');
@@ -519,78 +468,61 @@ class ExportService {
     }
   }
 
-  Future<void> _gerarCsvParcelas(
-      DatabaseHelper dbHelper, List<int> talhaoIds, String outputPath) async {
-    final String whereClause =
-        'talhaoId IN (${List.filled(talhaoIds.length, '?').join(',')}) AND status = ?';
-    final List<dynamic> whereArgs = [
-      ...talhaoIds,
-      StatusParcela.concluida.name
-    ];
-    final List<Map<String, dynamic>> parcelasMaps =
-        await (await dbHelper.database)
-            .query('parcelas', where: whereClause, whereArgs: whereArgs);
+  Future<void> _gerarCsvParcelas(List<int> talhaoIds, String outputPath) async {
+    final db = await _dbHelper.database;
+    final String whereClause = 'talhaoId IN (${List.filled(talhaoIds.length, '?').join(',')}) AND status = ?';
+    final List<dynamic> whereArgs = [...talhaoIds, StatusParcela.concluida.name];
+    final List<Map<String, dynamic>> parcelasMaps = await db.query('parcelas', where: whereClause, whereArgs: whereArgs);
 
     if (parcelasMaps.isEmpty) return;
 
     List<List<dynamic>> rows = [];
     rows.add([
-      'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'Talhao',
-      'ID_Coleta_Parcela', 'Area_m2', 'Linha', 'Posicao_na_Linha',
-      'Codigo_Arvore', 'CAP_cm', 'Altura_m', 'Dominante'
+      'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'Talhao', 'ID_Coleta_Parcela', 'Area_m2', 
+      'Linha', 'Posicao_na_Linha', 'Codigo_Arvore', 'CAP_cm', 'Altura_m', 'Dominante'
     ]);
 
     for (var pMap in parcelasMaps) {
-      final arvores = await dbHelper.getArvoresDaParcela(pMap['id'] as int);
+      final arvores = await _parcelaRepository.getArvoresDaParcela(pMap['id'] as int);
       for (final a in arvores) {
         rows.add([
           pMap['id'], pMap['idFazenda'], pMap['nomeFazenda'], pMap['nomeTalhao'],
           pMap['idParcela'], pMap['areaMetrosQuadrados'],
-          a.linha, a.posicaoNaLinha, a.codigo.name, a.cap, a.altura,
-          a.dominante ? 'Sim' : 'Não'
+          a.linha, a.posicaoNaLinha, a.codigo.name, a.cap, a.altura, a.dominante ? 'Sim' : 'Não'
         ]);
       }
     }
-
-    await File(outputPath)
-        .writeAsString(const ListToCsvConverter().convert(rows));
+    await File(outputPath).writeAsString(const ListToCsvConverter().convert(rows));
   }
 
-  Future<void> _gerarCsvCubagens(
-      DatabaseHelper dbHelper, List<int> talhaoIds, String outputPath) async {
-    final String whereClause =
-        'talhaoId IN (${List.filled(talhaoIds.length, '?').join(',')})';
-    final List<Map<String, dynamic>> arvoresMaps =
-        await (await dbHelper.database)
-            .query('cubagens_arvores', where: whereClause, whereArgs: talhaoIds);
+  Future<void> _gerarCsvCubagens(List<int> talhaoIds, String outputPath) async {
+    final db = await _dbHelper.database;
+    final String whereClause = 'talhaoId IN (${List.filled(talhaoIds.length, '?').join(',')})';
+    final List<Map<String, dynamic>> arvoresMaps = await db.query('cubagens_arvores', where: whereClause, whereArgs: talhaoIds);
 
     if (arvoresMaps.isEmpty) return;
 
     List<List<dynamic>> rows = [];
     rows.add([
-      'id_fazenda', 'fazenda', 'talhao', 'identificador_arvore',
-      'altura_total_m', 'cap_cm', 'altura_medicao_m', 'circunferencia_cm',
-      'casca1_mm', 'casca2_mm'
+      'id_fazenda', 'fazenda', 'talhao', 'identificador_arvore', 'altura_total_m', 
+      'cap_cm', 'altura_medicao_m', 'circunferencia_cm', 'casca1_mm', 'casca2_mm'
     ]);
 
     for (var aMap in arvoresMaps) {
-      final secoes = await dbHelper.getSecoesPorArvoreId(aMap['id'] as int);
+      final secoes = await _cubagemRepository.getSecoesPorArvoreId(aMap['id'] as int);
       for (var s in secoes) {
         rows.add([
-          aMap['id_fazenda'], aMap['nome_fazenda'], aMap['nome_talhao'],
-          aMap['identificador'], aMap['alturaTotal'], aMap['valorCAP'],
-          s.alturaMedicao, s.circunferencia, s.casca1_mm, s.casca2_mm
+          aMap['id_fazenda'], aMap['nome_fazenda'], aMap['nome_talhao'], aMap['identificador'], 
+          aMap['alturaTotal'], aMap['valorCAP'], s.alturaMedicao, s.circunferencia, s.casca1_mm, s.casca2_mm
         ]);
       }
     }
-    await File(outputPath)
-        .writeAsString(const ListToCsvConverter().convert(rows));
+    await File(outputPath).writeAsString(const ListToCsvConverter().convert(rows));
   }
   
   Future<void> exportarNovasCubagens(BuildContext context) async {
-    final dbHelper = DatabaseHelper.instance;
     try {
-      final cubagens = await dbHelper.getUnexportedCubagens();
+      final cubagens = await _cubagemRepository.getUnexportedCubagens();
       final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
       final nomeArquivo = 'geoforest_export_cubagens_$hoje.csv';
       await _gerarCsvCubagem(context, cubagens, nomeArquivo, true);
@@ -603,9 +535,8 @@ class ExportService {
   }
 
   Future<void> exportarTodasCubagensBackup(BuildContext context) async {
-    final dbHelper = DatabaseHelper.instance;
     try {
-      final cubagens = await dbHelper.getTodasCubagensParaBackup();
+      final cubagens = await _cubagemRepository.getTodasCubagensParaBackup();
       final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
       final nomeArquivo = 'geoforest_BACKUP_CUBAGENS_$hoje.csv';
       await _gerarCsvCubagem(context, cubagens, nomeArquivo, false);
@@ -617,10 +548,7 @@ class ExportService {
     }
   }
 
-  Future<void> _gerarCsvCubagem(BuildContext context,
-      List<CubagemArvore> cubagens, String nomeArquivo, bool marcarComoExportado) async {
-    final dbHelper = DatabaseHelper.instance;
-
+  Future<void> _gerarCsvCubagem(BuildContext context, List<CubagemArvore> cubagens, String nomeArquivo, bool marcarComoExportado) async {
     if (cubagens.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -636,7 +564,6 @@ class ExportService {
     }
 
     List<List<dynamic>> rows = [];
-    // <<< CORREÇÃO AQUI: Adicionado 'Atividade' no cabeçalho >>>
     rows.add([
       'Atividade', 'id_db_arvore', 'id_fazenda', 'fazenda', 'talhao',
       'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap',
@@ -650,9 +577,8 @@ class ExportService {
       if (marcarComoExportado) {
         idsParaMarcar.add(arvore.id!);
       }
-      final secoes = await dbHelper.getSecoesPorArvoreId(arvore.id!);
+      final secoes = await _cubagemRepository.getSecoesPorArvoreId(arvore.id!);
       if (secoes.isEmpty) {
-        // <<< CORREÇÃO AQUI: Adicionado 'CUB' no início da linha >>>
         rows.add([
           'CUB', arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao,
           arvore.identificador, arvore.classe, arvore.alturaTotal,
@@ -661,7 +587,6 @@ class ExportService {
         ]);
       } else {
         for (var secao in secoes) {
-          // <<< CORREÇÃO AQUI: Adicionado 'CUB' no início da linha >>>
           rows.add([
             'CUB', arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao,
             arvore.identificador, arvore.classe, arvore.alturaTotal,
@@ -680,10 +605,9 @@ class ExportService {
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
-      await Share.shareXFiles([XFile(path)],
-          subject: 'Exportação de Cubagens GeoForest');
+      await Share.shareXFiles([XFile(path)], subject: 'Exportação de Cubagens GeoForest');
       if (marcarComoExportado) {
-        await dbHelper.marcarCubagensComoExportadas(idsParaMarcar);
+        await _cubagemRepository.marcarCubagensComoExportadas(idsParaMarcar);
       }
     }
   }

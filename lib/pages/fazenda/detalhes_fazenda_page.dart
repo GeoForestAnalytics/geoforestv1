@@ -1,14 +1,20 @@
-// lib/pages/fazenda/detalhes_fazenda_page.dart (VERSÃO COM NAVEGAÇÃO CORRIGIDA)
+// lib/pages/fazenda/detalhes_fazenda_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/pages/talhoes/form_talhao_page.dart';
 import 'package:geoforestv1/pages/talhoes/detalhes_talhao_page.dart';
 import 'package:geoforestv1/utils/navigation_helper.dart';
+
+// --- NOVO IMPORT DO REPOSITÓRIO ---
+import 'package:geoforestv1/data/repositories/talhao_repository.dart';
+// ------------------------------------
+
+// O import do database_helper foi removido.
+// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class DetalhesFazendaPage extends StatefulWidget {
   final Fazenda fazenda;
@@ -24,7 +30,10 @@ class DetalhesFazendaPage extends StatefulWidget {
 class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
   List<Talhao> _talhoes = [];
   bool _isLoading = true;
-  final dbHelper = DatabaseHelper.instance;
+  
+  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
+  final _talhaoRepository = TalhaoRepository();
+  // ---------------------------------------
 
   bool _isSelectionMode = false;
   final Set<int> _selectedTalhoes = {};
@@ -35,6 +44,7 @@ class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
     _carregarTalhoes();
   }
 
+  // --- MÉTODO ATUALIZADO ---
   void _carregarTalhoes() async {
     if (mounted) {
       setState(() {
@@ -44,7 +54,8 @@ class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
       });
     }
 
-    final todosOsTalhoes = await dbHelper.getTalhoesDaFazenda(
+    // Usa o TalhaoRepository
+    final todosOsTalhoes = await _talhaoRepository.getTalhoesDaFazenda(
         widget.fazenda.id, widget.fazenda.atividadeId);
 
     if (mounted) {
@@ -78,6 +89,7 @@ class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
     });
   }
 
+  // --- MÉTODO ATUALIZADO ---
   Future<void> _deleteTalhao(Talhao talhao) async {
     final bool? confirmar = await showDialog<bool>(
       context: context,
@@ -99,13 +111,16 @@ class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
     );
 
     if (confirmar == true && mounted) {
-      await dbHelper.deleteTalhao(talhao.id!);
+      // Usa o TalhaoRepository
+      await _talhaoRepository.deleteTalhao(talhao.id!);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Talhão apagado.'), backgroundColor: Colors.red));
       _carregarTalhoes();
     }
   }
 
+  // O restante dos métodos (navegação, build, etc.) não precisa de alterações.
+  
   void _navegarParaNovoTalhao() async {
     final bool? talhaoCriado = await Navigator.push<bool>(
       context,
@@ -175,8 +190,6 @@ class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
         IconButton(
           icon: const Icon(Icons.home_outlined),
           tooltip: 'Voltar para o Início',
-          // <<< CORREÇÃO DA NAVEGAÇÃO >>>
-          // Em vez de recriar a HomePage, ele "desempilha" as telas até chegar na primeira.
           onPressed: () => NavigationHelper.goBackToHome(context)
         ),
       ],

@@ -1,4 +1,4 @@
-// lib/pages/amostra/coleta_dados_page.dart (VERSÃO COM SUA LÓGICA DE SALVAMENTO CORRIGIDA)
+// lib/pages/amostra/coleta_dados_page.dart (VERSÃO FINAL COMPLETA E CORRIGIDA)
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -8,7 +8,6 @@ import 'dart:math' as math;
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/pages/amostra/inventario_page.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
@@ -16,6 +15,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geoforestv1/services/permission_service.dart';
 import 'package:image/image.dart' as img;
 import 'package:gal/gal.dart';
+
+// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:geoforestv1/data/repositories/projeto_repository.dart';
+// ------------------------------------
 
 enum FormaParcela { retangular, circular }
 
@@ -32,7 +36,12 @@ class ColetaDadosPage extends StatefulWidget {
 
 class _ColetaDadosPageState extends State<ColetaDadosPage> {
   final _formKey = GlobalKey<FormState>();
-  final dbHelper = DatabaseHelper.instance;
+  
+  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS ---
+  final _parcelaRepository = ParcelaRepository();
+  final _projetoRepository = ProjetoRepository();
+  // ---------------------------------------
+  
   late Parcela _parcelaAtual;
 
   final _nomeFazendaController = TextEditingController();
@@ -49,10 +58,8 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   String? _erroLocalizacao;
   bool _salvando = false;
   FormaParcela _formaDaParcela = FormaParcela.retangular;
-  
   bool _isModoEdicao = false;
   bool _isVinculadoATalhao = false;
-
   final ImagePicker _picker = ImagePicker();
   final PermissionService _permissionService = PermissionService();
   bool _isReadOnly = false;
@@ -67,10 +74,10 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     setState(() { _salvando = true; });
     if (widget.parcelaParaEditar != null) {
       _isModoEdicao = true;
-      final parcelaDoBanco = await dbHelper.getParcelaById(widget.parcelaParaEditar!.dbId!);
+      final parcelaDoBanco = await _parcelaRepository.getParcelaById(widget.parcelaParaEditar!.dbId!);
       _parcelaAtual = parcelaDoBanco ?? widget.parcelaParaEditar!;
       if(parcelaDoBanco != null) {
-        _parcelaAtual.arvores = await dbHelper.getArvoresDaParcela(_parcelaAtual.dbId!);
+        _parcelaAtual.arvores = await _parcelaRepository.getArvoresDaParcela(_parcelaAtual.dbId!);
       }
       _isVinculadoATalhao = _parcelaAtual.talhaoId != null;
       if (_parcelaAtual.status == StatusParcela.concluida || _parcelaAtual.status == StatusParcela.exportada) {
@@ -80,7 +87,16 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       _isModoEdicao = false;
       _isReadOnly = false;
       _isVinculadoATalhao = true;
-      _parcelaAtual = Parcela(talhaoId: widget.talhao!.id, idParcela: '', areaMetrosQuadrados: 0, dataColeta: DateTime.now(), nomeFazenda: widget.talhao!.fazendaNome, nomeTalhao: widget.talhao!.nome);
+      _parcelaAtual = Parcela(
+        talhaoId: widget.talhao!.id,
+        idParcela: '',
+        areaMetrosQuadrados: 0,
+        dataColeta: DateTime.now(),
+        nomeFazenda: widget.talhao!.fazendaNome,
+        nomeTalhao: widget.talhao!.nome,
+        idFazenda: widget.talhao!.fazendaId,
+        projetoId: widget.talhao!.projetoId, // Passa o ID do projeto para a nova parcela
+      );
     }
     _preencherControllersComDadosAtuais();
     setState(() { _salvando = false; });
@@ -149,11 +165,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     );
   }
 
-  // MÉTODO _pickImage COM AS CORREÇÕES FINAIS E DEFINITIVAS
-
-// MÉTODO _pickImage COM AS CORREÇÕES FINAIS E DEFINITIVAS
-
-Future<void> _pickImage(ImageSource source) async {
+  Future<void> _pickImage(ImageSource source) async {
     final XFile? pickedFile = await _picker.pickImage(source: source, imageQuality: 85, maxWidth: 1280);
     if (pickedFile == null || !mounted) return;
 
@@ -168,11 +180,7 @@ Future<void> _pickImage(ImageSource source) async {
         throw Exception("A parcela precisa ser salva e vinculada a um talhão antes de adicionar fotos.");
       }
 
-      final db = await dbHelper.database;
-      final talhaoMaps = await db.query('talhoes', where: 'id = ?', whereArgs: [_parcelaAtual.talhaoId]);
-      if (talhaoMaps.isEmpty) throw Exception("Talhão vinculado não encontrado no banco de dados.");
-      final talhao = Talhao.fromMap(talhaoMaps.first);
-      final projeto = await dbHelper.getProjetoPelaAtividade(talhao.fazendaAtividadeId);
+      final projeto = await _projetoRepository.getProjetoPelaParcela(_parcelaAtual);
       final projetoNome = projeto?.nome.replaceAll(RegExp(r'[^\w\s-]'), '') ?? 'PROJETO';
       final fazendaNome = _parcelaAtual.nomeFazenda?.replaceAll(RegExp(r'[^\w\s-]'), '') ?? 'FAZENDA';
       final talhaoNome = _parcelaAtual.nomeTalhao?.replaceAll(RegExp(r'[^\w\s-]'), '') ?? 'TALHAO';
@@ -183,20 +191,15 @@ Future<void> _pickImage(ImageSource source) async {
       
       if (_parcelaAtual.latitude != null && _parcelaAtual.longitude != null) {
         final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
-        final codigoEpsg = 31982; // Valor de exemplo
+        // Simulação de EPSG, idealmente isso viria de um mapa no database_helper
+        final codigoEpsg = 31982; 
         final projWGS84 = proj4.Projection.get('EPSG:4326')!;
         final projUTM = proj4.Projection.get('EPSG:$codigoEpsg')!;
         var pUtm = projWGS84.transform(projUTM, proj4.Point(x: _parcelaAtual.longitude!, y: _parcelaAtual.latitude!));
         utmString = "E: ${pUtm.x.toInt()} N: ${pUtm.y.toInt()} | ${nomeZona.split('/')[1].trim()}";
       }
       
-      final String nomeEquipe = prefs.getString('user_team_name') ?? 'Equipe N/A';
-      final String userRole = prefs.getString('user_role') ?? '';
-      
-      String linhaEquipe = "Equipe: $nomeEquipe";
-      if (userRole.toLowerCase() == 'gerente') {
-        linhaEquipe += " (Gerente)";
-      }
+      final String nomeLider = prefs.getString('nome_lider') ?? 'Equipe N/A';
       
       final timestamp = DateTime.now();
       final dataHoraFormatada = DateFormat('dd/MM/yyyy HH:mm:ss').format(timestamp);
@@ -209,9 +212,9 @@ Future<void> _pickImage(ImageSource source) async {
 
       final List<String> linhas = [
         "Projeto: $projetoNome",
-        "Fazenda: $fazendaNome | Talhao: $talhaoNome | Parcela: $idParcela",
+        "Fazenda: $fazendaNome | Talhão: $talhaoNome | Parcela: $idParcela",
         utmString,
-        "$linhaEquipe | $dataHoraFormatada"
+        "Líder: $nomeLider | $dataHoraFormatada"
       ];
 
       final int alturaLinha = 28;
@@ -227,19 +230,11 @@ Future<void> _pickImage(ImageSource source) async {
 
       final Uint8List bytesFinais = Uint8List.fromList(img.encodeJpg(imagemEditavel, quality: 85));
 
-      // ===================================================================
-      // === SUBSTITUIÇÃO DO CÓDIGO ANTIGO PELO NOVO AQUI ===
-      // ===================================================================
-      
-      // Salva a imagem na galeria usando o novo pacote 'gal'
       await Gal.putImageBytes(bytesFinais, name: nomeArquivoFinal);
 
-      // Adiciona o caminho do arquivo temporário à lista para exibição na tela
       setState(() {
           _parcelaAtual.photoPaths.add(pickedFile.path);
       });
-      
-      // ===================================================================
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -250,13 +245,13 @@ Future<void> _pickImage(ImageSource source) async {
     } catch (e) {
       if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar foto: $e'), backgroundColor: Colors.red));
     }
-}
+  }
 
   Future<void> _reabrirParaEdicao() async {
     setState(() => _salvando = true);
     try {
       final parcelaReaberta = _parcelaAtual.copyWith(status: StatusParcela.emAndamento);
-      await dbHelper.updateParcela(parcelaReaberta);
+      await _parcelaRepository.updateParcela(parcelaReaberta);
       if(mounted) {
         setState(() {
           _parcelaAtual = parcelaReaberta;
@@ -283,7 +278,7 @@ Future<void> _pickImage(ImageSource source) async {
     setState(() => _salvando = true);
 
     if (!_isModoEdicao) {
-        final parcelaExistente = await dbHelper.getParcelaPorIdParcela(widget.talhao!.id!, _idParcelaController.text.trim());
+        final parcelaExistente = await _parcelaRepository.getParcelaPorIdParcela(widget.talhao!.id!, _idParcelaController.text.trim());
         if(parcelaExistente != null && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Este ID de Parcela já existe neste talhão.'), backgroundColor: Colors.red));
             setState(() => _salvando = false);
@@ -293,7 +288,7 @@ Future<void> _pickImage(ImageSource source) async {
 
     try {
       final parcelaAtualizada = parcelaParaSalvar.copyWith(status: StatusParcela.emAndamento);
-      final parcelaSalva = await dbHelper.saveFullColeta(parcelaAtualizada, []);
+      final parcelaSalva = await _parcelaRepository.saveFullColeta(parcelaAtualizada, []);
 
       if (mounted) {
         await Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => InventarioPage(parcela: parcelaSalva)));
@@ -325,7 +320,7 @@ Future<void> _pickImage(ImageSource source) async {
 
     try {
       final parcelaFinalizada = _construirObjetoParcelaParaSalvar().copyWith(status: StatusParcela.concluida);
-      await dbHelper.saveFullColeta(parcelaFinalizada, []);
+      await _parcelaRepository.saveFullColeta(parcelaFinalizada, []);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Parcela finalizada com sucesso!'), backgroundColor: Colors.green));
@@ -343,7 +338,7 @@ Future<void> _pickImage(ImageSource source) async {
     setState(() => _salvando = true);
     try {
       final parcelaEditada = _construirObjetoParcelaParaSalvar();
-      final parcelaSalva = await dbHelper.saveFullColeta(parcelaEditada, _parcelaAtual.arvores);
+      final parcelaSalva = await _parcelaRepository.saveFullColeta(parcelaEditada, _parcelaAtual.arvores);
       
       if (mounted) {
         setState(() {
@@ -375,9 +370,9 @@ Future<void> _pickImage(ImageSource source) async {
   
   Future<void> _recarregarTela() async {
     if (_parcelaAtual.dbId == null) return;
-    final parcelaRecarregada = await dbHelper.getParcelaById(_parcelaAtual.dbId!);
+    final parcelaRecarregada = await _parcelaRepository.getParcelaById(_parcelaAtual.dbId!);
     if(parcelaRecarregada != null && mounted) {
-      final arvoresRecarregadas = await dbHelper.getArvoresDaParcela(parcelaRecarregada.dbId!);
+      final arvoresRecarregadas = await _parcelaRepository.getArvoresDaParcela(parcelaRecarregada.dbId!);
       parcelaRecarregada.arvores = arvoresRecarregadas;
       setState(() {
         _parcelaAtual = parcelaRecarregada;

@@ -1,4 +1,4 @@
-// lib/pages/menu/map_import_page.dart (VERSÃO COM AJUSTES NA APPBAR)
+// lib/pages/menu/map_import_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +9,13 @@ import 'package:geoforestv1/providers/map_provider.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+
+// --- NOVO IMPORT DO REPOSITÓRIO ---
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+// ------------------------------------
+
+// O import do database_helper foi removido.
+// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class MapImportPage extends StatefulWidget {
   const MapImportPage({super.key});
@@ -21,8 +27,6 @@ class MapImportPage extends StatefulWidget {
 class _MapImportPageState extends State<MapImportPage> with RouteAware {
   final _mapController = MapController();
 
-  // O resto do seu código inicial (didChangeDependencies, didPopNext, dispose, etc)
-  // permanece exatamente o mesmo.
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -203,10 +207,6 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
     }
   }
 
-  // =======================================================================
-  // <<< INÍCIO DAS MUDANÇAS >>>
-  // =======================================================================
-
   AppBar _buildAppBar(MapProvider mapProvider) {
     final atividadeTipo = mapProvider.currentAtividade?.tipo ?? 'Planejamento';
 
@@ -223,7 +223,6 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
               icon: const Icon(Icons.grid_on_sharp),
               onPressed: mapProvider.isLoading ? null : _handleGenerateSamples,
               tooltip: 'Gerar Amostras'),
-        // O botão de Desenhar continua aqui, como no seu fluxo ideal
         IconButton(
             icon: const Icon(Icons.edit_location_alt_outlined),
             onPressed: () => mapProvider.startDrawing(),
@@ -243,21 +242,13 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
       leading: IconButton(icon: const Icon(Icons.close), onPressed: () => mapProvider.cancelDrawing(), tooltip: 'Cancelar Desenho'),
       actions: [
         IconButton(icon: const Icon(Icons.undo), onPressed: () => mapProvider.undoLastDrawnPoint(), tooltip: 'Desfazer Último Ponto'),
-        // Ação de salvar agora passa o 'context' para poder abrir o formulário
         IconButton(icon: const Icon(Icons.check), onPressed: () => mapProvider.saveDrawnPolygon(context), tooltip: 'Salvar Polígono'),
       ],
     );
   }
 
-  // =======================================================================
-  // <<< FIM DAS MUDANÇAS >>>
-  // =======================================================================
-
-
   @override
   Widget build(BuildContext context) {
-    // O resto do seu arquivo build (Scaffold, FlutterMap, etc)
-    // permanece exatamente o mesmo.
     final mapProvider = context.watch<MapProvider>();
     final currentUserPosition = mapProvider.currentUserPosition;
     final isDrawing = mapProvider.isDrawing;
@@ -303,7 +294,12 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro: ID da parcela não encontrado.')));
                           return;
                         }
-                        final parcela = await DatabaseHelper.instance.getParcelaById(dbId);
+                        
+                        // --- CORREÇÃO PRINCIPAL AQUI ---
+                        // Instancia o repositório e usa o método correto.
+                        final parcela = await ParcelaRepository().getParcelaById(dbId);
+                        // -----------------------------
+                        
                         if (!mounted || parcela == null) return;
 
                         await Navigator.push<bool>(

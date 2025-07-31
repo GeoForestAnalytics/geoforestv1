@@ -1,4 +1,4 @@
-// lib/pages/menu/configuracoes_page.dart (VERSÃO COM LINK PARA GERENCIAR DELEGAÇÕES)
+// lib/pages/menu/configuracoes_page.dart (VERSÃO FINAL E CORRIGIDA)
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -7,21 +7,17 @@ import 'package:geoforestv1/pages/menu/login_page.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/services/licensing_service.dart';
 import 'package:permission_handler/permission_handler.dart';
-
-// <<< MUDANÇA 1: Import da nova tela de gerenciamento de delegações >>>
 import 'package:geoforestv1/pages/projetos/gerenciar_delegacoes_page.dart';
 
+// --- IMPORT COM O CAMINHO CORRETO PARA A PÁGINA DE EQUIPE ---
+import 'package:geoforestv1/pages/gerente/gerenciar_equipe_page.dart'; 
+// -----------------------------------------------------------
 
-const Map<String, int> zonasUtmSirgas2000 = {
-  'SIRGAS 2000 / UTM Zona 18S': 31978, 'SIRGAS 2000 / UTM Zona 19S': 31979,
-  'SIRGAS 2000 / UTM Zona 20S': 31980, 'SIRGAS 2000 / UTM Zona 21S': 31981,
-  'SIRGAS 2000 / UTM Zona 22S': 31982, 'SIRGAS 2000 / UTM Zona 23S': 31983,
-  'SIRGAS 2000 / UTM Zona 24S': 31984, 'SIRGAS 2000 / UTM Zona 25S': 31985,
-};
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+import 'package:geoforestv1/utils/constants.dart';
 
 class ConfiguracoesPage extends StatefulWidget {
   const ConfiguracoesPage({super.key});
@@ -32,9 +28,11 @@ class ConfiguracoesPage extends StatefulWidget {
 
 class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
   String? _zonaSelecionada;
-  final dbHelper = DatabaseHelper.instance;
   
-  final LicensingService _licensingService = LicensingService();
+  final _parcelaRepository = ParcelaRepository();
+  final _cubagemRepository = CubagemRepository();
+  final _licensingService = LicensingService();
+  
   Map<String, int>? _deviceUsage;
   bool _isLoadingLicense = true;
 
@@ -142,10 +140,10 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
     
     await openAppSettings(); 
   }
+  
 
   @override
   Widget build(BuildContext context) {
-    // <<< MUDANÇA 2: Verificando o cargo do usuário para mostrar o botão condicionalmente >>>
     final licenseProvider = context.watch<LicenseProvider>();
     final isGerente = licenseProvider.licenseData?.cargo == 'gerente';
 
@@ -220,7 +218,6 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                   const Text('Gerenciamento de Dados', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                   const SizedBox(height: 12),
                   
-                  // <<< MUDANÇA 3: O novo ListTile/Botão que só aparece para o gerente >>>
                   if (isGerente)
                     ListTile(
                       leading: const Icon(Icons.handshake_outlined, color: Colors.teal),
@@ -234,6 +231,20 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                       },
                     ),
 
+                  // <<< VERSÃO ÚNICA E CORRIGIDA DO BOTÃO >>>
+                  if (isGerente)
+                    ListTile(
+                      leading: const Icon(Icons.groups_outlined, color: Colors.blueAccent),
+                      title: const Text('Gerenciar Equipe'),
+                      subtitle: const Text('Adicione ou remova membros da equipe.'),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const GerenciarEquipePage()),
+                        );
+                      },
+                    ),
+
                   ListTile(
                     leading: const Icon(Icons.archive_outlined),
                     title: const Text('Arquivar Coletas Exportadas'),
@@ -242,7 +253,7 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                       titulo: 'Arquivar Coletas',
                       conteudo: 'Isso removerá do dispositivo todas as coletas (parcelas e cubagens) já marcadas como exportadas. Deseja continuar?',
                       onConfirmar: () async {
-                        final parcelasCount = await dbHelper.limparParcelasExportadas();
+                        final parcelasCount = await _parcelaRepository.limparParcelasExportadas();
                         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$parcelasCount parcelas arquivadas.')));
                       },
                     ),
@@ -260,7 +271,7 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                       titulo: 'Limpar Todas as Parcelas',
                       conteudo: 'Tem certeza? TODOS os dados de parcelas e árvores serão apagados permanentemente.',
                       onConfirmar: () async {
-                        await dbHelper.limparTodasAsParcelas();
+                        await _parcelaRepository.limparTodasAsParcelas();
                         if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Todas as parcelas foram apagadas!', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
                       },
                     ),
@@ -273,7 +284,7 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                       titulo: 'Limpar Todas as Cubagens',
                       conteudo: 'Tem certeza? TODOS os dados de cubagem serão apagados permanentemente.',
                       onConfirmar: () async {
-                        await dbHelper.limparTodasAsCubagens();
+                        await _cubagemRepository.limparTodasAsCubagens();
                         if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Todos os dados de cubagem foram apagados!', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
                       },
                     ),

@@ -1,8 +1,7 @@
-// lib/services/pdf_service.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/services/pdf_service.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
@@ -14,11 +13,16 @@ import 'package:path_provider_android/path_provider_android.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:permission_handler/permission_handler.dart';
-
 import 'package:geoforestv1/models/analise_result_model.dart';
 
+// --- NOVO IMPORT DO REPOSITÓRIO ---
+import 'package:geoforestv1/data/repositories/analise_repository.dart';
+// ------------------------------------
 
 class PdfService {
+  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
+  final _analiseRepository = AnaliseRepository();
+  // ---------------------------------------
 
   Future<bool> _requestPermission() async {
     Permission permission;
@@ -84,8 +88,6 @@ class PdfService {
     }
   }
 
-  // --- FUNÇÕES PÚBLICAS DE GERAÇÃO DE PDF ---
-
   Future<void> gerarRelatorioVolumetricoPdf({
     required BuildContext context,
     required Map<String, dynamic> resultadoRegressao,
@@ -129,7 +131,6 @@ class PdfService {
     if (talhoes.isEmpty) return;
     
     final analysisService = AnalysisService();
-    final dbHelper = DatabaseHelper.instance;
     final pdf = pw.Document(); 
     int talhoesProcessados = 0;
 
@@ -139,7 +140,7 @@ class PdfService {
     ));
 
     for (final talhao in talhoes) {
-      final dadosAgregados = await dbHelper.getDadosAgregadosDoTalhao(talhao.id!);
+      final dadosAgregados = await _analiseRepository.getDadosAgregadosDoTalhao(talhao.id!);
       final parcelas = dadosAgregados['parcelas'] as List<Parcela>;
       final arvores = dadosAgregados['arvores'] as List<Arvore>;
 
@@ -344,7 +345,6 @@ class PdfService {
     );
   }
   
-  // <<< FUNÇÃO RESTAURADA >>>
   pw.Widget _buildResumoTalhaoPdf(TalhaoAnalysisResult result) {
     return pw.Container(
         padding: const pw.EdgeInsets.all(10),
@@ -533,7 +533,6 @@ class PdfService {
     );
   }
   
-  // <<< FUNÇÃO RESTAURADA >>>
   pw.Widget _buildTabelaRendimentoPdf(List<RendimentoDAP> dados) {
     final headers = ['Classe DAP', 'Volume (m³/ha)', '% do Total', 'Árv./ha'];
     
@@ -558,7 +557,6 @@ class PdfService {
     );
   }
   
-  // <<< FUNÇÃO RESTAURADA >>>
   pw.Widget _buildTabelaSimulacaoPdf(TalhaoAnalysisResult antes, TalhaoAnalysisResult depois) {
     final headers = ['Parâmetro', 'Antes', 'Após'];
     

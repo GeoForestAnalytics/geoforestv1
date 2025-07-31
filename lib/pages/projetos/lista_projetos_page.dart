@@ -1,4 +1,4 @@
-// lib/pages/projetos/lista_projetos_page.dart (VERSÃO COM LÓGICA DE DELEGAÇÃO)
+// lib/pages/projetos/lista_projetos_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -11,11 +11,12 @@ import 'package:uuid/uuid.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Imports do projeto
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/pages/projetos/detalhes_projeto_page.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/services/sync_service.dart';
+import 'package:geoforestv1/services/import_service.dart';
 import 'form_projeto_page.dart';
 
 class ListaProjetosPage extends StatefulWidget {
@@ -33,7 +34,12 @@ class ListaProjetosPage extends StatefulWidget {
 }
 
 class _ListaProjetosPageState extends State<ListaProjetosPage> {
-  final dbHelper = DatabaseHelper.instance;
+  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS E SERVIÇOS ---
+  final _projetoRepository = ProjetoRepository();
+  final _importService = ImportService();
+  final _syncService = SyncService();
+  // ----------------------------------------------------
+  
   List<Projeto> projetos = [];
   bool _isLoading = true;
 
@@ -66,9 +72,11 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     final licenseId = licenseProvider.licenseData!.id; 
 
     if (_isGerente) {
-      data = await dbHelper.getTodosOsProjetosParaGerente();
+      // Usa o repositório
+      data = await _projetoRepository.getTodosOsProjetosParaGerente();
     } else {
-      data = await dbHelper.getTodosProjetos(licenseId);
+      // Usa o repositório
+      data = await _projetoRepository.getTodosProjetos(licenseId);
     }
 
     if (mounted) {
@@ -79,7 +87,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     }
   }
 
-  // <<< MUDANÇA 1: Nova função para DELEGAR um projeto (Ação do Gerente/Klabin) >>>
   Future<void> _delegarProjeto(Projeto projeto) async {
     final bool? confirmar = await showDialog<bool>(
       context: context,
@@ -105,7 +112,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
         "licenseIdConvidada": null,
         "empresaConvidada": "Aguardando Vínculo",
         "dataCriacao": FieldValue.serverTimestamp(),
-        "projetosPermitidos": [projeto.id], // Armazena o ID numérico do projeto
+        "projetosPermitidos": [projeto.id],
       };
 
       await FirebaseFirestore.instance
@@ -156,7 +163,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     }
   }
 
-  // <<< MUDANÇA 2: Nova função para VINCULAR um projeto (Ação do Terceiro/Força) >>>
   Future<void> _vincularProjetoComChave(String chave) async {
     if (chave.trim().isEmpty) return;
     setState(() => _isLoading = true);
@@ -186,9 +192,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
         backgroundColor: Colors.green,
       ));
       
-      // Aqui, você pode chamar a sincronização para baixar os novos projetos
-      final syncService = SyncService();
-      await syncService.sincronizarDados();
+      await _syncService.sincronizarDados();
       await _checkUserRoleAndLoadProjects();
 
     } catch (e) {
@@ -200,7 +204,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     }
   }
 
-  // <<< MUDANÇA 3: Diálogo para o Terceiro/Força inserir a chave >>>
   Future<void> _mostrarDialogoInserirChave() async {
     final controller = TextEditingController();
     final chave = await showDialog<String>(
@@ -220,13 +223,12 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     );
 
     if (chave != null && chave.isNotEmpty && mounted) {
-      Navigator.of(context).pop(); // Fecha o BottomSheet
+      Navigator.of(context).pop();
       await _vincularProjetoComChave(chave);
     }
   }
 
   Future<void> _toggleArchiveStatus(Projeto projeto) async {
-    // (Esta função permanece sem alterações)
     if (!_isGerente) return;
 
     final novoStatus = projeto.status == 'ativo' ? 'arquivado' : 'ativo';
@@ -254,11 +256,10 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       setState(() => _isLoading = true);
       try {
         final projetoAtualizado = projeto.copyWith(status: novoStatus);
-        final db = await dbHelper.database;
-        await db.update('projetos', projetoAtualizado.toMap(), where: 'id = ?', whereArgs: [projeto.id]);
+        // Usa o repositório para atualizar o projeto localmente
+        await _projetoRepository.insertProjeto(projetoAtualizado); // insert com replace fará o update
 
-        final syncService = SyncService();
-        await syncService.atualizarStatusProjetoNaFirebase(projeto.id!.toString(), novoStatus);
+        await _syncService.atualizarStatusProjetoNaFirebase(projeto.id!.toString(), novoStatus);
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Projeto ${projeto.nome} foi atualizado para "$novoStatus".'), backgroundColor: Colors.green),
@@ -281,7 +282,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   Future<void> _iniciarImportacao(Projeto projeto) async {
-    // (Esta função permanece sem alterações)
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['csv'],
@@ -312,7 +312,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       final file = File(result.files.single.path!);
       final csvContent = await file.readAsString();
       
-      final message = await DatabaseHelper.instance.importarCsvUniversal(csvContent, projetoIdAlvo: projeto.id!);
+      final message = await _importService.importarCsvUniversal(csvContent, projetoIdAlvo: projeto.id!);
       
       if (mounted) {
         Navigator.of(context).pop();
@@ -337,7 +337,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   void _clearSelection() {
-    // (Esta função permanece sem alterações)
     if (mounted) {
       setState(() {
         _selectedProjetos.clear();
@@ -347,7 +346,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   void _toggleSelection(int projetoId) {
-    // (Esta função permanece sem alterações)
     if (mounted) {
       setState(() {
         if (_selectedProjetos.contains(projetoId)) {
@@ -361,7 +359,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   Future<void> _deletarProjetosSelecionados() async {
-    // (Esta função permanece sem alterações)
     if (_selectedProjetos.isEmpty || !mounted) return;
 
     final confirmar = await showDialog<bool>(
@@ -379,7 +376,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
             ));
     if (confirmar == true && mounted) {
       for (final id in _selectedProjetos) {
-        await dbHelper.deleteProjeto(id);
+        await _projetoRepository.deleteProjeto(id);
       }
       _clearSelection();
       await _checkUserRoleAndLoadProjects();
@@ -387,7 +384,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   void _navegarParaEdicao(Projeto projeto) async {
-    // (Esta função permanece sem alterações)
     final bool? projetoEditado = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
@@ -402,7 +398,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
   
   void _navegarParaDetalhes(Projeto projeto) {
-    // (Esta função permanece sem alterações)
     Navigator.push(context, MaterialPageRoute(builder: (context) => DetalhesProjetoPage(projeto: projeto)))
       .then((_) => _checkUserRoleAndLoadProjects());
   }
@@ -428,14 +423,12 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
         final projeto = projetos[index];
         final isSelected = _selectedProjetos.contains(projeto.id!);
         final isArchived = projeto.status == 'arquivado';
-        // <<< MUDANÇA 4: Adiciona a verificação se o projeto é delegado >>>
         final isDelegado = projeto.delegadoPorLicenseId != null;
 
         return Slidable(
           key: ValueKey(projeto.id),
           startActionPane: ActionPane(
             motion: const DrawerMotion(),
-            // <<< MUDANÇA 5: O tamanho da action pane agora depende se tem o botão de delegar >>>
             extentRatio: _isGerente ? (isDelegado ? 0.25 : 0.75) : 0.25,
             children: [
               SlidableAction(
@@ -453,7 +446,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
                   icon: isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
                   label: isArchived ? 'Reativar' : 'Arquivar',
                 ),
-              // <<< MUDANÇA 6: O botão de delegar só aparece para o gerente e se não for um projeto já delegado >>>
               if (_isGerente && !isDelegado)
                 SlidableAction(
                   onPressed: (_) => _delegarProjeto(projeto),
@@ -478,7 +470,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
                 }
               },
               onLongPress: () => _toggleSelection(projeto.id!),
-              // <<< MUDANÇA 7: Ícone e subtítulo dinâmicos baseados no status de delegação >>>
               leading: Icon(
                 isSelected ? Icons.check_circle : 
                 isArchived ? Icons.archive_rounded :
@@ -530,7 +521,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     );
   }
 
-  // <<< MUDANÇA 8: O FAB agora mostra um menu de opções >>>
   Widget _buildAddProjectButton() {
     return FloatingActionButton(
       onPressed: () {

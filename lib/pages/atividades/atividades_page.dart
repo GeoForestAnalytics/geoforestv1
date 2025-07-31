@@ -1,15 +1,21 @@
-// lib/pages/atividades/atividades_page.dart (VERSÃO COM EDIÇÃO DE ATIVIDADE)
+// lib/pages/atividades/atividades_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 
-// Importações dos seus arquivos
-import '../../data/datasources/local/database_helper.dart';
-import '../../models/atividade_model.dart';
-import '../../models/projeto_model.dart';
+// --- NOVOS IMPORTS DOS REPOSITÓRIOS E MODELS ---
+import 'package:geoforestv1/data/repositories/atividade_repository.dart';
+import 'package:geoforestv1/models/atividade_model.dart';
+import 'package:geoforestv1/models/projeto_model.dart';
+// ---------------------------------------------
+
 import 'detalhes_atividade_page.dart';
 import 'form_atividade_page.dart';
+
+// O import do database_helper foi removido.
+// import '../../data/datasources/local/database_helper.dart';
+
 
 class AtividadesPage extends StatefulWidget {
   final Projeto projeto;
@@ -24,7 +30,10 @@ class AtividadesPage extends StatefulWidget {
 }
 
 class _AtividadesPageState extends State<AtividadesPage> {
-  final dbHelper = DatabaseHelper.instance;
+  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
+  final _atividadeRepository = AtividadeRepository();
+  // ---------------------------------------
+
   late Future<List<Atividade>> _atividadesFuture;
 
   @override
@@ -33,12 +42,15 @@ class _AtividadesPageState extends State<AtividadesPage> {
     _carregarAtividades();
   }
 
+  // --- MÉTODO ATUALIZADO ---
   void _carregarAtividades() {
     setState(() {
-      _atividadesFuture = dbHelper.getAtividadesDoProjeto(widget.projeto.id!);
+      // Usa o AtividadeRepository
+      _atividadesFuture = _atividadeRepository.getAtividadesDoProjeto(widget.projeto.id!);
     });
   }
 
+  // --- MÉTODO ATUALIZADO ---
   Future<void> _mostrarDialogoDeConfirmacao(Atividade atividade) async {
     final bool? confirmar = await showDialog<bool>(
       context: context,
@@ -62,7 +74,8 @@ class _AtividadesPageState extends State<AtividadesPage> {
     );
     
     if (confirmar == true && mounted) {
-      await dbHelper.deleteAtividade(atividade.id!);
+      // Usa o AtividadeRepository
+      await _atividadeRepository.deleteAtividade(atividade.id!);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Atividade excluída com sucesso!'), backgroundColor: Colors.red),
       );
@@ -70,7 +83,9 @@ class _AtividadesPageState extends State<AtividadesPage> {
     }
   }
 
-  // Navega para a tela de formulário para criar uma nova atividade
+  // O restante dos métodos da classe não interage com o banco de dados diretamente,
+  // então eles permanecem exatamente iguais.
+
   void _navegarParaFormularioAtividade() async {
     final bool? atividadeCriada = await Navigator.push<bool>(
       context,
@@ -83,19 +98,16 @@ class _AtividadesPageState extends State<AtividadesPage> {
     }
   }
   
-  // <<< MUDANÇA 1 >>> Nova função para navegar para a tela de edição
   void _navegarParaEdicao(Atividade atividade) async {
     final bool? atividadeEditada = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        // Reutiliza a FormAtividadePage, passando a atividade a ser editada
         builder: (context) => FormAtividadePage(
           projetoId: atividade.projetoId,
           atividadeParaEditar: atividade,
         ),
       ),
     );
-    // Se a edição foi salva com sucesso, recarrega a lista
     if (atividadeEditada == true && mounted) {
       _carregarAtividades();
     }
@@ -107,7 +119,7 @@ class _AtividadesPageState extends State<AtividadesPage> {
       MaterialPageRoute(
         builder: (context) => DetalhesAtividadePage(atividade: atividade),
       ),
-    );
+    ).then((_) => _carregarAtividades()); // Adicionado para recarregar ao voltar
   }
 
   @override
@@ -144,10 +156,8 @@ class _AtividadesPageState extends State<AtividadesPage> {
             itemBuilder: (context, index) {
               final atividade = atividades[index];
               
-              // <<< MUDANÇA 2 >>> Adiciona a ação de editar no Slidable
               return Slidable(
                 key: ValueKey(atividade.id),
-                // Ações que aparecem ao deslizar para a direita
                 startActionPane: ActionPane(
                   motion: const DrawerMotion(),
                   extentRatio: 0.25,
@@ -161,7 +171,6 @@ class _AtividadesPageState extends State<AtividadesPage> {
                     ),
                   ],
                 ),
-                // Ações que aparecem ao deslizar para a esquerda (excluir)
                 endActionPane: ActionPane(
                   motion: const StretchMotion(),
                   children: [

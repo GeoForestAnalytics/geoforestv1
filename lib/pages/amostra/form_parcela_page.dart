@@ -1,12 +1,18 @@
-// lib/pages/amostra/form_parcela_page.dart
+// lib/pages/amostra/form_parcela_page.dart (VERSÃO REFATORADA COM REPOSITÓRIOS)
 
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/pages/amostra/inventario_page.dart';
-import 'package:geolocator/geolocator.dart'; // <<< 1. IMPORTA O PACOTE
+import 'package:geolocator/geolocator.dart';
+
+// --- NOVO IMPORT DO REPOSITÓRIO ---
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+// ------------------------------------
+
+// O import do database_helper foi removido.
+// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 enum FormaParcela { retangular, circular }
 
@@ -21,7 +27,10 @@ class FormParcelaPage extends StatefulWidget {
 
 class _FormParcelaPageState extends State<FormParcelaPage> {
   final _formKey = GlobalKey<FormState>();
-  final dbHelper = DatabaseHelper.instance;
+  
+  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
+  final _parcelaRepository = ParcelaRepository();
+  // ---------------------------------------
 
   final _idParcelaController = TextEditingController();
   final _observacaoController = TextEditingController();
@@ -34,7 +43,6 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
   FormaParcela _formaDaParcela = FormaParcela.retangular;
   double _areaCalculada = 0.0;
   
-  // >>> 2. ADICIONA ESTADOS PARA GUARDAR AS COORDENADAS <<<
   double? _latitude;
   double? _longitude;
 
@@ -69,7 +77,6 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
     setState(() => _areaCalculada = area);
   }
 
-  // >>> 3. ADICIONA O MÉTODO PARA OBTER A LOCALIZAÇÃO <<<
   Future<void> _obterCoordenadasGPS() async {
     setState(() => _isGettingLocation = true);
 
@@ -108,16 +115,15 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
     }
   }
 
+  // --- MÉTODO ATUALIZADO ---
   Future<void> _salvarEIniciarColeta() async {
     if (!_formKey.currentState!.validate()) return;
     
-    // Validação da área
     if (_areaCalculada <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A área da parcela deve ser maior que zero.'), backgroundColor: Colors.orange));
       return;
     }
     
-    // Validação das coordenadas
     if (_latitude == null || _longitude == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('É obrigatório obter as coordenadas GPS da parcela.'), backgroundColor: Colors.orange));
       return;
@@ -125,7 +131,8 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
 
     setState(() => _isSaving = true);
 
-    final parcelaExistente = await dbHelper.getParcelaPorIdParcela(widget.talhao.id!, _idParcelaController.text.trim());
+    // Usa o ParcelaRepository para verificar a existência
+    final parcelaExistente = await _parcelaRepository.getParcelaPorIdParcela(widget.talhao.id!, _idParcelaController.text.trim());
     if (parcelaExistente != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Este ID de Parcela já existe neste talhão.'), backgroundColor: Colors.red));
         setState(() => _isSaving = false);
@@ -144,13 +151,14 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
       raio: _formaDaParcela == FormaParcela.circular ? double.tryParse(_raioController.text.replaceAll(',', '.')) : null,
       nomeFazenda: widget.talhao.fazendaNome, 
       nomeTalhao: widget.talhao.nome,
-      // >>> 4. ADICIONA AS COORDENADAS AO OBJETO A SER SALVO <<<
       latitude: _latitude,
       longitude: _longitude,
+      projetoId: widget.talhao.projetoId, // Passa o ID do projeto para a nova parcela
     );
 
     try {
-      final parcelaSalva = await dbHelper.saveParcela(novaParcela);
+      // Usa o ParcelaRepository para salvar
+      final parcelaSalva = await _parcelaRepository.saveParcela(novaParcela);
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -164,6 +172,7 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
     }
   }
 
+  // O método build e seus widgets auxiliares não precisam de nenhuma alteração.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -185,7 +194,6 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
               const SizedBox(height: 16),
               _buildCalculadoraArea(),
               const SizedBox(height: 16),
-              // >>> 5. ADICIONA O WIDGET DE GPS NA INTERFACE <<<
               _buildLocalizacaoGps(),
               const SizedBox(height: 16),
               TextFormField(
@@ -207,7 +215,6 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
     );
   }
 
-  // >>> 6. CRIA O WIDGET PARA A INTERFACE DO GPS <<<
   Widget _buildLocalizacaoGps() {
     return Card(
       elevation: 0,

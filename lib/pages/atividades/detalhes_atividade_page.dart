@@ -1,17 +1,21 @@
-// lib/pages/atividades/detalhes_atividade_page.dart
+// lib/pages/atividades/detalhes_atividade_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'package:intl/intl.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
-// import 'package:geoforestv1/models/talhao_model.dart'; // <<< REMOVIDO
 import 'package:geoforestv1/pages/fazenda/form_fazenda_page.dart';
 import 'package:geoforestv1/pages/fazenda/detalhes_fazenda_page.dart';
-// import 'package:geoforestv1/pages/dashboard/relatorio_comparativo_page.dart'; // <<< REMOVIDO
 import 'package:geoforestv1/utils/navigation_helper.dart';
+
+// --- NOVO IMPORT DO REPOSITÓRIO ---
+import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
+// ------------------------------------
+
+// O import do database_helper foi removido.
+// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class DetalhesAtividadePage extends StatefulWidget {
   final Atividade atividade;
@@ -23,7 +27,10 @@ class DetalhesAtividadePage extends StatefulWidget {
 
 class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
   late Future<List<Fazenda>> _fazendasFuture;
-  final dbHelper = DatabaseHelper.instance;
+
+  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
+  final _fazendaRepository = FazendaRepository();
+  // ---------------------------------------
 
   bool _isSelectionMode = false;
   final Set<String> _selectedFazendas = {};
@@ -39,12 +46,14 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
     _carregarFazendas();
   }
 
+  // --- MÉTODO ATUALIZADO ---
   void _carregarFazendas() {
     if (mounted) {
       setState(() {
         _isSelectionMode = false;
         _selectedFazendas.clear();
-        _fazendasFuture = dbHelper.getFazendasDaAtividade(widget.atividade.id!);
+        // Usa o FazendaRepository
+        _fazendasFuture = _fazendaRepository.getFazendasDaAtividade(widget.atividade.id!);
       });
     }
   }
@@ -72,6 +81,7 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
     });
   }
   
+  // --- MÉTODO ATUALIZADO ---
   Future<void> _deleteFazenda(Fazenda fazenda) async {
      final bool? confirmar = await showDialog<bool>(
       context: context,
@@ -90,7 +100,8 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
     );
 
     if (confirmar == true && mounted) {
-      await dbHelper.deleteFazenda(fazenda.id, fazenda.atividadeId);
+      // Usa o FazendaRepository
+      await _fazendaRepository.deleteFazenda(fazenda.id, fazenda.atividadeId);
       
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Fazenda apagada.'),
@@ -98,6 +109,9 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
       _carregarFazendas();
     }
   }
+
+  // O restante dos métodos (navegação, build, etc.) não precisa de alterações
+  // pois eles não interagem diretamente com o banco de dados.
 
   void _navegarParaNovaFazenda() async {
     final bool? fazendaCriada = await Navigator.push<bool>(
@@ -135,8 +149,6 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
       )),
     ).then((_) => _carregarFazendas());
   }
-
-  // <<< FUNÇÃO _navegarParaGeracaoDePlano REMOVIDA >>>
 
   AppBar _buildSelectionAppBar() {
     return AppBar(
@@ -309,7 +321,6 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
                 label: 'Nova Fazenda',
                 onTap: _navegarParaNovaFazenda,
               ),
-              // <<< BOTÃO DE CUBAGEM REMOVIDO DAQUI >>>
             ],
         ),
     );

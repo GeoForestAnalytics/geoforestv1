@@ -1,10 +1,13 @@
-// lib/pages/cubagem/lista_cubagens_page.dart (ARQUIVO NOVO)
+// lib/pages/cubagem/lista_cubagens_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/pages/cubagem/cubagem_dados_page.dart';
+
+// --- NOVO IMPORT DO REPOSITÓRIO ---
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+// ------------------------------------
 
 class ListaCubagensPage extends StatefulWidget {
   final Talhao talhao;
@@ -16,7 +19,10 @@ class ListaCubagensPage extends StatefulWidget {
 
 class _ListaCubagensPageState extends State<ListaCubagensPage> {
   late Future<List<CubagemArvore>> _cubagensFuture;
-  final dbHelper = DatabaseHelper.instance;
+  
+  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
+  final _cubagemRepository = CubagemRepository();
+  // ---------------------------------------
 
   @override
   void initState() {
@@ -24,14 +30,15 @@ class _ListaCubagensPageState extends State<ListaCubagensPage> {
     _carregarCubagens();
   }
 
+  // --- MÉTODO ATUALIZADO ---
   void _carregarCubagens() {
     setState(() {
-      _cubagensFuture = dbHelper.getTodasCubagensDoTalhao(widget.talhao.id!);
+      // Usa o CubagemRepository
+      _cubagensFuture = _cubagemRepository.getTodasCubagensDoTalhao(widget.talhao.id!);
     });
   }
 
   Future<void> _navegarParaDadosCubagem(CubagemArvore arvore) async {
-    // Navega para a tela de edição
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -41,10 +48,10 @@ class _ListaCubagensPageState extends State<ListaCubagensPage> {
         ),
       ),
     );
-    // Recarrega a lista quando voltar
     _carregarCubagens();
   }
 
+  // O método build permanece o mesmo.
   @override
   Widget build(BuildContext context) {
     return Scaffold(

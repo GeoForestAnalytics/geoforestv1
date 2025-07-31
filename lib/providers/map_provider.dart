@@ -1,10 +1,9 @@
-// lib/providers/map_provider.dart (VERSÃO CORRIGIDA COM O CAMPO projetoId)
+// lib/providers/map_provider.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/imported_feature_model.dart';
@@ -18,6 +17,16 @@ import 'package:geoforestv1/services/sampling_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
+
+// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
+import 'package:geoforestv1/data/repositories/talhao_repository.dart';
+// ------------------------------------
+
+// O dbHelper ainda é útil para transações complexas e para o otimizador
+import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+
 enum MapLayerType { ruas, satelite, sateliteMapbox }
 
 class MapProvider with ChangeNotifier {
@@ -26,6 +35,12 @@ class MapProvider with ChangeNotifier {
   final _samplingService = SamplingService();
   late final ActivityOptimizerService _optimizerService;
   final _exportService = ExportService();
+  
+  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS ---
+  final _parcelaRepository = ParcelaRepository();
+  final _fazendaRepository = FazendaRepository();
+  final _talhaoRepository = TalhaoRepository();
+  // ---------------------------------------
   
   static final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
@@ -257,9 +272,6 @@ class MapProvider with ChangeNotifier {
     );
   }
   
-  // =======================================================================
-  // <<< INÍCIO DA CORREÇÃO >>>
-  // =======================================================================
   Future<String> gerarAmostrasParaAtividade({
     required double hectaresPerSample,
     List<ImportedPolygonFeature>? featuresParaProcessar,
@@ -283,7 +295,6 @@ class MapProvider with ChangeNotifier {
     final List<Parcela> parcelasParaSalvar = [];
     int pointIdCounter = 1;
     
-    // Pega o ID do projeto da atividade atual.
     final int? idDoProjetoAtual = _currentAtividade?.projetoId;
 
     for (final ponto in pontosGerados) {
@@ -301,7 +312,6 @@ class MapProvider with ChangeNotifier {
           nomeFazenda: props['db_fazenda_nome']?.toString(),
           idFazenda: props['fazenda_id']?.toString(),
           nomeTalhao: props['talhao_nome']?.toString(),
-          // A linha crucial da correção está aqui:
           projetoId: idDoProjetoAtual,
         ));
         pointIdCounter++;
@@ -309,7 +319,7 @@ class MapProvider with ChangeNotifier {
     }
 
     if (parcelasParaSalvar.isNotEmpty) {
-      await _dbHelper.saveBatchParcelas(parcelasParaSalvar);
+      await _parcelaRepository.saveBatchParcelas(parcelasParaSalvar);
       await loadSamplesParaAtividade();
     }
     
@@ -341,7 +351,6 @@ class MapProvider with ChangeNotifier {
     
     await db.transaction((txn) async {
       for (final ponto in pontosImportados) {
-        // ... (lógica de criar fazenda e talhão se não existirem)
         final props = ponto.properties;
         final fazendaId = (props['fazenda_id'] ?? props['fazenda'])?.toString();
         final nomeTalhao = (props['talhao'] ?? props['talhao_nome'])?.toString();
@@ -378,24 +387,19 @@ class MapProvider with ChangeNotifier {
           nomeFazenda: fazenda.nome, 
           idFazenda: fazenda.id, 
           nomeTalhao: talhao.nome,
-          // A linha crucial da correção está aqui também:
           projetoId: idDoProjetoAtual,
         ));
       }
     });
     
     if (parcelasParaSalvar.isNotEmpty) {
-      await _dbHelper.saveBatchParcelas(parcelasParaSalvar);
+      await _parcelaRepository.saveBatchParcelas(parcelasParaSalvar);
       await loadSamplesParaAtividade();
     }
 
     return "Plano importado: ${parcelasParaSalvar.length} amostras salvas. Novas Fazendas: $novasFazendas, Novos Talhões: $novosTalhoes.";
   }
-  // =======================================================================
-  // <<< FIM DA CORREÇÃO >>>
-  // =======================================================================
   
-  // Funções existentes que não precisam ser alteradas
   void clearAllMapData() {
     _importedPolygons = [];
     _samplePoints = [];
@@ -488,11 +492,11 @@ class MapProvider with ChangeNotifier {
     
     _setLoading(true);
     _samplePoints.clear();
-    final fazendas = await _dbHelper.getFazendasDaAtividade(_currentAtividade!.id!);
+    final fazendas = await _fazendaRepository.getFazendasDaAtividade(_currentAtividade!.id!);
     for (final fazenda in fazendas) {
-      final talhoes = await _dbHelper.getTalhoesDaFazenda(fazenda.id, _currentAtividade!.id!);
+      final talhoes = await _talhaoRepository.getTalhoesDaFazenda(fazenda.id, _currentAtividade!.id!);
       for (final talhao in talhoes) {
-        final parcelas = await _dbHelper.getParcelasDoTalhao(talhao.id!);
+        final parcelas = await _parcelaRepository.getParcelasDoTalhao(talhao.id!);
         for (final p in parcelas) {
            _samplePoints.add(SamplePoint(
               id: int.tryParse(p.idParcela) ?? 0,
@@ -548,7 +552,7 @@ class MapProvider with ChangeNotifier {
         return SampleStatus.open;
       case StatusParcela.pendente:
         return SampleStatus.untouched;
-      case StatusParcela.exportada:
+      case StatusParcela.exportada: // Redundante, mas seguro.
         return SampleStatus.exported;
     }
   }

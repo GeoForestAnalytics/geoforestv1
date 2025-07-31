@@ -1,15 +1,23 @@
-// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO FINAL COM FILTROS)
+// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO FINAL COM REPOSITÓRIOS)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 // Imports do seu projeto
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/services/analysis_service.dart';
 import 'package:geoforestv1/services/pdf_service.dart';
+
+// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
+import 'package:geoforestv1/data/repositories/projeto_repository.dart';
+import 'package:geoforestv1/data/repositories/atividade_repository.dart';
+import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
+import 'package:geoforestv1/data/repositories/talhao_repository.dart';
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+// ------------------------------------
+
 
 class AnaliseVolumetricaPage extends StatefulWidget {
   const AnaliseVolumetricaPage({super.key});
@@ -19,7 +27,14 @@ class AnaliseVolumetricaPage extends StatefulWidget {
 }
 
 class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
-  final dbHelper = DatabaseHelper.instance;
+  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS ---
+  final _projetoRepository = ProjetoRepository();
+  final _atividadeRepository = AtividadeRepository();
+  final _fazendaRepository = FazendaRepository();
+  final _talhaoRepository = TalhaoRepository();
+  final _cubagemRepository = CubagemRepository();
+  // ---------------------------------------
+  
   final analysisService = AnalysisService();
   final pdfService = PdfService();
 
@@ -49,6 +64,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     });
   }
 
+  // --- MÉTODO ATUALIZADO ---
   Future<void> _carregarDadosIniciais() async {
     setState(() { _isLoading = true; _errorMessage = null; });
     try {
@@ -58,25 +74,25 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       }
       final licenseId = licenseProvider.licenseData!.id;
 
-      // Busca e armazena os projetos para o dropdown do filtro
-      final projetos = await dbHelper.getTodosProjetos(licenseId);
+      // Busca e armazena os projetos usando o repositório
+      final projetos = await _projetoRepository.getTodosProjetos(licenseId);
       
-      // Busca todos os talhões da licença
+      // Busca todos os talhões da licença usando os repositórios
       final List<Talhao> todosTalhoesDaLicenca = [];
       for (var proj in projetos) {
-        final atividades = await dbHelper.getAtividadesDoProjeto(proj.id!);
+        final atividades = await _atividadeRepository.getAtividadesDoProjeto(proj.id!);
         for (var atv in atividades) {
-          final fazendas = await dbHelper.getFazendasDaAtividade(atv.id!);
+          final fazendas = await _fazendaRepository.getFazendasDaAtividade(atv.id!);
           for (var faz in fazendas) {
-            todosTalhoesDaLicenca.addAll(await dbHelper.getTalhoesDaFazenda(faz.id, faz.atividadeId));
+            todosTalhoesDaLicenca.addAll(await _talhaoRepository.getTalhoesDaFazenda(faz.id, faz.atividadeId));
           }
         }
       }
 
       // Separa os talhões em listas para cubagem e inventário
-      final todasCubagens = await dbHelper.getTodasCubagens();
+      final todasCubagens = await _cubagemRepository.getTodasCubagens();
       final idsTalhoesCubados = todasCubagens.map((a) => a.talhaoId).where((id) => id != null).toSet();
-      final talhoesInventario = await dbHelper.getTalhoesComParcelasConcluidas();
+      final talhoesInventario = await _talhaoRepository.getTalhoesComParcelasConcluidas();
       final idsTalhoesInventario = talhoesInventario.map((t) => t.id).toSet();
 
       if (mounted) {
@@ -102,8 +118,9 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     });
   }
 
-  // O resto do seu código (_gerarAnaliseCompleta, build, etc.) permanece o mesmo,
-  // mas agora ele vai ler as listas filtradas que preparamos no _buildBody.
+  // O resto dos seus métodos (_gerarAnaliseCompleta, build, _buildBody, etc.)
+  // não precisam de alterações, pois a lógica de UI e de negócio já está correta.
+  // Eles apenas consomem as listas que o _carregarDadosIniciais preparou.
 
   @override
   Widget build(BuildContext context) {
@@ -132,7 +149,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   }
 
   Widget _buildBody() {
-    // LÓGICA DE FILTRO APLICADA AQUI
+    // A lógica de filtro para exibição permanece a mesma.
     final List<Talhao> talhoesCubadosParaExibir = _projetoSelecionado == null
         ? _todosTalhoesCubadosDaLicenca
         : _todosTalhoesCubadosDaLicenca.where((t) => t.projetoId == _projetoSelecionado!.id).toList();
@@ -170,7 +187,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         _buildSelectionCard(
             '1. Selecione os Talhões CUBADOS',
             'Serão usados para gerar a equação de volume.',
-            talhoesCubadosParaExibir, // <-- USA A LISTA FILTRADA
+            talhoesCubadosParaExibir,
             _talhoesCubadosSelecionados,
             (id, selected) => setState(() {
                   _talhoesCubadosSelecionados.clear();
@@ -181,7 +198,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         _buildSelectionCard(
             '2. Selecione os Talhões de INVENTÁRIO',
             'A equação será aplicada nestes talhões.',
-            talhoesInventarioParaExibir, // <-- USA A LISTA FILTRADA
+            talhoesInventarioParaExibir,
             _talhoesInventarioSelecionados,
             (id, selected) => setState(() => selected ? _talhoesInventarioSelecionados.add(id) : _talhoesInventarioSelecionados.remove(id))) ,
         

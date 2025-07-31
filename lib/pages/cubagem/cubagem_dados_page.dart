@@ -1,10 +1,13 @@
-// lib/pages/cubagem/cubagem_dados_page.dart
+// lib/pages/cubagem/cubagem_dados_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
-import '../../data/datasources/local/database_helper.dart';
 import '../../models/cubagem_arvore_model.dart';
 import '../../models/cubagem_secao_model.dart';
 import '../../widgets/cubagem_secao_dialog.dart';
+
+// --- NOVO IMPORT DO REPOSITÓRIO ---
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+// ------------------------------------
 
 class CubagemResult {
   final CubagemArvore arvore;
@@ -32,7 +35,10 @@ class CubagemDadosPage extends StatefulWidget {
 
 class _CubagemDadosPageState extends State<CubagemDadosPage> {
   final _formKey = GlobalKey<FormState>();
-  final dbHelper = DatabaseHelper.instance;
+  
+  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
+  final _cubagemRepository = CubagemRepository();
+  // ---------------------------------------
 
   late TextEditingController _idFazendaController;
   late TextEditingController _fazendaController;
@@ -86,7 +92,7 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
 
   void _carregarSecoes(int arvoreId) async {
     setState(() => _isLoading = true);
-    final secoesDoBanco = await dbHelper.getSecoesPorArvoreId(arvoreId);
+    final secoesDoBanco = await _cubagemRepository.getSecoesPorArvoreId(arvoreId);
     if(mounted) {
       setState(() {
         _secoes = secoesDoBanco;
@@ -167,7 +173,7 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
 
     final arvoreToSave = CubagemArvore(
       id: widget.arvoreParaEditar?.id,
-      talhaoId: widget.arvoreParaEditar?.talhaoId, // << Preserva o talhaoId
+      talhaoId: widget.arvoreParaEditar?.talhaoId,
       idFazenda: _idFazendaController.text.isNotEmpty ? _idFazendaController.text : null,
       nomeFazenda: _fazendaController.text,
       nomeTalhao: _talhaoController.text,
@@ -180,7 +186,7 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     );
       
     try {
-      await dbHelper.salvarCubagemCompleta(arvoreToSave, _secoes);
+      await _cubagemRepository.salvarCubagemCompleta(arvoreToSave, _secoes);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cubagem salva com sucesso!'), backgroundColor: Colors.green));
       Navigator.of(context).pop(CubagemResult(arvore: arvoreToSave, irParaProxima: irParaProxima));

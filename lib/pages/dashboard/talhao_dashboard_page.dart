@@ -1,7 +1,6 @@
-// lib/pages/dashboard/talhao_dashboard_page.dart (ARQUIVO COMPLETO E CORRIGIDO)
+// lib/pages/dashboard/talhao_dashboard_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
@@ -11,6 +10,13 @@ import 'package:geoforestv1/widgets/grafico_distribuicao_widget.dart';
 import 'package:geoforestv1/pages/analises/simulacao_desbaste_page.dart';
 import 'package:geoforestv1/pages/analises/rendimento_dap_page.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
+
+// --- NOVO IMPORT DO REPOSITÓRIO ---
+import 'package:geoforestv1/data/repositories/analise_repository.dart';
+// ------------------------------------
+
+// O import do database_helper foi removido.
+// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class TalhaoDashboardPage extends StatelessWidget {
   final Talhao talhao;
@@ -57,9 +63,11 @@ class TalhaoDashboardContent extends StatefulWidget {
 }
 
 class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
-  final _dbHelper = DatabaseHelper.instance;
+  // --- INSTÂNCIAS DOS NOVOS SERVIÇOS E REPOSITÓRIOS ---
+  final _analiseRepository = AnaliseRepository();
   final _analysisService = AnalysisService();
   final _exportService = ExportService();
+  // ----------------------------------------------------
 
   List<Parcela> _parcelasDoTalhao = [];
   List<Arvore> _arvoresDoTalhao = [];
@@ -110,17 +118,23 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     );
   }
 
+  // --- MÉTODO ATUALIZADO ---
   Future<void> _carregarEAnalisarTalhao() async {
-    final dadosAgregados = await _dbHelper.getDadosAgregadosDoTalhao(widget.talhao.id!);
+    // Usa o AnaliseRepository para buscar os dados agregados
+    final dadosAgregados = await _analiseRepository.getDadosAgregadosDoTalhao(widget.talhao.id!);
+    
     _parcelasDoTalhao = dadosAgregados['parcelas'] as List<Parcela>;
     _arvoresDoTalhao = dadosAgregados['arvores'] as List<Arvore>;
     if (!mounted || _parcelasDoTalhao.isEmpty || _arvoresDoTalhao.isEmpty) return;
+    
     final resultado = _analysisService.getTalhaoInsights(_parcelasDoTalhao, _arvoresDoTalhao);
     if (mounted) {
       setState(() => _analysisResult = resultado);
     }
   }
   
+  // O restante dos métodos (navegação, build, etc.) não precisa de alterações.
+
   void _navegarParaSimulacao() {
     if (_analysisResult == null) return;
     Navigator.push(
@@ -156,9 +170,6 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
       ),
     );
   }
-
-  // <<< MÉTODO _gerarPlanoDeCubagemPdf REMOVIDO >>>
-  // void _gerarPlanoDeCubagemPdf() async { ... }
 
   @override
   Widget build(BuildContext context) {
@@ -218,7 +229,6 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
                 label: const Text('Analisar Rendimento Comercial'),
                 style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
               ),
-              // <<< BOTÃO VERMELHO E O SIZEDBOX ACIMA DELE FORAM REMOVIDOS >>>
             ],
           ),
         );

@@ -1,11 +1,19 @@
-// lib/pages/cubagem/plano_cubagem_selecao_page.dart (VERSÃO CORRIGIDA)
+// lib/pages/cubagem/plano_cubagem_selecao_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // <<< IMPORT ADICIONADO
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:intl/intl.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
+import 'package:geoforestv1/services/analysis_service.dart';
+
+// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
+import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
+import 'package:geoforestv1/data/repositories/talhao_repository.dart';
+import 'package:geoforestv1/data/repositories/analise_repository.dart';
+import 'package:geoforestv1/data/repositories/atividade_repository.dart';
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+// ------------------------------------
 
 class PlanoCubagemSelecaoPage extends StatefulWidget {
   final Atividade atividadeDeOrigem;
@@ -16,7 +24,13 @@ class PlanoCubagemSelecaoPage extends StatefulWidget {
 }
 
 class _PlanoCubagemSelecaoPageState extends State<PlanoCubagemSelecaoPage> {
-  final dbHelper = DatabaseHelper.instance;
+  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS ---
+  final _fazendaRepository = FazendaRepository();
+  final _talhaoRepository = TalhaoRepository();
+  final _analiseRepository = AnaliseRepository();
+  final _atividadeRepository = AtividadeRepository();
+  final _cubagemRepository = CubagemRepository();
+  // ---------------------------------------
 
   List<Fazenda> _fazendasDisponiveis = [];
   Map<String, List<Talhao>> _talhoesPorFazenda = {};
@@ -34,13 +48,13 @@ class _PlanoCubagemSelecaoPageState extends State<PlanoCubagemSelecaoPage> {
 
   Future<void> _carregarDados() async {
     setState(() => _isLoading = true);
-    final fazendas = await dbHelper.getFazendasDaAtividade(widget.atividadeDeOrigem.id!);
+    final fazendas = await _fazendaRepository.getFazendasDaAtividade(widget.atividadeDeOrigem.id!);
     final talhoesPorFazenda = <String, List<Talhao>>{};
     for (final fazenda in fazendas) {
-      final talhoes = await dbHelper.getTalhoesDaFazenda(fazenda.id, fazenda.atividadeId);
+      final talhoes = await _talhaoRepository.getTalhoesDaFazenda(fazenda.id, fazenda.atividadeId);
       final talhoesComDados = <Talhao>[];
       for (final talhao in talhoes) {
-        final dadosAgregados = await dbHelper.getDadosAgregadosDoTalhao(talhao.id!);
+        final dadosAgregados = await _analiseRepository.getDadosAgregadosDoTalhao(talhao.id!);
         if ((dadosAgregados['parcelas'] as List).isNotEmpty) {
            talhoesComDados.add(talhao);
         }
@@ -78,10 +92,8 @@ class _PlanoCubagemSelecaoPageState extends State<PlanoCubagemSelecaoPage> {
   void _toggleTalhao(int talhaoId, bool? isSelected) {
     setState(() {
       if (isSelected == true) {
-        // Usa diretamente o 'talhaoId' que o método recebeu
         _talhoesSelecionados.add(talhaoId);
       } else {
-        // Usa diretamente o 'talhaoId' que o método recebeu
         _talhoesSelecionados.remove(talhaoId);
       }
     });
@@ -129,12 +141,11 @@ class _PlanoCubagemSelecaoPageState extends State<PlanoCubagemSelecaoPage> {
         descricao: 'Plano gerado em ${DateFormat('dd/MM/yyyy').format(DateTime.now())}', 
         dataCriacao: DateTime.now()
       );
-      final novaAtividadeId = await dbHelper.insertAtividade(novaAtividadeCubagem);
+      final novaAtividadeId = await _atividadeRepository.insertAtividade(novaAtividadeCubagem);
 
       for (final talhaoId in _talhoesSelecionados) {
         final talhaoOriginal = _talhoesPorFazenda.values.expand((t) => t).firstWhere((t) => t.id == talhaoId);
-        // <<< LÓGICA CORRIGIDA >>>
-        await dbHelper.gerarPlanoDeCubagemNoBanco(talhaoOriginal, totalParaCubar, novaAtividadeId);
+        await _cubagemRepository.gerarPlanoDeCubagemNoBanco(talhaoOriginal, totalParaCubar, novaAtividadeId, AnalysisService());
       }
       
       if(!mounted) return;

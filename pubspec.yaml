@@ -63,6 +63,7 @@ dependencies:
   # Imagens
   image_picker: ^1.0.7 # Capturar ou escolher imagens
   image: ^4.5.4 # Manipulação de imagens em Dart puro
+  cloud_functions: ^6.0.0
 
   # Vitrines (comentados)
   # flutter_stripe: ^10.1.1 # Pagamentos com Stripe

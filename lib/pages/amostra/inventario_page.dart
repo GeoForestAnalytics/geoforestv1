@@ -1,13 +1,16 @@
-// lib/pages/amostra/inventario_page.dart (VERSÃO CORRIGIDA E COMPLETA)
+// lib/pages/amostra/inventario_page.dart (VERSÃO COMPLETA E CORRIGIDA)
 
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/services/validation_service.dart';
 import 'package:geoforestv1/widgets/arvore_dialog.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:geoforestv1/pages/dashboard/dashboard_page.dart';
+
+// --- NOVO IMPORT DO REPOSITÓRIO ---
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+// ------------------------------------
 
 class InventarioPage extends StatefulWidget {
   final Parcela parcela;
@@ -19,7 +22,10 @@ class InventarioPage extends StatefulWidget {
 
 class _InventarioPageState extends State<InventarioPage> {
   final _validationService = ValidationService();
-  final dbHelper = DatabaseHelper.instance;
+  
+  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
+  final _parcelaRepository = ParcelaRepository();
+  // ---------------------------------------
 
   late Parcela _parcelaAtual;
   List<Arvore> _arvoresColetadas = [];
@@ -40,18 +46,18 @@ class _InventarioPageState extends State<InventarioPage> {
   }
 
   Future<bool> _carregarDadosIniciais() async {
-    if (_parcelaAtual.status == StatusParcela.concluida) {
+    if (_parcelaAtual.status == StatusParcela.concluida || _parcelaAtual.status == StatusParcela.exportada) {
       _isReadOnly = true;
     } else {
       _isReadOnly = false;
       if (_parcelaAtual.status != StatusParcela.emAndamento) {
         _parcelaAtual.status = StatusParcela.emAndamento;
-        await dbHelper.updateParcelaStatus(_parcelaAtual.dbId!, StatusParcela.emAndamento);
+        await _parcelaRepository.updateParcelaStatus(_parcelaAtual.dbId!, StatusParcela.emAndamento);
       }
     }
 
     if (_parcelaAtual.dbId != null) {
-      _arvoresColetadas = await dbHelper.getArvoresDaParcela(_parcelaAtual.dbId!);
+      _arvoresColetadas = await _parcelaRepository.getArvoresDaParcela(_parcelaAtual.dbId!);
     }
     
     return true;
@@ -61,7 +67,7 @@ class _InventarioPageState extends State<InventarioPage> {
     setState(() => _isSaving = true);
     try {
       _parcelaAtual.status = StatusParcela.emAndamento;
-      await dbHelper.updateParcelaStatus(_parcelaAtual.dbId!, StatusParcela.emAndamento);
+      await _parcelaRepository.updateParcelaStatus(_parcelaAtual.dbId!, StatusParcela.emAndamento);
       if (mounted) {
         setState(() {
           _isReadOnly = false;
@@ -121,7 +127,7 @@ class _InventarioPageState extends State<InventarioPage> {
         if (compPos != 0) return compPos;
         return (a.id ?? 0).compareTo(b.id ?? 0);
       });
-      await dbHelper.saveFullColeta(_parcelaAtual, _arvoresColetadas);
+      await _parcelaRepository.saveFullColeta(_parcelaAtual, _arvoresColetadas);
       if (mounted && showSnackbar) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Progresso salvo!'), duration: Duration(seconds: 2), backgroundColor: Colors.green));
       }
@@ -213,7 +219,6 @@ class _InventarioPageState extends State<InventarioPage> {
     if (result.irParaProxima) {
       Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore());
     } 
-    // <<< BLOCO RESTAURADO: Fuste Adicional >>>
     else if (result.continuarNaMesmaPosicao) {
       Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore(isFusteAdicional: true));
     } 
@@ -230,7 +235,6 @@ class _InventarioPageState extends State<InventarioPage> {
         Future.delayed(const Duration(milliseconds: 100), () => _abrirFormularioParaEditar(_arvoresColetadas[novoIndex + 1]));
       }
     } 
-    // <<< NOVO BLOCO: Atualizar e Anterior >>>
     else if (result.atualizarEAnterior && indexOriginal != null) {
       _arvoresColetadas.sort((a, b) {
         int compLinha = a.linha.compareTo(b.linha);
@@ -328,64 +332,6 @@ class _InventarioPageState extends State<InventarioPage> {
     await showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text("Relatório de Análise Estatística"), content: validationResult.isValid ? const Text("Nenhuma anomalia estatística significativa foi encontrada nos dados de CAP.") : SingleChildScrollView(child: Text(validationResult.warnings.join('\n\n'))), actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text("OK"))]));
   }
   
-  Widget _buildSummaryCard() {
-    final covas = <String>{};
-    for (var arvore in _arvoresColetadas) {
-      covas.add('${arvore.linha}-${arvore.posicaoNaLinha}');
-    }
-    final int totalCovas = covas.length;
-
-    final int contagemAlturaNormal = _arvoresColetadas.where((a) => a.codigo.name == 'normal' && a.altura != null && a.altura! > 0).length;
-    final int contagemAlturaDominante = _arvoresColetadas.where((a) => a.dominante && a.altura != null && a.altura! > 0).length;
-    final int contagemAlturaOutros = _arvoresColetadas.where((a) => a.codigo.name != 'normal' && a.altura != null && a.altura! > 0).length;
-
-    return Card(
-      margin: const EdgeInsets.all(8),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Talhão: ${_parcelaAtual.nomeTalhao} / Parcela: ${_parcelaAtual.idParcela}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const Divider(height: 20),
-            _buildStatRow('Total de Covas:', '$totalCovas'),
-            _buildStatRow('Alturas (Normais):', '$contagemAlturaNormal'),
-            _buildStatRow('Alturas (Dominantes):', '$contagemAlturaDominante'),
-            _buildStatRow('Alturas (Outros Códigos):', '$contagemAlturaOutros'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeaderRow() {
-    final theme = Theme.of(context);
-    final headerStyle = theme.textTheme.labelMedium?.copyWith(
-      fontWeight: FontWeight.bold,
-      color: theme.colorScheme.onSurface.withOpacity(0.6),
-      letterSpacing: 0.5,
-    );
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-        border: Border(bottom: BorderSide(color: theme.dividerColor, width: 1.5)),
-      ),
-      child: Row(
-        children: [
-          _HeaderCell('LINHA', flex: 15, style: headerStyle),
-          _HeaderCell('ÁRVORE', flex: 15, style: headerStyle),
-          _HeaderCell('CAP', flex: 20, style: headerStyle),
-          _HeaderCell('ALTURA', flex: 20, style: headerStyle),
-          _HeaderCell('CÓDIGOS', flex: 30, style: headerStyle),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -534,6 +480,65 @@ class _InventarioPageState extends State<InventarioPage> {
         tooltip: 'Adicionar Árvore',
         icon: const Icon(Icons.add),
         label: const Text('Nova Árvore'),
+      ),
+    );
+  }
+
+  // --- MÉTODOS DE BUILD QUE FALTAVAM ---
+  Widget _buildSummaryCard() {
+    final covas = <String>{};
+    for (var arvore in _arvoresColetadas) {
+      covas.add('${arvore.linha}-${arvore.posicaoNaLinha}');
+    }
+    final int totalCovas = covas.length;
+
+    final int contagemAlturaNormal = _arvoresColetadas.where((a) => a.codigo.name == 'normal' && a.altura != null && a.altura! > 0).length;
+    final int contagemAlturaDominante = _arvoresColetadas.where((a) => a.dominante && a.altura != null && a.altura! > 0).length;
+    final int contagemAlturaOutros = _arvoresColetadas.where((a) => a.codigo.name != 'normal' && a.altura != null && a.altura! > 0).length;
+
+    return Card(
+      margin: const EdgeInsets.all(8),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Talhão: ${_parcelaAtual.nomeTalhao} / Parcela: ${_parcelaAtual.idParcela}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const Divider(height: 20),
+            _buildStatRow('Total de Covas:', '$totalCovas'),
+            _buildStatRow('Alturas (Normais):', '$contagemAlturaNormal'),
+            _buildStatRow('Alturas (Dominantes):', '$contagemAlturaDominante'),
+            _buildStatRow('Alturas (Outros Códigos):', '$contagemAlturaOutros'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderRow() {
+    final theme = Theme.of(context);
+    final headerStyle = theme.textTheme.labelMedium?.copyWith(
+      fontWeight: FontWeight.bold,
+      color: theme.colorScheme.onSurface.withOpacity(0.6),
+      letterSpacing: 0.5,
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        border: Border(bottom: BorderSide(color: theme.dividerColor, width: 1.5)),
+      ),
+      child: Row(
+        children: [
+          _HeaderCell('LINHA', flex: 15, style: headerStyle),
+          _HeaderCell('ÁRVORE', flex: 15, style: headerStyle),
+          _HeaderCell('CAP', flex: 20, style: headerStyle),
+          _HeaderCell('ALTURA', flex: 20, style: headerStyle),
+          _HeaderCell('CÓDIGOS', flex: 30, style: headerStyle),
+        ],
       ),
     );
   }

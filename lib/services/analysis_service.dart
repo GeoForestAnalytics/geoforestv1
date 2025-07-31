@@ -1,8 +1,7 @@
-// lib/services/analysis_service.dart (VERSÃO COM ALGORITMO DE SORTIMENTO CORRIGIDO)
+// lib/services/analysis_service.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
@@ -14,7 +13,21 @@ import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/sortimento_model.dart';
 import 'package:ml_linalg/linalg.dart';
 
+// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+import 'package:geoforestv1/data/repositories/analise_repository.dart';
+import 'package:geoforestv1/data/repositories/projeto_repository.dart';
+import 'package:geoforestv1/data/repositories/atividade_repository.dart';
+// ------------------------------------
+
 class AnalysisService {
+  // --- INSTÂNCIAS DOS REPOSITÓRIOS ---
+  final _cubagemRepository = CubagemRepository();
+  final _analiseRepository = AnaliseRepository();
+  final _projetoRepository = ProjetoRepository();
+  final _atividadeRepository = AtividadeRepository();
+  // ------------------------------------
+
   static const double FATOR_DE_FORMA = 0.45;
 
   final List<SortimentoModel> _sortimentosFixos = [
@@ -49,14 +62,14 @@ class AnalysisService {
   }
 
   Future<Map<String, dynamic>> gerarEquacaoSchumacherHall(List<CubagemArvore> arvoresCubadas) async {
-    final dbHelper = DatabaseHelper.instance;
     final List<Vector> xData = [];
     final List<double> yData = [];
 
     for (final arvoreCubada in arvoresCubadas) {
       if (arvoreCubada.id == null) continue;
 
-      final secoes = await dbHelper.getSecoesPorArvoreId(arvoreCubada.id!);
+      // Usa o CubagemRepository para buscar as seções
+      final secoes = await _cubagemRepository.getSecoesPorArvoreId(arvoreCubada.id!);
       final volumeReal = calcularVolumeComercialSmalian(secoes);
 
       if (volumeReal <= 0 || arvoreCubada.valorCAP <= 0 || arvoreCubada.alturaTotal <= 0) {
@@ -137,16 +150,12 @@ class AnalysisService {
     return arvoresComVolume;
   }
   
-  // ===================================================================
-  // <<< ALGORITMO DE SORTIMENTO CORRIGIDO >>>
-  // ===================================================================
   Map<String, double> classificarSortimentos(List<CubagemSecao> secoes) {
     Map<String, double> volumesPorSortimento = {};
     if (secoes.length < 2) return volumesPorSortimento;
 
     secoes.sort((a, b) => a.alturaMedicao.compareTo(b.alturaMedicao));
 
-    // Itera sobre cada segmento (tora) da árvore
     for (int i = 0; i < secoes.length - 1; i++) {
         final secaoBase = secoes[i];
         final secaoPonta = secoes[i+1];
@@ -154,18 +163,14 @@ class AnalysisService {
         final diametroBase = secaoBase.diametroSemCasca;
         final diametroPonta = secaoPonta.diametroSemCasca;
 
-        // Se a tora inteira for muito fina, pula para a próxima
         if (diametroBase < _sortimentosFixos.last.diametroMinimo) continue;
 
         final comprimentoTora = secaoPonta.alturaMedicao - secaoBase.alturaMedicao;
         
-        // Calcula o volume total da tora pelo método de Smalian
         final areaBaseM2 = (pi * pow(diametroBase / 100, 2)) / 4;
         final areaPontaM2 = (pi * pow(diametroPonta / 100, 2)) / 4;
         final volumeTora = ((areaBaseM2 + areaPontaM2) / 2) * comprimentoTora;
 
-        // Encontra o sortimento apropriado para esta tora
-        // A verificação é feita com o diâmetro da ponta fina da tora
         SortimentoModel? sortimentoEncontrado;
         for (final sortimentoDef in _sortimentosFixos) {
             if (diametroPonta >= sortimentoDef.diametroMinimo && diametroPonta < sortimentoDef.diametroMaximo) {
@@ -174,7 +179,6 @@ class AnalysisService {
             }
         }
 
-        // Se um sortimento foi encontrado, adiciona o volume da tora a ele.
         if (sortimentoEncontrado != null) {
             volumesPorSortimento.update(
                 sortimentoEncontrado.nome, 
@@ -411,19 +415,19 @@ class AnalysisService {
   }
 
   double _areaBasalPorArvore(double cap) {
-    if (cap <= 0) return 0;
+    if (cap <= 0) return 0.0;
     final double dap = cap / pi;
     return (pi * pow(dap, 2)) / 40000;
   }
 
   double _estimateVolume(double cap, double altura) {
-    if (cap <= 0 || altura <= 0) return 0;
+    if (cap <= 0 || altura <= 0) return 0.0;
     final areaBasal = _areaBasalPorArvore(cap);
     return areaBasal * altura * FATOR_DE_FORMA;
   }
 
   double _calculateAverage(List<double> numbers) {
-    if (numbers.isEmpty) return 0;
+    if (numbers.isEmpty) return 0.0;
     return numbers.reduce((a, b) => a + b) / numbers.length;
   }
 
@@ -433,9 +437,7 @@ class AnalysisService {
     required int quantidade,
     required String metodoCubagem,
   }) async {
-    final dbHelper = DatabaseHelper.instance;
     final Map<int, int> quantidadesPorTalhao = {};
-    
     final Map<Talhao, Map<String, int>> planosGerados = {};
 
     if (metodo == MetodoDistribuicaoCubagem.fixoPorTalhao) {
@@ -466,7 +468,7 @@ class AnalysisService {
       final totalArvoresParaCubar = quantidadesPorTalhao[talhao.id!] ?? 0;
       if (totalArvoresParaCubar <= 0) continue;
       
-      final dadosAgregados = await dbHelper.getDadosAgregadosDoTalhao(talhao.id!);
+      final dadosAgregados = await _analiseRepository.getDadosAgregadosDoTalhao(talhao.id!);
       final parcelas = dadosAgregados['parcelas'] as List<Parcela>;
       final arvores = dadosAgregados['arvores'] as List<Arvore>;
 
@@ -474,7 +476,7 @@ class AnalysisService {
       
       final analiseResult = getTalhaoInsights(parcelas, arvores);
       
-      final projeto = await dbHelper.getProjetoPelaAtividade(talhao.fazendaAtividadeId);
+      final projeto = await _projetoRepository.getProjetoPelaAtividade(talhao.fazendaAtividadeId);
       if (projeto == null) {
         debugPrint("Aviso: Não foi possível encontrar o projeto pai para o talhão ${talhao.nome}. Pulando.");
         continue;
@@ -515,7 +517,7 @@ class AnalysisService {
           );
         }
       });
-      await dbHelper.criarAtividadeComPlanoDeCubagem(novaAtividade, placeholders);
+      await _atividadeRepository.criarAtividadeComPlanoDeCubagem(novaAtividade, placeholders);
     }
     
     return planosGerados;

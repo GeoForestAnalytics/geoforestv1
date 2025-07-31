@@ -1,52 +1,52 @@
-// ARQUIVO: lib/services/auth_service.dart (VERSÃO FINAL E COMPLETA)
+// lib/services/auth_service.dart (VERSÃO CORRETA E FINAL)
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <<< ADICIONADO
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geoforestv1/services/licensing_service.dart';
 
 class AuthService {
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance; // <<< ADICIONADO
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final LicensingService _licensingService = LicensingService();
 
-  // A função de login não precisa de alterações.
   Future<UserCredential> signInWithEmailAndPassword({
-  required String email,
-  required String password,
-}) async {
-  // O bloco 'if' foi removido. A execução agora sempre começa no 'try'.
-  try {
-    final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final user = userCredential.user;
 
-    if (userCredential.user == null) {
-      throw FirebaseAuthException(code: 'user-not-found', message: 'Usuário não encontrado após o login.');
+      if (user == null) {
+        throw FirebaseAuthException(code: 'user-not-found');
+      }
+
+      // Força a atualização do token para pegar os Custom Claims mais recentes
+      await user.getIdToken(true); 
+
+      await _licensingService.checkAndRegisterDevice(user);
+      
+      return userCredential;
+    } on LicenseException catch(e) {
+      // Se a licença falhar, desloga o usuário para evitar estado inconsistente.
+      print('Erro de licença: ${e.message}. Deslogando usuário.');
+      await signOut(); 
+      rethrow;
+    } on FirebaseAuthException {
+      rethrow;
     }
-
-    // Esta linha agora será executada para TODOS os usuários, incluindo o de teste.
-    await _licensingService.checkAndRegisterDevice(userCredential.user!); 
-    
-    return userCredential;
-
-  } on LicenseException catch (e) {
-    print('Erro de licença: ${e.message}. Deslogando usuário.');
-    await signOut(); 
-    rethrow;
-  } on FirebaseAuthException {
-    rethrow;
   }
-}
 
-  // <<< ESTA É A FUNÇÃO QUE FOI COMPLETAMENTE ATUALIZADA >>>
+  // --- ESTA É A FUNÇÃO CORRIGIDA ---
   Future<UserCredential> createUserWithEmailAndPassword({
     required String email,
     required String password,
     required String displayName,
   }) async {
     try {
-      // 1. Cria o usuário na autenticação (como antes)
       final credential = await _firebaseAuth.createUserWithEmailAndPassword(
         email: email,
         password: password,
@@ -54,18 +54,16 @@ class AuthService {
       final user = credential.user;
 
       if (user != null) {
-        // Atualiza o nome de exibição do usuário
         await user.updateDisplayName(displayName);
 
-        // 2. Define a data de fim do período de teste (7 dias a partir de agora)
+        // Define a data de fim do período de teste
         final trialEndDate = DateTime.now().add(const Duration(days: 7));
         
-        // 3. Prepara os dados da licença de teste
+        // Prepara os dados da licença no formato NOVO e CORRETO
         final licenseData = {
-          'stripeCustomerId': null, 
-          'statusAssinatura': 'trial',
+          'statusAssinatura': 'trial', // Começa como trial
           'features': {
-            'exportacao': false,
+            'exportacao': true, // Pode definir como true para o trial
             'analise': true,
           },
           'limites': {
@@ -77,30 +75,33 @@ class AuthService {
             'dataInicio': FieldValue.serverTimestamp(),
             'dataFim': Timestamp.fromDate(trialEndDate),
           },
-          // =================================================================
-          // <<< MUDANÇA PRINCIPAL AQUI >>>
-          // Cria o mapa 'usuariosPermitidos' e já insere o próprio usuário.
+          // CRIA O MAPA 'usuariosPermitidos' com um OBJETO para o gerente
           'usuariosPermitidos': {
-            user.uid: 'gerente' // Define o criador da conta como 'gerente' da sua própria licença
+            user.uid: {
+              'cargo': 'gerente',
+              'nome': displayName,
+              'email': email,
+              'adicionadoEm': FieldValue.serverTimestamp(),
+            }
           }
-          // =================================================================
         };
 
-        // 4. Salva a licença de teste no Firestore usando o ID do usuário
+        // Salva a licença no Firestore usando o UID do usuário como ID do documento
         await _firestore.collection('clientes').doc(user.uid).set(licenseData);
       }
       
       return credential;
 
     } on FirebaseAuthException catch (e) {
-      // Propaga erros comuns (como "email já em uso") para a tela de registro
-      throw Exception(e.message);
+      if (e.code == 'email-already-in-use') {
+        throw Exception('Este email já está em uso por outra conta.');
+      }
+      throw Exception('Ocorreu um erro durante o registro: ${e.message}');
     } catch (e) {
       throw Exception('Ocorreu um erro inesperado durante o registro.');
     }
   }
 
-  // O resto do arquivo não precisa de mudanças.
   Future<void> sendPasswordResetEmail({required String email}) async {
     await _firebaseAuth.sendPasswordResetEmail(email: email);
   }
