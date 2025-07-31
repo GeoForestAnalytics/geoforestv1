@@ -257,7 +257,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       try {
         final projetoAtualizado = projeto.copyWith(status: novoStatus);
         // Usa o repositório para atualizar o projeto localmente
-        await _projetoRepository.insertProjeto(projetoAtualizado); // insert com replace fará o update
+         await _projetoRepository.updateProjeto(projetoAtualizado); // insert com replace fará o update
 
         await _syncService.atualizarStatusProjetoNaFirebase(projeto.id!.toString(), novoStatus);
 

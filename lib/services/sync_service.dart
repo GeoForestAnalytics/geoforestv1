@@ -41,8 +41,12 @@ class SyncService {
     final licenseId = licenseDoc.id;
 
     final licenseData = licenseDoc.data()!;
+    
+    // --- CORREÇÃO PRINCIPAL AQUI ---
     final usuariosPermitidos = licenseData['usuariosPermitidos'] as Map<String, dynamic>? ?? {};
-    final cargo = usuariosPermitidos[user.uid] as String? ?? 'equipe';
+    final dadosDoUsuario = usuariosPermitidos[user.uid] as Map<String, dynamic>?;
+    final cargo = dadosDoUsuario?['cargo'] as String? ?? 'equipe'; // Lê o cargo de dentro do objeto
+    // -----------------------------
 
     if (cargo == 'gerente') {
       debugPrint("Sincronização em modo GERENTE: Upload e Download completos.");

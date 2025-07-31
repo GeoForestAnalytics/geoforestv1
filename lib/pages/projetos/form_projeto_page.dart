@@ -1,12 +1,13 @@
-// lib/pages/projetos/form_projeto_page.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/pages/projetos/form_projeto_page.dart (VERSÃO CORRIGIDA E COMPLETA)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-// Imports necessários
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+// --- NOVOS IMPORTS ---
+import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
+// ---------------------
 
 class FormProjetoPage extends StatefulWidget {
   final Projeto? projetoParaEditar;
@@ -28,6 +29,8 @@ class _FormProjetoPageState extends State<FormProjetoPage> {
   final _empresaController = TextEditingController();
   final _responsavelController = TextEditingController();
 
+  // --- INSTÂNCIA DO REPOSITÓRIO ---
+  final _projetoRepository = ProjetoRepository();
   bool _isSaving = false;
 
   @override
@@ -49,41 +52,32 @@ class _FormProjetoPageState extends State<FormProjetoPage> {
     super.dispose();
   }
   
-  // ESTA FUNÇÃO FOI COMPLETAMENTE CORRIGIDA
+  // --- FUNÇÃO DE SALVAR ATUALIZADA ---
   Future<void> _salvarProjeto() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isSaving = true);
       
       try {
-        // Pega o ID da licença do usuário logado
         final licenseProvider = context.read<LicenseProvider>();
         if (licenseProvider.licenseData == null) {
           throw Exception("Não foi possível identificar a licença do usuário.");
         }
         final licenseId = licenseProvider.licenseData!.id;
 
-        // Constrói o objeto Projeto com base no modo (criação ou edição)
         final projeto = Projeto(
           id: widget.isEditing ? widget.projetoParaEditar!.id : null,
-          
-          // A "etiqueta" licenseId é adicionada aqui
           licenseId: widget.isEditing ? widget.projetoParaEditar!.licenseId : licenseId,
-          
           nome: _nomeController.text.trim(),
           empresa: _empresaController.text.trim(),
           responsavel: _responsavelController.text.trim(),
           dataCriacao: widget.isEditing ? widget.projetoParaEditar!.dataCriacao : DateTime.now(),
           status: widget.isEditing ? widget.projetoParaEditar!.status : 'ativo',
+          delegadoPorLicenseId: widget.isEditing ? widget.projetoParaEditar!.delegadoPorLicenseId : null,
         );
 
-        final dbHelper = DatabaseHelper.instance;
-        final db = await dbHelper.database;
-        
-        if (widget.isEditing) {
-          await db.update('projetos', projeto.toMap(), where: 'id = ?', whereArgs: [projeto.id]);
-        } else {
-          await db.insert('projetos', projeto.toMap());
-        }
+        // O método insert do repositório lida com criação e atualização
+        // devido ao `ConflictAlgorithm.replace`.
+        await _projetoRepository.insertProjeto(projeto);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

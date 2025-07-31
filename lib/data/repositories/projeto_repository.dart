@@ -1,15 +1,18 @@
-// lib/data/repositories/projeto_repository.dart
+// lib/data/repositories/projeto_repository.dart (VERSÃO FINAL E LIMPA)
+
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
+import 'package:sqflite/sqflite.dart'; 
 
 class ProjetoRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
   Future<int> insertProjeto(Projeto p) async {
     final db = await _dbHelper.database;
-    return await db.insert('projetos', p.toMap());
+    // Para que a atualização funcione, o ideal é usar `ConflictAlgorithm.replace`
+    return await db.insert('projetos', p.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<Projeto>> getTodosProjetos(String licenseId) async {
@@ -78,5 +81,15 @@ class ProjetoRepository {
     ''', [parcela.talhaoId]);
     if (maps.isNotEmpty) return Projeto.fromMap(maps.first);
     return null;
+  }
+
+   Future<int> updateProjeto(Projeto p) async {
+    final db = await _dbHelper.database;
+    return await db.update(
+      'projetos',
+      p.toMap(),
+      where: 'id = ?',
+      whereArgs: [p.id],
+    );
   }
 }

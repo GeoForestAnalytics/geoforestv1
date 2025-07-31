@@ -1,12 +1,12 @@
-// lib/pages/atividades/form_atividade_page.dart (VERSÃO COM SUPORTE PARA EDIÇÃO)
+// lib/pages/atividades/form_atividade_page.dart (VERSÃO COMPLETA E REFATORADA)
 
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/data/repositories/atividade_repository.dart'; // <-- IMPORT CORRIGIDO
 import 'package:geoforestv1/models/atividade_model.dart';
+
 
 class FormAtividadePage extends StatefulWidget {
   final int projetoId;
-  // <<< MUDANÇA 1 >>> Adiciona o parâmetro opcional para edição
   final Atividade? atividadeParaEditar;
 
   const FormAtividadePage({
@@ -15,7 +15,6 @@ class FormAtividadePage extends StatefulWidget {
     this.atividadeParaEditar,
   });
 
-  // <<< MUDANÇA 2 >>> Adiciona um getter para facilitar a verificação do modo de edição
   bool get isEditing => atividadeParaEditar != null;
 
   @override
@@ -27,12 +26,13 @@ class _FormAtividadePageState extends State<FormAtividadePage> {
   final _tipoController = TextEditingController();
   final _descricaoController = TextEditingController();
 
+  // --- INSTÂNCIA DO REPOSITÓRIO ---
+  final _atividadeRepository = AtividadeRepository();
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    // <<< MUDANÇA 3 >>> Lógica para pré-preencher o formulário no modo de edição
     if (widget.isEditing) {
       final atividade = widget.atividadeParaEditar!;
       _tipoController.text = atividade.tipo;
@@ -47,38 +47,25 @@ class _FormAtividadePageState extends State<FormAtividadePage> {
     super.dispose();
   }
 
-  // <<< MUDANÇA 4 >>> Função de salvar agora lida com criação e edição
+  // --- FUNÇÃO DE SALVAR ATUALIZADA ---
   Future<void> _salvarAtividade() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isSaving = true);
 
-      // Constrói o objeto Atividade. Se estiver editando, mantém o ID e a data de criação originais.
       final atividade = Atividade(
         id: widget.isEditing ? widget.atividadeParaEditar!.id : null,
         projetoId: widget.projetoId,
         tipo: _tipoController.text.trim(),
         descricao: _descricaoController.text.trim(),
         dataCriacao: widget.isEditing ? widget.atividadeParaEditar!.dataCriacao : DateTime.now(),
-        // Preserva o método de cubagem se já existir
         metodoCubagem: widget.isEditing ? widget.atividadeParaEditar!.metodoCubagem : null,
       );
 
       try {
-        final dbHelper = DatabaseHelper.instance;
-        final db = await dbHelper.database; // Obtém a instância do banco
-        
-        if (widget.isEditing) {
-          // Se estiver editando, executa um UPDATE
-          await db.update(
-            'atividades',
-            atividade.toMap(),
-            where: 'id = ?',
-            whereArgs: [atividade.id],
-          );
-        } else {
-          // Se não, executa um INSERT
-          await db.insert('atividades', atividade.toMap());
-        }
+        // Usa o repositório para inserir/atualizar
+        // Assumindo que o `insertAtividade` no repositório lida com o conflito.
+        // Vamos garantir que ele tenha o `conflictAlgorithm.replace`.
+        await _atividadeRepository.insertAtividade(atividade);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -87,7 +74,7 @@ class _FormAtividadePageState extends State<FormAtividadePage> {
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.of(context).pop(true); // Retorna 'true' para recarregar a lista
+          Navigator.of(context).pop(true);
         }
       } catch (e) {
         if (mounted) {
@@ -106,7 +93,6 @@ class _FormAtividadePageState extends State<FormAtividadePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // <<< MUDANÇA 5 >>> O título da página e o texto do botão agora são dinâmicos
       appBar: AppBar(
         title: Text(widget.isEditing ? 'Editar Atividade' : 'Nova Atividade'),
       ),
