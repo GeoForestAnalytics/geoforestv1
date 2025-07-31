@@ -8,11 +8,10 @@ class TalhaoRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
   Future<int> insertTalhao(Talhao t) async {
-  final db = await _dbHelper.database;
-  // Adiciona o ConflictAlgorithm.replace para que ele funcione como um "upsert" (update or insert)
-  return await db.insert('talhoes', t.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-}
-
+    final db = await _dbHelper.database;
+    // Adiciona o ConflictAlgorithm.replace
+    return await db.insert('talhoes', t.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
   Future<List<Talhao>> getTalhoesDaFazenda(String fazendaId, int fazendaAtividadeId) async {
     final db = await _dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.rawQuery('''

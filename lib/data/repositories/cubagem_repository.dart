@@ -1,8 +1,7 @@
-// lib/data/repositories/cubagem_repository.dart (VERSÃO COMPLETA E CORRIGIDA)
-
+// lib/data/repositories/cubagem_repository.dart
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
-import 'package:geoforestv1/data/repositories/analise_repository.dart'; // Importa o repositório correto
+import 'package:geoforestv1/data/repositories/analise_repository.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
@@ -13,7 +12,6 @@ import 'package:sqflite/sqflite.dart';
 
 class CubagemRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
-  // Instancia o repositório de análise para usar seus métodos.
   final AnaliseRepository _analiseRepository = AnaliseRepository(); 
 
   Future<void> limparTodasAsCubagens() async {
@@ -72,17 +70,13 @@ class CubagemRepository {
     await db.delete('cubagens_arvores', where: 'id IN (${List.filled(ids.length, '?').join(',')})', whereArgs: ids);
   }
   
-  /// Gera um plano de cubagem, agora usando o AnaliseRepository para obter os dados.
   Future<void> gerarPlanoDeCubagemNoBanco(Talhao talhao, int totalParaCubar, int novaAtividadeId, AnalysisService analysisService) async {
-    // <-- MUDANÇA PRINCIPAL AQUI -->
-    // Em vez de chamar o DatabaseHelper, chamamos o repositório correto.
     final dadosAgregados = await _analiseRepository.getDadosAgregadosDoTalhao(talhao.id!);
     
     final parcelas = dadosAgregados['parcelas'] as List<Parcela>;
     final arvores = dadosAgregados['arvores'] as List<Arvore>;
     if (parcelas.isEmpty || arvores.isEmpty) throw Exception('Não há árvores suficientes neste talhão para gerar um plano.');
     
-    // O .cast() não é mais necessário se a função já retorna a lista tipada corretamente.
     final analise = analysisService.getTalhaoInsights(parcelas, arvores);
     final plano = analysisService.gerarPlanoDeCubagem(analise.distribuicaoDiametrica, analise.totalArvoresAmostradas, totalParaCubar);
     

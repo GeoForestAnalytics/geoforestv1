@@ -1,4 +1,4 @@
-// lib/data/repositories/parcela_repository.dart
+// lib/data/repositories/parcela_repository.dart (VERSÃO COM LÓGICA DE DATA)
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 class ParcelaRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
+  // ... (todos os outros métodos como saveParcela, getParcelasDoTalhao, etc. permanecem aqui)
   Future<Parcela> saveParcela(Parcela parcela) async {
     final db = await _dbHelper.database;
     final dbId = await db.insert('parcelas', parcela.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
@@ -120,22 +121,47 @@ class ParcelaRepository {
     final db = await _dbHelper.database;
     await db.update('parcelas', {'status': novoStatus.name}, where: 'id = ?', whereArgs: [parcelaId]);
   }
+  
+  // <<< NOVO MÉTODO PARA RESTAURAR A LÓGICA ORIGINAL >>>
+  /// Busca parcelas concluídas HOJE que ainda não foram exportadas.
+  Future<List<Parcela>> getTodaysUnexportedConcludedParcelas() async {
+    final db = await _dbHelper.database;
 
+    // Calcula o início e o fim do dia de hoje
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    final maps = await db.query('parcelas', 
+        where: 'status = ? AND exportada = ? AND dataColeta >= ? AND dataColeta < ?', 
+        whereArgs: [
+          StatusParcela.concluida.name, 
+          0,
+          startOfDay.toIso8601String(),
+          endOfDay.toIso8601String()
+        ]
+    );
+    return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
+  }
+
+  /// Busca TODAS as parcelas concluídas que ainda não foram exportadas (sem filtro de data).
   Future<List<Parcela>> getUnexportedConcludedParcelas() async {
     final db = await _dbHelper.database;
     final maps = await db.query('parcelas', 
-        where: 'status = ? AND exportada = ? AND isSynced = ?', 
-        whereArgs: [StatusParcela.concluida.name, 0, 0]
+        where: 'status = ? AND exportada = ?', 
+        whereArgs: [StatusParcela.concluida.name, 0]
     );
     return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
   }
   
+  /// Busca TODAS as parcelas concluídas, ideal para backup completo.
   Future<List<Parcela>> getTodasAsParcelasConcluidasParaBackup() async {
     final db = await _dbHelper.database;
     final maps = await db.query('parcelas', where: 'status = ?', whereArgs: [StatusParcela.concluida.name]);
     return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
   }
 
+  /// Marca uma lista de parcelas como exportadas no banco de dados.
   Future<void> marcarParcelasComoExportadas(List<int> ids) async {
     if (ids.isEmpty) return;
     final db = await _dbHelper.database;

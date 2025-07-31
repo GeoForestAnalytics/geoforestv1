@@ -1,4 +1,4 @@
-// lib/main.dart (VERSÃO COM A NOVA ROTA DO MAPA DO GERENTE)
+// lib/main.dart (VERSÃO FINAL E CORRIGIDA)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -23,14 +23,22 @@ import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/pages/menu/paywall_page.dart';
 import 'package:geoforestv1/pages/gerente/gerente_main_page.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
-
-// <<< MUDANÇA 1: Importar o novo arquivo de mapa que vamos criar >>>
 import 'package:geoforestv1/pages/gerente/gerente_map_page.dart';
 
 
 // PONTO DE ENTRADA PRINCIPAL DO APP
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // <<< MUDANÇA CRÍTICA APLICADA AQUI >>>
+  // Inicializa o FFI para plataformas desktop antes de qualquer outra coisa.
+  // Isso garante que a 'databaseFactory' esteja disponível globalmente para a
+  // thread principal e para qualquer isolate (background thread) que for criado.
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -65,10 +73,7 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
       await SystemChrome.setPreferredOrientations(
         [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown],
       );
-      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-        sqfliteFfiInit();
-        databaseFactory = databaseFactoryFfi;
-      }
+      // A inicialização do FFI foi movida para o main(), então não é mais necessária aqui.
     } catch (e) {
       print("!!!!!! ERRO NA INICIALIZAÇÃO DOS SERVIÇOS: $e !!!!!");
       rethrow;
@@ -135,7 +140,6 @@ class MyApp extends StatelessWidget {
           '/login': (context) => const LoginPage(),
           '/paywall': (context) => const PaywallPage(),
           '/gerente_home': (context) => const GerenteMainPage(),
-          // <<< MUDANÇA 2: Registrar a nova rota para o mapa do gerente >>>
           '/gerente_map': (context) => const GerenteMapPage(),
         },
         navigatorObservers: [MapProvider.routeObserver],

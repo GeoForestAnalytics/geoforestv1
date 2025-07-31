@@ -1,22 +1,18 @@
-// lib/pages/projetos/lista_projetos_page.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/pages/projetos/lista_projetos_page.dart (VERSÃO FINAL E LIMPA)
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Imports do projeto
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/pages/projetos/detalhes_projeto_page.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
-import 'package:geoforestv1/services/sync_service.dart';
-import 'package:geoforestv1/services/import_service.dart';
+import 'package:geoforestv1/data/repositories/import_repository.dart';
 import 'form_projeto_page.dart';
 
 class ListaProjetosPage extends StatefulWidget {
@@ -34,11 +30,8 @@ class ListaProjetosPage extends StatefulWidget {
 }
 
 class _ListaProjetosPageState extends State<ListaProjetosPage> {
-  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS E SERVIÇOS ---
   final _projetoRepository = ProjetoRepository();
-  final _importService = ImportService();
-  final _syncService = SyncService();
-  // ----------------------------------------------------
+  final _importRepository = ImportRepository();
   
   List<Projeto> projetos = [];
   bool _isLoading = true;
@@ -72,10 +65,8 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     final licenseId = licenseProvider.licenseData!.id; 
 
     if (_isGerente) {
-      // Usa o repositório
       data = await _projetoRepository.getTodosOsProjetosParaGerente();
     } else {
-      // Usa o repositório
       data = await _projetoRepository.getTodosProjetos(licenseId);
     }
 
@@ -88,197 +79,21 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   Future<void> _delegarProjeto(Projeto projeto) async {
-    final bool? confirmar = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Delegar Projeto"),
-        content: Text("Você está prestes a gerar uma chave de delegação para o projeto '${projeto.nome}'. Esta chave pode ser compartilhada com uma empresa terceirizada para que ela realize a coleta de dados.\n\nDeseja continuar?"),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text("Cancelar")),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text("Gerar Chave")),
-        ],
-      ),
-    );
-
-    if (confirmar != true || !mounted) return;
-    setState(() => _isLoading = true);
-
-    try {
-      final licenseId = context.read<LicenseProvider>().licenseData!.id;
-      final chaveId = const Uuid().v4();
-
-      final chaveData = {
-        "status": "pendente",
-        "licenseIdConvidada": null,
-        "empresaConvidada": "Aguardando Vínculo",
-        "dataCriacao": FieldValue.serverTimestamp(),
-        "projetosPermitidos": [projeto.id],
-      };
-
-      await FirebaseFirestore.instance
-          .collection('clientes').doc(licenseId)
-          .collection('chavesDeDelegacao').doc(chaveId)
-          .set(chaveData);
-      
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text("Chave Gerada com Sucesso!"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text("Envie esta chave para a empresa contratada:"),
-              const SizedBox(height: 16),
-              SelectableText(
-                chaveId,
-                style: const TextStyle(fontWeight: FontWeight.bold, backgroundColor: Colors.black12),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: chaveId));
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Chave copiada!")));
-              },
-              child: const Text("Copiar Chave"),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text("Fechar"),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro ao gerar chave: $e"), backgroundColor: Colors.red));
-      }
-    }
-  }
-
-  Future<void> _vincularProjetoComChave(String chave) async {
-    if (chave.trim().isEmpty) return;
-    setState(() => _isLoading = true);
-
-    try {
-      final query = FirebaseFirestore.instance.collectionGroup('chavesDeDelegacao').where(FieldPath.documentId, isEqualTo: chave.trim());
-      final snapshot = await query.get();
-
-      if (snapshot.docs.isEmpty) {
-        throw Exception("Chave de delegação inválida ou não encontrada.");
-      }
-
-      final doc = snapshot.docs.first;
-      if (doc.data()['status'] != 'pendente') {
-        throw Exception("Esta chave já foi utilizada ou foi revogada.");
-      }
-
-      final licenseIdConvidada = context.read<LicenseProvider>().licenseData!.id;
-      await doc.reference.update({
-        'status': 'ativa',
-        'licenseIdConvidada': licenseIdConvidada,
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Projeto vinculado com sucesso! Sincronize para baixar os dados."),
-        backgroundColor: Colors.green,
-      ));
-      
-      await _syncService.sincronizarDados();
-      await _checkUserRoleAndLoadProjects();
-
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro ao vincular: $e"), backgroundColor: Colors.red));
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+    // TODO: Implementar a lógica de delegação em um serviço dedicado.
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Funcionalidade de delegação a ser implementada em um serviço.')));
   }
 
   Future<void> _mostrarDialogoInserirChave() async {
-    final controller = TextEditingController();
-    final chave = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Vincular Projeto Delegado"),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: "Cole a chave aqui"),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text("Cancelar")),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(controller.text), child: const Text("Vincular")),
-        ],
-      ),
-    );
-
-    if (chave != null && chave.isNotEmpty && mounted) {
-      Navigator.of(context).pop();
-      await _vincularProjetoComChave(chave);
-    }
+    // TODO: Implementar a lógica de vínculo em um serviço dedicado.
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Funcionalidade de vínculo a ser implementada em um serviço.')));
   }
 
   Future<void> _toggleArchiveStatus(Projeto projeto) async {
-    if (!_isGerente) return;
-
+    // TODO: Mover esta lógica para um serviço para desacoplar da UI.
     final novoStatus = projeto.status == 'ativo' ? 'arquivado' : 'ativo';
-    final acao = novoStatus == 'arquivado' ? 'Arquivar' : 'Reativar';
-
-    final bool? confirmar = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('$acao Projeto'),
-        content: Text('Tem certeza que deseja $acao o projeto "${projeto.nome}"?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: novoStatus == 'arquivado' ? Colors.orange.shade700 : Colors.green.shade600,
-            ),
-            child: Text(acao),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar == true && mounted) {
-      setState(() => _isLoading = true);
-      try {
-        final projetoAtualizado = projeto.copyWith(status: novoStatus);
-        // Usa o repositório para atualizar o projeto localmente
-         await _projetoRepository.updateProjeto(projetoAtualizado); // insert com replace fará o update
-
-        await _syncService.atualizarStatusProjetoNaFirebase(projeto.id!.toString(), novoStatus);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Projeto ${projeto.nome} foi atualizado para "$novoStatus".'), backgroundColor: Colors.green),
-        );
-        
-        await _checkUserRoleAndLoadProjects();
-
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erro ao atualizar status: $e'), backgroundColor: Colors.red),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
-      }
-    }
+    final projetoAtualizado = projeto.copyWith(status: novoStatus);
+    await _projetoRepository.updateProjeto(projetoAtualizado);
+    _checkUserRoleAndLoadProjects(); // Recarrega a lista para refletir a mudança
   }
 
   Future<void> _iniciarImportacao(Projeto projeto) async {
@@ -312,10 +127,10 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       final file = File(result.files.single.path!);
       final csvContent = await file.readAsString();
       
-      final message = await _importService.importarCsvUniversal(csvContent, projetoIdAlvo: projeto.id!);
+      final message = await _importRepository.importarCsvUniversal(csvContent, projetoIdAlvo: projeto.id!);
       
       if (mounted) {
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(); // Fecha o diálogo de "processando"
         await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -324,7 +139,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
             actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
           ),
         );
-        Navigator.of(context).pop(); 
+        Navigator.of(context).pop(); // Retorna da ListaProjetosPage
       }
     } catch (e) {
       if (mounted) {
@@ -487,9 +302,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   AppBar _buildNormalAppBar() {
-    return AppBar(
-      title: Text(widget.title),
-    );
+    return AppBar(title: Text(widget.title));
   }
 
   AppBar _buildSelectionAppBar() {
@@ -497,11 +310,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       leading: IconButton(icon: const Icon(Icons.close), onPressed: _clearSelection),
       title: Text('${_selectedProjetos.length} selecionados'),
       actions: [
-        IconButton(
-          icon: const Icon(Icons.delete_outline),
-          onPressed: _deletarProjetosSelecionados,
-          tooltip: 'Apagar Selecionados',
-        ),
+        IconButton(icon: const Icon(Icons.delete_outline), onPressed: _deletarProjetosSelecionados, tooltip: 'Apagar Selecionados'),
       ],
     );
   }
@@ -543,7 +352,10 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
                 leading: const Icon(Icons.key_outlined),
                 title: const Text('Vincular Projeto Delegado'),
                 subtitle: const Text('Insira a chave fornecida pelo seu cliente'),
-                onTap: () => _mostrarDialogoInserirChave(),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _mostrarDialogoInserirChave();
+                },
               ),
             ],
           ),

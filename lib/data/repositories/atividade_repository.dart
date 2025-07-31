@@ -11,10 +11,10 @@ class AtividadeRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
   Future<int> insertAtividade(Atividade a) async {
-  final db = await _dbHelper.database;
-  // Adiciona o ConflictAlgorithm.replace para que ele funcione como um "upsert" (update or insert)
-  return await db.insert('atividades', a.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-}
+    final db = await _dbHelper.database;
+    // Adiciona o ConflictAlgorithm.replace para que ele funcione como um "upsert"
+    return await db.insert('atividades', a.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
 
   Future<List<Atividade>> getAtividadesDoProjeto(int projetoId) async {
     final db = await _dbHelper.database;
