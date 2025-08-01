@@ -9,11 +9,13 @@ import 'package:sqflite/sqflite.dart';
 class ProjetoRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
+  // AJUSTE 1: Insert agora apenas insere.
   Future<int> insertProjeto(Projeto p) async {
     final db = await _dbHelper.database;
-    // Para que a atualização funcione, o ideal é usar `ConflictAlgorithm.replace`
-    return await db.insert('projetos', p.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert('projetos', p.toMap(), conflictAlgorithm: ConflictAlgorithm.fail);
   }
+
+  
 
   Future<List<Projeto>> getTodosProjetos(String licenseId) async {
     final db = await _dbHelper.database;

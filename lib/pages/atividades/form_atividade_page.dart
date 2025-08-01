@@ -62,10 +62,13 @@ class _FormAtividadePageState extends State<FormAtividadePage> {
       );
 
       try {
-        // Usa o repositório para inserir/atualizar
-        // Assumindo que o `insertAtividade` no repositório lida com o conflito.
-        // Vamos garantir que ele tenha o `conflictAlgorithm.replace`.
-        await _atividadeRepository.insertAtividade(atividade);
+        // <<< LÓGICA DE SALVAR CORRIGIDA >>>
+        if (widget.isEditing) {
+          await _atividadeRepository.updateAtividade(atividade);
+        } else {
+          await _atividadeRepository.insertAtividade(atividade);
+        }
+        // <<< FIM DA CORREÇÃO >>>
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -89,6 +92,7 @@ class _FormAtividadePageState extends State<FormAtividadePage> {
       }
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

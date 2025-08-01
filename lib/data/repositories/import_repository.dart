@@ -1,13 +1,14 @@
-// lib/data/repositories/import_repository.dart (VERSÃO FINAL COM CUBAGEM)
-
+// lib/data/repositories/import_repository.dart (VERSÃO COMPLETA E FINAL - GARANTIDO)
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:proj4dart/proj4dart.dart' as proj4;
 
-
-// Repositórios
+// Repositórios e Constantes
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
+import 'package:geoforestv1/utils/constants.dart';
 
 // Modelos
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -26,7 +27,6 @@ class ImportRepository {
   final ProjetoRepository _projetoRepository = ProjetoRepository();
 
   Future<String> importarProjetoCompleto(String fileContent) async {
-    // ... (seu código de importação GeoJSON permanece aqui)
     return "Funcionalidade a ser revisada";
   }
 
@@ -34,25 +34,19 @@ class ImportRepository {
     final db = await _dbHelper.database;
     int linhasProcessadas = 0, atividadesCriadas = 0, fazendasCriadas = 0, talhoesCriados = 0;
     int parcelasCriadas = 0, arvoresCriadas = 0, cubagensCriadas = 0, secoesCriadas = 0;
+    int parcelasAtualizadas = 0, cubagensAtualizadas = 0;
 
     final Projeto? projeto = await _projetoRepository.getProjetoById(projetoIdAlvo);
-    if (projeto == null) {
-      return "Erro Crítico: O projeto de destino selecionado não foi encontrado.";
-    }
-    
+    if (projeto == null) return "Erro Crítico: O projeto de destino não foi encontrado.";
     if (csvContent.isEmpty) return "Erro: O arquivo CSV está vazio.";
     
-    // Lógica de detecção de delimitador (permanece a mesma)
     final firstLine = csvContent.split('\n').first;
     final commaCount = ','.allMatches(firstLine).length;
     final semicolonCount = ';'.allMatches(firstLine).length;
     final tabCount = '\t'.allMatches(firstLine).length;
     String detectedDelimiter = ',';
-    if (semicolonCount > commaCount && semicolonCount > tabCount) {
-      detectedDelimiter = ';';
-    } else if (tabCount > commaCount && tabCount > semicolonCount) {
-      detectedDelimiter = '\t';
-    }
+    if (semicolonCount > commaCount && semicolonCount > tabCount) detectedDelimiter = ';';
+    else if (tabCount > commaCount && tabCount > semicolonCount) detectedDelimiter = '\t';
     
     final List<List<dynamic>> rows = CsvToListConverter(fieldDelimiter: detectedDelimiter, eol: '\n', allowInvalid: true).convert(csvContent);
     if (rows.length < 2) return "Erro: O arquivo CSV está vazio ou contém apenas o cabeçalho.";
@@ -77,7 +71,6 @@ class ImportRepository {
           final tipoAtividadeStr = getValue(row, ['atividade', 'tipo_atividade'])?.toUpperCase();
           if (tipoAtividadeStr == null) continue;
 
-          // 1. Atividade
           Atividade? atividade = (await txn.query('atividades', where: 'projetoId = ? AND tipo = ?', whereArgs: [projeto.id!, tipoAtividadeStr])).map(Atividade.fromMap).firstOrNull;
           if (atividade == null) {
               atividade = Atividade(projetoId: projeto.id!, tipo: tipoAtividadeStr, descricao: 'Importado via CSV', dataCriacao: DateTime.now());
@@ -86,8 +79,8 @@ class ImportRepository {
               atividadesCriadas++;
           }
 
-          // 2. Fazenda
-          final nomeFazenda = getValue(row, ['fazenda', 'nome_fazenda']) ?? 'Fazenda Padrão';
+          final nomeFazenda = getValue(row, ['fazenda', 'nome_fazenda']);
+          if (nomeFazenda == null) continue;
           final idFazenda = getValue(row, ['codigo_fazenda', 'id_fazenda']) ?? nomeFazenda;
           Fazenda? fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [idFazenda, atividade.id!])).map(Fazenda.fromMap).firstOrNull;
           if (fazenda == null) {
@@ -96,8 +89,8 @@ class ImportRepository {
               fazendasCriadas++;
           }
 
-          // 3. Talhão
-          final nomeTalhao = getValue(row, ['talhao', 'nome_talhao']) ?? 'Talhão Padrão';
+          final nomeTalhao = getValue(row, ['talhao', 'nome_talhao']);
+          if (nomeTalhao == null) continue;
           Talhao? talhao = (await txn.query('talhoes', where: 'nome = ? AND fazendaId = ? AND fazendaAtividadeId = ?', whereArgs: [nomeTalhao, fazenda.id, fazenda.atividadeId])).map(Talhao.fromMap).firstOrNull;
           if(talhao == null) {
               talhao = Talhao(fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao);
@@ -106,58 +99,116 @@ class ImportRepository {
               talhoesCriados++;
           }
           
-          TipoImportacao tipoLinha = ['IPC', 'IFC', 'AUD', 'IFS', 'BIO'].contains(tipoAtividadeStr) ? TipoImportacao.inventario : (tipoAtividadeStr == 'CUB' ? TipoImportacao.cubagem : TipoImportacao.desconhecido);
+          final tipoLinha = ['IPC', 'IFC', 'AUD', 'IFS', 'BIO', 'IFQ'].any((e) => tipoAtividadeStr.contains(e)) ? TipoImportacao.inventario : (tipoAtividadeStr.contains('CUB') ? TipoImportacao.cubagem : TipoImportacao.desconhecido);
 
-          // Lógica de Inventário
+          // <<< LÓGICA DE INVENTÁRIO RESTAURADA E COMPLETA >>>
           if (tipoLinha == TipoImportacao.inventario) {
               final idParcelaColeta = getValue(row, ['id_coleta_parcela', 'id_parcela']);
               if (idParcelaColeta == null) continue;
+              
               Parcela? parcela = (await txn.query('parcelas', where: 'idParcela = ? AND talhaoId = ?', whereArgs: [idParcelaColeta, talhao.id!])).map(Parcela.fromMap).firstOrNull;
               int parcelaDbId;
+
               if(parcela == null) {
+                  double? latitudeFinal, longitudeFinal;
+                  final latStr = getValue(row, ['latitude', 'lat']);
+                  final lonStr = getValue(row, ['longitude', 'lon', 'lng']);
+                  if (latStr != null && lonStr != null) {
+                      latitudeFinal = double.tryParse(latStr.replaceAll(',', '.'));
+                      longitudeFinal = double.tryParse(lonStr.replaceAll(',', '.'));
+                  } else {
+                      final eastingStr = getValue(row, ['easting', 'este']);
+                      final northingStr = getValue(row, ['northing', 'norte']);
+                      if (eastingStr != null && northingStr != null) {
+                          final easting = double.tryParse(eastingStr.replaceAll(',', '.'));
+                          final northing = double.tryParse(northingStr.replaceAll(',', '.'));
+                          if (easting != null && northing != null) {
+                              final prefs = await SharedPreferences.getInstance();
+                              final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
+                              final codigoEpsg = zonasUtmSirgas2000[nomeZona] ?? 31982;
+                              final projUTM = proj4.Projection.get('EPSG:$codigoEpsg') ?? proj4.Projection.parse(proj4Definitions[codigoEpsg]!);
+                              final projWGS84 = proj4.Projection.get('EPSG:4326') ?? proj4.Projection.parse('+proj=longlat +datum=WGS84 +no_defs');
+                              var pontoWGS84 = projUTM.transform(projWGS84, proj4.Point(x: easting, y: northing));
+                              latitudeFinal = pontoWGS84.y;
+                              longitudeFinal = pontoWGS84.x;
+                          }
+                      }
+                  }
+
+                  final statusStr = getValue(row, ['status_parcela']) ?? 'concluida';
                   final novaParcela = Parcela(
-                      talhaoId: talhao.id!, idParcela: idParcelaColeta,
+                      talhaoId: talhao.id!, 
+                      idParcela: idParcelaColeta,
                       areaMetrosQuadrados: double.tryParse(getValue(row, ['area_m2'])?.replaceAll(',', '.') ?? '0') ?? 0,
-                      status: StatusParcela.concluida, dataColeta: DateTime.now(),
-                      nomeFazenda: fazenda.nome, nomeTalhao: talhao.nome, isSynced: false, projetoId: projeto.id 
+                      status: StatusParcela.values.firstWhere((e) => e.name == statusStr, orElse: ()=> StatusParcela.concluida), 
+                      dataColeta: DateTime.tryParse(getValue(row, ['data_coleta']) ?? ''),
+                      nomeFazenda: fazenda.nome, 
+                      nomeTalhao: talhao.nome, 
+                      isSynced: false, 
+                      projetoId: projeto.id,
+                      latitude: latitudeFinal,
+                      longitude: longitudeFinal,
+                      largura: double.tryParse(getValue(row, ['largura_m'])?.replaceAll(',', '.') ?? ''),
+                      comprimento: double.tryParse(getValue(row, ['comprimento_m'])?.replaceAll(',', '.') ?? ''),
+                      raio: double.tryParse(getValue(row, ['raio_m'])?.replaceAll(',', '.') ?? ''),
+                      observacao: getValue(row, ['observacao_parcela']),
+                      nomeLider: getValue(row, ['lider_equipe'])
                   );
                   parcelaDbId = await txn.insert('parcelas', novaParcela.toMap());
                   parcelasCriadas++;
               } else {
                   parcelaDbId = parcela.dbId!;
+                  parcelasAtualizadas++;
               }
+
               final codigoStr = getValue(row, ['codigo_arvore', 'codigo']);
               if (codigoStr != null) {
                   final dominante = getValue(row, ['dominante'])?.toLowerCase() == 'sim' || getValue(row, ['dominante'])?.toLowerCase() == 'true';
-                  final novaArvore = Arvore(cap: double.tryParse(getValue(row, ['cap_cm'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0, altura: double.tryParse(getValue(row, ['altura_m'])?.replaceAll(',', '.') ?? ''), linha: int.tryParse(getValue(row, ['linha']) ?? '0') ?? 0, posicaoNaLinha: int.tryParse(getValue(row, ['posicao_na_linha']) ?? '0') ?? 0, dominante: dominante, codigo: Codigo.values.firstWhere((e) => e.name.toLowerCase() == codigoStr.toLowerCase(), orElse: () => Codigo.normal), fimDeLinha: false);
+                  final codigo2Str = getValue(row, ['codigo_arvore_2']);
+                  final novaArvore = Arvore(
+                    cap: double.tryParse(getValue(row, ['cap_cm'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0, 
+                    altura: double.tryParse(getValue(row, ['altura_m'])?.replaceAll(',', '.') ?? ''), 
+                    linha: int.tryParse(getValue(row, ['linha']) ?? '0') ?? 0, 
+                    posicaoNaLinha: int.tryParse(getValue(row, ['posicao_na_linha']) ?? '0') ?? 0, 
+                    dominante: dominante, 
+                    codigo: Codigo.values.firstWhere((e) => e.name.toLowerCase() == codigoStr.toLowerCase(), orElse: () => Codigo.normal),
+                    codigo2: codigo2Str != null ? Codigo2.values.firstWhere((e) => e.name.toLowerCase() == codigo2Str.toLowerCase()) : null,
+                    fimDeLinha: false
+                  );
                   final arvoreMap = novaArvore.toMap();
                   arvoreMap['parcelaId'] = parcelaDbId;
                   await txn.insert('arvores', arvoreMap);
                   arvoresCriadas++;
               }
           } 
-          // ===================================================================
-          // <<< LÓGICA DE CUBAGEM REINTEGRADA E CORRIGIDA >>>
-          // ===================================================================
+          // <<< LÓGICA DE CUBAGEM COM CORREÇÃO DE TIPO DE DADO >>>
           else if (tipoLinha == TipoImportacao.cubagem) {
               final idArvore = getValue(row, ['identificador_arvore', 'id_db_arvore']);
               if (idArvore == null) continue;
 
               CubagemArvore? arvoreCubagem = (await txn.query('cubagens_arvores', where: 'talhaoId = ? AND identificador = ?', whereArgs: [talhao.id!, idArvore])).map(CubagemArvore.fromMap).firstOrNull;
+              
+              final dadosArvore = CubagemArvore(
+                  talhaoId: talhao.id!, 
+                  idFazenda: fazenda.id, 
+                  nomeFazenda: fazenda.nome, 
+                  nomeTalhao: talhao.nome, 
+                  identificador: idArvore, 
+                  alturaTotal: double.tryParse(getValue(row, ['altura_total_m'])?.replaceAll(',', '.') ?? '0') ?? 0, 
+                  valorCAP: double.tryParse(getValue(row, ['valor_cap', 'cap_cm'])?.replaceAll(',', '.') ?? '0') ?? 0, 
+                  alturaBase: double.tryParse(getValue(row, ['altura_base_m'])?.replaceAll(',', '.') ?? '0') ?? 0, 
+                  tipoMedidaCAP: getValue(row, ['tipo_medida_cap']) ?? 'fita', 
+                  classe: getValue(row, ['classe']),
+                  isSynced: false
+              );
 
               if (arvoreCubagem == null) {
-                arvoreCubagem = CubagemArvore(
-                    talhaoId: talhao.id!, idFazenda: fazenda.id, nomeFazenda: fazenda.nome, nomeTalhao: talhao.nome, 
-                    identificador: idArvore, 
-                    alturaTotal: double.tryParse(getValue(row, ['altura_total_m'])?.replaceAll(',', '.') ?? '0') ?? 0, 
-                    valorCAP: double.tryParse(getValue(row, ['valor_cap', 'cap_cm'])?.replaceAll(',', '.') ?? '0') ?? 0, 
-                    alturaBase: double.tryParse(getValue(row, ['altura_base_m'])?.replaceAll(',', '.') ?? '0') ?? 0, 
-                    tipoMedidaCAP: getValue(row, ['tipo_medida_cap']) ?? 'fita', 
-                    isSynced: false
-                );
-                final cubagemId = await txn.insert('cubagens_arvores', arvoreCubagem.toMap());
-                arvoreCubagem = arvoreCubagem.copyWith(id: cubagemId);
+                final cubagemId = await txn.insert('cubagens_arvores', dadosArvore.toMap());
+                arvoreCubagem = dadosArvore.copyWith(id: cubagemId);
                 cubagensCriadas++;
+              } else {
+                await txn.update('cubagens_arvores', dadosArvore.copyWith(id: arvoreCubagem.id).toMap(), where: 'id = ?', whereArgs: [arvoreCubagem.id]);
+                cubagensAtualizadas++;
               }
 
               final alturaMedicaoStr = getValue(row, ['altura_medicao_secao_m', 'altura_medicao_m']);
@@ -178,7 +229,7 @@ class ImportRepository {
           }
         }
       });
-      return "Importação Concluída para o projeto '${projeto.nome}'!\n\nLinhas Processadas: $linhasProcessadas\nAtividades Novas: $atividadesCriadas\nFazendas Novas: $fazendasCriadas\nTalhões Novos: $talhoesCriados\nParcelas Novas: $parcelasCriadas\nÁrvores Inseridas: $arvoresCriadas\nCubagens Inseridas: $cubagensCriadas\nSeções Inseridas: $secoesCriadas";
+      return "Importação Concluída para '${projeto.nome}'!\n\nLinhas: $linhasProcessadas\nAtividades Novas: $atividadesCriadas\nFazendas Novas: $fazendasCriadas\nTalhões Novos: $talhoesCriados\nParcelas Novas/Atualizadas: $parcelasCriadas/$parcelasAtualizadas\nÁrvores Inseridas: $arvoresCriadas\nCubagens Novas/Atualizadas: $cubagensCriadas/$cubagensAtualizadas\nSeções Inseridas: $secoesCriadas";
     } catch(e, s) {
       debugPrint("Erro CRÍTICO na importação universal: $e\n$s");
       return "Ocorreu um erro grave durante a importação. Verifique o console de debug. Erro: ${e.toString()}";

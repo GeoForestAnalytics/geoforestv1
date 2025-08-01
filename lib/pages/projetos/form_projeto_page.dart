@@ -54,54 +54,63 @@ class _FormProjetoPageState extends State<FormProjetoPage> {
   
   // --- FUNÇÃO DE SALVAR ATUALIZADA ---
   Future<void> _salvarProjeto() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isSaving = true);
-      
-      try {
-        final licenseProvider = context.read<LicenseProvider>();
-        if (licenseProvider.licenseData == null) {
-          throw Exception("Não foi possível identificar a licença do usuário.");
-        }
-        final licenseId = licenseProvider.licenseData!.id;
+  if (_formKey.currentState!.validate()) {
+    setState(() => _isSaving = true);
+    
+    try {
+      final licenseProvider = context.read<LicenseProvider>();
+      if (licenseProvider.licenseData == null) {
+        throw Exception("Não foi possível identificar a licença do usuário.");
+      }
+      final licenseId = licenseProvider.licenseData!.id;
 
-        final projeto = Projeto(
-          id: widget.isEditing ? widget.projetoParaEditar!.id : null,
-          licenseId: widget.isEditing ? widget.projetoParaEditar!.licenseId : licenseId,
-          nome: _nomeController.text.trim(),
-          empresa: _empresaController.text.trim(),
-          responsavel: _responsavelController.text.trim(),
-          dataCriacao: widget.isEditing ? widget.projetoParaEditar!.dataCriacao : DateTime.now(),
-          status: widget.isEditing ? widget.projetoParaEditar!.status : 'ativo',
-          delegadoPorLicenseId: widget.isEditing ? widget.projetoParaEditar!.delegadoPorLicenseId : null,
-        );
+      final projeto = Projeto(
+        id: widget.isEditing ? widget.projetoParaEditar!.id : null,
+        licenseId: widget.isEditing ? widget.projetoParaEditar!.licenseId : licenseId,
+        nome: _nomeController.text.trim(),
+        empresa: _empresaController.text.trim(),
+        responsavel: _responsavelController.text.trim(),
+        dataCriacao: widget.isEditing ? widget.projetoParaEditar!.dataCriacao : DateTime.now(),
+        status: widget.isEditing ? widget.projetoParaEditar!.status : 'ativo',
+        delegadoPorLicenseId: widget.isEditing ? widget.projetoParaEditar!.delegadoPorLicenseId : null,
+      );
 
-        // O método insert do repositório lida com criação e atualização
-        // devido ao `ConflictAlgorithm.replace`.
+      // <<< LÓGICA DE SALVAR CORRIGIDA >>>
+      // Agora, ele verifica se está editando e chama o método correto.
+      if (widget.isEditing) {
+        await _projetoRepository.updateProjeto(projeto);
+      } else {
         await _projetoRepository.insertProjeto(projeto);
+      }
+      // <<< FIM DA CORREÇÃO >>>
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Projeto ${widget.isEditing ? "atualizado" : "criado"} com sucesso!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.of(context).pop(true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Projeto ${widget.isEditing ? "atualizado" : "criado"} com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMessage = 'Erro ao salvar o projeto: $e';
+        // Melhora a mensagem de erro para o usuário
+        if (e.toString().contains('UNIQUE constraint failed')) {
+            errorMessage = 'Erro: Já existe um projeto com este nome ou ID.';
         }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erro ao salvar o projeto: $e'), backgroundColor: Colors.red),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() => _isSaving = false);
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
       }
     }
   }
-
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(

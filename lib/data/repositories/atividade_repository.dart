@@ -1,4 +1,5 @@
-// lib/data/repositories/atividade_repository.dart
+// lib/data/repositories/atividade_repository.dart (VERSÃO CORRIGIDA)
+
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
@@ -10,10 +11,16 @@ import 'package:sqflite/sqflite.dart';
 class AtividadeRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
+  // AJUSTE 1: Insert agora apenas insere, usando .fail para segurança.
   Future<int> insertAtividade(Atividade a) async {
     final db = await _dbHelper.database;
-    // Adiciona o ConflictAlgorithm.replace para que ele funcione como um "upsert"
-    return await db.insert('atividades', a.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert('atividades', a.toMap(), conflictAlgorithm: ConflictAlgorithm.fail);
+  }
+
+  // AJUSTE 2: Adiciona um método de update explícito e seguro.
+  Future<int> updateAtividade(Atividade a) async {
+    final db = await _dbHelper.database;
+    return await db.update('atividades', a.toMap(), where: 'id = ?', whereArgs: [a.id]);
   }
 
   Future<List<Atividade>> getAtividadesDoProjeto(int projetoId) async {
@@ -39,6 +46,7 @@ class AtividadeRepository {
     }
     final db = await _dbHelper.database;
     await db.transaction((txn) async {
+      // Esta função é apenas para criar, então o uso de insert aqui está correto.
       final atividadeId = await txn.insert('atividades', novaAtividade.toMap());
       final firstPlaceholder = placeholders.first;
       final fazendaDoPlano = Fazenda(id: firstPlaceholder.idFazenda!, atividadeId: atividadeId, nome: firstPlaceholder.nomeFazenda, municipio: 'N/I', estado: 'N/I');

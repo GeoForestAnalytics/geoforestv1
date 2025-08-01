@@ -84,15 +84,13 @@ class _FormTalhaoPageState extends State<FormTalhaoPage> {
       );
 
       try {
-        // A lógica de `update` não está no repositório, então vamos adicioná-la ou
-        // podemos simplesmente chamar `insertTalhao` que pode ter um `conflictAlgorithm.replace`.
-        // Para ser explícito e correto, vamos garantir que o repositório tenha um método de update.
-        // Assumindo que o `insertTalhao` do repositório já lida com `update` (se o ID existir)
-        // ou que podemos criar um método `updateTalhao`. Vamos usar `insertTalhao` por simplicidade,
-        // mas o ideal seria ter um método de update explícito no repositório.
-        
-        // A melhor abordagem é usar um único método no repositório.
-        await _talhaoRepository.insertTalhao(talhao);
+        // <<< LÓGICA DE SALVAR CORRIGIDA >>>
+        if (widget.isEditing) {
+          await _talhaoRepository.updateTalhao(talhao);
+        } else {
+          await _talhaoRepository.insertTalhao(talhao);
+        }
+        // <<< FIM DA CORREÇÃO >>>
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

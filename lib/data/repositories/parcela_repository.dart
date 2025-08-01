@@ -167,4 +167,15 @@ class ParcelaRepository {
     final db = await _dbHelper.database;
     await db.update('parcelas', {'exportada': 1}, where: 'id IN (${List.filled(ids.length, '?').join(',')})', whereArgs: ids);
   }
+
+ Future<List<Parcela>> getUnexportedConcludedParcelasByLider(String nomeLider) async {
+    final db = await _dbHelper.database;
+    final maps = await db.query(
+      'parcelas',
+      where: 'status = ? AND exportada = ? AND nomeLider = ?',
+      whereArgs: [StatusParcela.concluida.name, 0, nomeLider],
+    );
+    return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
+  }
+
 }

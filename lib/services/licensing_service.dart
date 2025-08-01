@@ -20,27 +20,27 @@ class LicensingService {
   // <<< 1. NOVA FUNÇÃO PARA ENCONTRAR A LICENÇA CORRETA >>>
   // =======================================================================
   /// Busca na coleção 'clientes' por um documento que contenha o UID do usuário no mapa 'usuariosPermitidos'.
-  Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User user) async {
-    // ESTE PRINT JÁ ESTÁ LÁ, MAS CONFIRME
-    print('--- DEBUG: Buscando licença para o UID: ${user.uid}');
-    
-    final query = _firestore
-        .collection('clientes')
-        .where('usuariosPermitidos.${user.uid}', isNotEqualTo: null)
-        .limit(1);
+  // --- SUBSTITUA ESTA FUNÇÃO PELA VERSÃO CORRIGIDA ABAIXO ---
+Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User user) async {
+  print('--- DEBUG: Buscando licença para o UID: ${user.uid}');
+  
+  // <<< MUDANÇA PRINCIPAL: A CONSULTA AGORA É MUITO MAIS ROBUSTA E EFICIENTE >>>
+  // Usamos 'array-contains' para buscar o UID do usuário no novo campo de array.
+  final query = _firestore
+      .collection('clientes')
+      .where('uidsPermitidos', arrayContains: user.uid)
+      .limit(1);
 
-    final snapshot = await query.get();
+  final snapshot = await query.get();
 
-    if (snapshot.docs.isNotEmpty) {
-      // <<< ADICIONE ESTE PRINT >>>
-      print('--- DEBUG: Licença encontrada! Documento ID: ${snapshot.docs.first.id}');
-      return snapshot.docs.first;
-    }
-    
-    // <<< E ADICIONE ESTE PRINT >>>
-    print('--- DEBUG: NENHUMA licença encontrada para este UID.');
-    return null;
+  if (snapshot.docs.isNotEmpty) {
+    print('--- DEBUG: Licença encontrada! Documento ID: ${snapshot.docs.first.id}');
+    return snapshot.docs.first;
   }
+  
+  print('--- DEBUG: NENHUMA licença encontrada para este UID.');
+  return null;
+}
 
   // =======================================================================
   // <<< 2. MÉTODO PRINCIPAL ATUALIZADO >>>

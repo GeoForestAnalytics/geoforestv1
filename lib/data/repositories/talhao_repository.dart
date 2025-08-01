@@ -1,4 +1,5 @@
-// lib/data/repositories/talhao_repository.dart
+// lib/data/repositories/talhao_repository.dart (VERSÃO CORRIGIDA)
+
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
@@ -7,11 +8,38 @@ import 'package:sqflite/sqflite.dart';
 class TalhaoRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
+  // AJUSTE 1: Insert agora apenas insere, usando .fail para segurança.
   Future<int> insertTalhao(Talhao t) async {
     final db = await _dbHelper.database;
-    // Adiciona o ConflictAlgorithm.replace
-    return await db.insert('talhoes', t.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert('talhoes', t.toMap(), conflictAlgorithm: ConflictAlgorithm.fail);
   }
+
+  // AJUSTE 2: Adiciona um método de update explícito e seguro.
+  Future<int> updateTalhao(Talhao t) async {
+    final db = await _dbHelper.database;
+    return await db.update('talhoes', t.toMap(), where: 'id = ?', whereArgs: [t.id]);
+  }
+  
+  // AJUSTE 3: Adiciona um método para buscar um talhão específico (necessário para a UI)
+  Future<Talhao?> getTalhaoById(int id) async {
+    final db = await _dbHelper.database;
+    final maps = await db.query('talhoes', where: 'id = ?', whereArgs: [id], limit: 1);
+    if (maps.isNotEmpty) {
+      final fazendaMap = await db.rawQuery('''
+          SELECT F.nome as fazendaNome 
+          FROM fazendas F
+          JOIN talhoes T ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
+          WHERE T.id = ?
+      ''', [id]);
+      final mapCompleto = Map<String, dynamic>.from(maps.first);
+      if (fazendaMap.isNotEmpty) {
+        mapCompleto['fazendaNome'] = fazendaMap.first['fazendaNome'];
+      }
+      return Talhao.fromMap(mapCompleto);
+    }
+    return null;
+  }
+
   Future<List<Talhao>> getTalhoesDaFazenda(String fazendaId, int fazendaAtividadeId) async {
     final db = await _dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.rawQuery('''

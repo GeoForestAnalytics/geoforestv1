@@ -1,9 +1,12 @@
-// lib/pages/fazenda/form_fazenda_page.dart (VERSÃO COM CORREÇÃO DE UPDATE)
+// lib/pages/fazenda/form_fazenda_page.dart (VERSÃO CORRIGIDA)
 
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:sqflite/sqflite.dart';
+
+// <<< 1. IMPORTE O REPOSITÓRIO E REMOVA O DATABASE_HELPER >>>
+import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
+// import 'package:geoforestv1/data/datasources/local/database_helper.dart'; // REMOVA ESTA LINHA
 
 class FormFazendaPage extends StatefulWidget {
   final int atividadeId;
@@ -27,7 +30,9 @@ class _FormFazendaPageState extends State<FormFazendaPage> {
   final _nomeController = TextEditingController();
   final _municipioController = TextEditingController();
   final _estadoController = TextEditingController();
-
+  
+  // <<< 2. INSTANCIE O REPOSITÓRIO >>>
+  final _fazendaRepository = FazendaRepository();
   bool _isSaving = false;
 
   @override
@@ -51,11 +56,14 @@ class _FormFazendaPageState extends State<FormFazendaPage> {
     super.dispose();
   }
 
+  // <<< 3. SUBSTITUA COMPLETAMENTE O MÉTODO _salvar >>>
   Future<void> _salvar() async {
     if (_formKey.currentState?.validate() ?? false) {
       setState(() => _isSaving = true);
 
       final fazenda = Fazenda(
+        // O ID não pode ser editado, então pegamos do controlador.
+        // A atividadeId vem do widget.
         id: _idController.text.trim(),
         atividadeId: widget.atividadeId,
         nome: _nomeController.text.trim(),
@@ -64,26 +72,12 @@ class _FormFazendaPageState extends State<FormFazendaPage> {
       );
 
       try {
-        final db = await DatabaseHelper.instance.database;
-        
         if (widget.isEditing) {
-            // <<< INÍCIO DA CORREÇÃO >>>
-            // Cria um mapa com apenas os campos que podem ser atualizados.
-            final dadosParaAtualizar = {
-              'nome': fazenda.nome,
-              'municipio': fazenda.municipio,
-              'estado': fazenda.estado,
-            };
-
-            await db.update(
-              'fazendas',
-              dadosParaAtualizar, // Usa o mapa corrigido
-              where: 'id = ? AND atividadeId = ?',
-              whereArgs: [widget.fazendaParaEditar!.id, widget.fazendaParaEditar!.atividadeId],
-            );
-            // <<< FIM DA CORREÇÃO >>>
+          // No modo de edição, usamos o novo método de update
+          await _fazendaRepository.updateFazenda(fazenda);
         } else {
-            await db.insert('fazendas', fazenda.toMap(), conflictAlgorithm: ConflictAlgorithm.fail);
+          // No modo de criação, usamos o método de insert
+          await _fazendaRepository.insertFazenda(fazenda);
         }
 
         if (mounted) {
@@ -122,6 +116,7 @@ class _FormFazendaPageState extends State<FormFazendaPage> {
 
   @override
   Widget build(BuildContext context) {
+    // O método build permanece o mesmo, não precisa de alterações.
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.isEditing ? 'Editar Fazenda' : 'Nova Fazenda'),
@@ -135,6 +130,7 @@ class _FormFazendaPageState extends State<FormFazendaPage> {
             children: [
               TextFormField(
                 controller: _idController,
+                // O ID da fazenda (chave primária) não deve ser editável.
                 enabled: !widget.isEditing,
                 style: TextStyle(
                   color: widget.isEditing ? Colors.grey.shade600 : null,

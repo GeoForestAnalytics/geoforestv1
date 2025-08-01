@@ -1,10 +1,16 @@
-// lib/services/export_service.dart (VERSÃO FINAL, COMPLETA E FUNCIONAL)
+// lib/services/export_service.dart (VERSÃO CORRIGIDA PARA ISOLATES)
 
 import 'dart:convert';
 import 'dart:io';
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+// ... (outros imports)
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+// ... (seus imports de modelos e repositórios)
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
@@ -16,18 +22,19 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_archive/flutter_archive.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
-// Imports dos repositórios
+import 'package:geoforestv1/providers/team_provider.dart';
+import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/utils/constants.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
+
 // --- PAYLOADS E FUNÇÕES PARA EXECUÇÃO EM BACKGROUND (COMPUTE) ---
 
 class _CsvParcelaPayload {
+  // ... (conteúdo da classe permanece o mesmo)
   final List<Map<String, dynamic>> parcelasMap;
   final String nomeLider;
   final String nomesAjudantes;
@@ -36,11 +43,14 @@ class _CsvParcelaPayload {
 }
 
 class _CsvCubagemPayload {
+  // ... (conteúdo da classe permanece o mesmo)
   final List<Map<String, dynamic>> cubagensMap;
   _CsvCubagemPayload({required this.cubagensMap});
 }
 
+// <<< 1. NOVA FUNÇÃO DE INICIALIZAÇÃO PARA OS ISOLATES >>>
 void _initServicesForIsolate() {
+  // Garante que o FFI seja inicializado em plataformas desktop
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -48,9 +58,12 @@ void _initServicesForIsolate() {
 }
 
 Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) async {
+  // <<< 2. CHAMA A INICIALIZAÇÃO NO INÍCIO DA FUNÇÃO DO ISOLATE >>>
   _initServicesForIsolate();
+  
   final parcelaRepository = ParcelaRepository();
   final codigoEpsg = zonasUtmSirgas2000[payload.nomeZona] ?? 31982;
+  // ... (o resto da função permanece o mesmo)
   final projWGS84 = proj4.Projection.parse('+proj=longlat +datum=WGS84 +no_defs');
   final projUTM = proj4.Projection.parse(proj4Definitions[codigoEpsg]!);
   List<List<dynamic>> rows = [];
@@ -79,9 +92,12 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 }
 
 Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) async {
+  // <<< 3. CHAMA A INICIALIZAÇÃO AQUI TAMBÉM >>>
   _initServicesForIsolate();
+
   final cubagemRepository = CubagemRepository();
   List<List<dynamic>> rows = [];
+  // ... (o resto da função permanece o mesmo)
   rows.add(['Atividade', 'id_db_arvore', 'id_fazenda', 'fazenda', 'talhao', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm']);
   for (var cMap in payload.cubagensMap) {
     final arvore = CubagemArvore.fromMap(cMap);
@@ -98,6 +114,7 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
 }
 
 class ExportService {
+  // ... (O resto da sua classe ExportService permanece exatamente o mesmo)
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
   final _projetoRepository = ProjetoRepository();
@@ -105,27 +122,68 @@ class ExportService {
   Future<void> exportarDados(BuildContext context) async {
     try {
       if (!await _requestPermission(context)) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando coletas de hoje para exportação...')));
-      final List<Parcela> parcelas = await _parcelaRepository.getTodaysUnexportedConcludedParcelas();
-      if (parcelas.isEmpty) {
+
+      final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
+      final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+      final user = FirebaseAuth.instance.currentUser;
+      
+      String? nomeDoColetor;
+
+      if (licenseProvider.licenseData?.cargo == 'gerente') {
+        nomeDoColetor = user?.displayName ?? user?.email;
+        debugPrint("Exportação em modo GERENTE. Coletor: $nomeDoColetor");
+      } else {
+        nomeDoColetor = teamProvider.lider;
+        debugPrint("Exportação em modo EQUIPE. Líder: $nomeDoColetor");
+      }
+      
+      if (nomeDoColetor == null || nomeDoColetor.isEmpty) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).removeCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma parcela nova concluída hoje para exportar.'), backgroundColor: Colors.orange));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Identidade do coletor não encontrada. Verifique os dados da equipe ou da sua conta.'),
+            backgroundColor: Colors.red,
+          ));
         }
         return;
       }
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando arquivo CSV em segundo plano...')));
-      final String fName = 'geoforest_export_coleta_diaria_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.csv';
+
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Buscando coletas de "$nomeDoColetor" para exportação...'),
+      ));
+
+      final List<Parcela> parcelas = await _parcelaRepository.getUnexportedConcludedParcelasByLider(nomeDoColetor);
+
+      if (parcelas.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).removeCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Nenhuma parcela nova concluída por você/sua equipe para exportar.'),
+            backgroundColor: Colors.orange,
+          ));
+        }
+        return;
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Gerando arquivo CSV em segundo plano...'),
+        ));
+      }
+      
+      final nomeArquivoColetor = nomeDoColetor.replaceAll(RegExp(r'[^\w]'), '_');
+      final String fName = 'geoforest_export_${nomeArquivoColetor}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.csv';
       final path = await _gerarCsvParcela(parcelas, fName);
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        await Share.shareXFiles([XFile(path)], subject: 'Exportação GeoForest - Coleta de Campo');
+        await Share.shareXFiles([XFile(path)], subject: 'Exportação GeoForest - Coleta de $nomeDoColetor');
         await _parcelaRepository.marcarParcelasComoExportadas(parcelas.map((p) => p.dbId!).toList());
       }
     } catch (e, s) {
-      _handleExportError(context, 'exportar dados', e, s);
+      _handleExportError(context, 'exportar dados da equipe', e, s);
     }
   }
+
 
   Future<void> exportarTodasAsParcelasBackup(BuildContext context) async {
     try {

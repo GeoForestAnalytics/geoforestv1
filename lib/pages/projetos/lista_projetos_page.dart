@@ -1,4 +1,4 @@
-// lib/pages/projetos/lista_projetos_page.dart (VERSÃO FINAL E LIMPA)
+// lib/pages/projetos/lista_projetos_page.dart (VERSÃO ATUALIZADA COM EXCLUSÃO COMPLETA)
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -13,6 +13,7 @@ import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/pages/projetos/detalhes_projeto_page.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/data/repositories/import_repository.dart';
+import 'package:geoforestv1/services/sync_service.dart'; // <<< 1. IMPORTE O SYNC SERVICE
 import 'form_projeto_page.dart';
 
 class ListaProjetosPage extends StatefulWidget {
@@ -32,6 +33,7 @@ class ListaProjetosPage extends StatefulWidget {
 class _ListaProjetosPageState extends State<ListaProjetosPage> {
   final _projetoRepository = ProjetoRepository();
   final _importRepository = ImportRepository();
+  final _syncService = SyncService(); // <<< 2. INSTANCIE O SYNC SERVICE
   
   List<Projeto> projetos = [];
   bool _isLoading = true;
@@ -79,21 +81,20 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   Future<void> _delegarProjeto(Projeto projeto) async {
-    // TODO: Implementar a lógica de delegação em um serviço dedicado.
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Funcionalidade de delegação a ser implementada em um serviço.')));
   }
 
   Future<void> _mostrarDialogoInserirChave() async {
-    // TODO: Implementar a lógica de vínculo em um serviço dedicado.
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Funcionalidade de vínculo a ser implementada em um serviço.')));
   }
 
   Future<void> _toggleArchiveStatus(Projeto projeto) async {
-    // TODO: Mover esta lógica para um serviço para desacoplar da UI.
     final novoStatus = projeto.status == 'ativo' ? 'arquivado' : 'ativo';
     final projetoAtualizado = projeto.copyWith(status: novoStatus);
     await _projetoRepository.updateProjeto(projetoAtualizado);
-    _checkUserRoleAndLoadProjects(); // Recarrega a lista para refletir a mudança
+    // Sincroniza a mudança de status com o Firebase
+    await _syncService.atualizarStatusProjetoNaFirebase(projeto.id.toString(), novoStatus);
+    _checkUserRoleAndLoadProjects();
   }
 
   Future<void> _iniciarImportacao(Projeto projeto) async {
@@ -130,7 +131,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       final message = await _importRepository.importarCsvUniversal(csvContent, projetoIdAlvo: projeto.id!);
       
       if (mounted) {
-        Navigator.of(context).pop(); // Fecha o diálogo de "processando"
+        Navigator.of(context).pop();
         await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -139,7 +140,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
             actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
           ),
         );
-        Navigator.of(context).pop(); // Retorna da ListaProjetosPage
+        Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
@@ -173,14 +174,19 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     }
   }
 
+  // <<< 3. SUBSTITUA COMPLETAMENTE ESTE MÉTODO >>>
   Future<void> _deletarProjetosSelecionados() async {
     if (_selectedProjetos.isEmpty || !mounted) return;
+    if (!_isGerente) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Apenas gerentes podem apagar projetos.')));
+      return;
+    }
 
     final confirmar = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
               title: const Text('Confirmar Exclusão'),
-              content: Text('Tem certeza que deseja apagar os ${_selectedProjetos.length} projetos selecionados e TODOS os seus dados? Esta ação é PERMANENTE.'),
+              content: Text('Tem certeza que deseja apagar os ${_selectedProjetos.length} projetos selecionados e TODOS os seus dados locais e na nuvem? Esta ação é PERMANENTE.'),
               actions: [
                 TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
                 FilledButton(
@@ -189,13 +195,46 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
                     child: const Text('Apagar')),
               ],
             ));
-    if (confirmar == true && mounted) {
-      for (final id in _selectedProjetos) {
-        await _projetoRepository.deleteProjeto(id);
-      }
-      _clearSelection();
-      await _checkUserRoleAndLoadProjects();
+            
+    if (confirmar != true) return;
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Excluindo projetos... Isso pode levar um momento.'),
+          duration: Duration(seconds: 10)));
     }
+    
+    final licenseId = context.read<LicenseProvider>().licenseData?.id;
+    if (licenseId == null) {
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro: Licença não encontrada.'), backgroundColor: Colors.red));
+        return;
+    }
+
+    bool houveErro = false;
+    for (final id in _selectedProjetos) {
+      try {
+        // Passo 1: Apagar no Firebase
+        await _syncService.deletarProjetoCompletoDoFirebase(licenseId, id);
+        
+        // Passo 2: Apagar localmente
+        await _projetoRepository.deleteProjeto(id);
+
+      } catch (e) {
+        houveErro = true;
+        debugPrint("Erro ao apagar projeto $id: $e");
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao apagar o projeto $id.'), backgroundColor: Colors.red));
+        break; 
+      }
+    }
+    
+    if (mounted) {
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        if (!houveErro) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Projetos excluídos com sucesso!'), backgroundColor: Colors.green));
+        }
+    }
+    _clearSelection();
+    await _checkUserRoleAndLoadProjects();
   }
 
   void _navegarParaEdicao(Projeto projeto) async {
@@ -219,6 +258,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
 
   @override
   Widget build(BuildContext context) {
+    // ... seu método build continua igual ...
     return Scaffold(
       appBar: _isSelectionMode ? _buildSelectionAppBar() : _buildNormalAppBar(),
       body: _isLoading

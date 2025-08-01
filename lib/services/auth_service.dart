@@ -1,4 +1,4 @@
-// lib/services/auth_service.dart (VERSÃO CORRETA E FINAL)
+// lib/services/auth_service.dart (VERSÃO CORRETA E FINAL - GARANTIDO)
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -24,14 +24,11 @@ class AuthService {
         throw FirebaseAuthException(code: 'user-not-found');
       }
 
-      // Força a atualização do token para pegar os Custom Claims mais recentes
       await user.getIdToken(true); 
-
       await _licensingService.checkAndRegisterDevice(user);
       
       return userCredential;
     } on LicenseException catch(e) {
-      // Se a licença falhar, desloga o usuário para evitar estado inconsistente.
       print('Erro de licença: ${e.message}. Deslogando usuário.');
       await signOut(); 
       rethrow;
@@ -40,7 +37,7 @@ class AuthService {
     }
   }
 
-  // --- ESTA É A FUNÇÃO CORRIGIDA ---
+  // --- ESTA É A FUNÇÃO CORRIGIDA QUE CRIA A ESTRUTURA CERTA ---
   Future<UserCredential> createUserWithEmailAndPassword({
     required String email,
     required String password,
@@ -56,26 +53,22 @@ class AuthService {
       if (user != null) {
         await user.updateDisplayName(displayName);
 
-        // Define a data de fim do período de teste
         final trialEndDate = DateTime.now().add(const Duration(days: 7));
         
-        // Prepara os dados da licença no formato NOVO e CORRETO
+        // <<< ESTRUTURA DE DADOS CORRIGIDA >>>
         final licenseData = {
-          'statusAssinatura': 'trial', // Começa como trial
-          'features': {
-            'exportacao': true, // Pode definir como true para o trial
-            'analise': true,
-          },
-          'limites': {
-            'smartphone': 1,
-            'desktop': 0,
-          },
+          'statusAssinatura': 'trial',
+          'features': {'exportacao': false, 'analise': true},
+          'limites': {'smartphone': 1, 'desktop': 0},
           'trial': {
             'ativo': true,
             'dataInicio': FieldValue.serverTimestamp(),
             'dataFim': Timestamp.fromDate(trialEndDate),
           },
-          // CRIA O MAPA 'usuariosPermitidos' com um OBJETO para o gerente
+          // MUDANÇA 1: CRIA O ARRAY para os UIDs, que é otimizado para buscas.
+          'uidsPermitidos': [user.uid],
+          
+          // MUDANÇA 2: Os detalhes dos usuários ficam em um mapa separado.
           'usuariosPermitidos': {
             user.uid: {
               'cargo': 'gerente',
@@ -86,7 +79,6 @@ class AuthService {
           }
         };
 
-        // Salva a licença no Firestore usando o UID do usuário como ID do documento
         await _firestore.collection('clientes').doc(user.uid).set(licenseData);
       }
       

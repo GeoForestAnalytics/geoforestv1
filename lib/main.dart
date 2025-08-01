@@ -190,7 +190,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// WIDGET AUTHCHECK
+// WIDGET AUTHCHECK (VERSÃO CORRIGIDA PARA SUBSTITUIR A ANTIGA)
 class AuthCheck extends StatelessWidget {
   const AuthCheck({super.key});
 
@@ -199,20 +199,41 @@ class AuthCheck extends StatelessWidget {
     final loginController = context.watch<LoginController>();
     final licenseProvider = context.watch<LicenseProvider>();
 
-    if (!loginController.isInitialized || licenseProvider.isLoading) {
+    // 1. Estado de Carregamento Inicial do Firebase Auth
+    if (!loginController.isInitialized) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    // 2. Usuário confirmado como Deslogado
     if (!loginController.isLoggedIn) {
       return const LoginPage();
     }
 
-    final license = licenseProvider.licenseData;
-    final bool isLicenseOk = license != null && (license.status == 'ativa' || license.status == 'trial');
+    // A partir daqui, sabemos que o usuário ESTÁ LOGADO.
+    // Agora, vamos verificar o status da licença de forma segura.
+
+    // 3. Estado de Erro na Licença (ex: sem internet na hora da busca)
+    if (licenseProvider.error != null && !licenseProvider.isLoading) {
+      return ErrorScreen(
+        message: "Não foi possível verificar sua licença:\n${licenseProvider.error}",
+        onRetry: () => context.read<LicenseProvider>().fetchLicenseData(),
+      );
+    }
+
+    // 4. Estado de Carregamento da Licença (CHAVE DA CORREÇÃO)
+    //    Força a tela de loading até que os dados da licença (licenseData)
+    //    estejam realmente prontos e não sejam nulos.
+    if (licenseProvider.isLoading || licenseProvider.licenseData == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    // 5. Estado Pronto: Todos os dados estão carregados e consistentes.
+    final license = licenseProvider.licenseData!; // Agora é seguro usar '!'
+    final bool isLicenseOk = (license.status == 'ativa' || license.status == 'trial');
 
     if (isLicenseOk) {
       if (license.cargo == 'gerente') {
-        return const GerenteMainPage();
+        return const GerenteMainPage(); // << Rota correta para o gerente
       } else {
         return const EquipePage();
       }

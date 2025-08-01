@@ -1,4 +1,4 @@
-// lib/services/sync_service.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/services/sync_service.dart (VERSÃO COMPLETA E CORRIGIDA)
 
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,23 +12,19 @@ import 'package:geoforestv1/services/licensing_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
-// ------------------------------------
 
 class SyncService {
   final firestore.FirebaseFirestore _firestore = firestore.FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final DatabaseHelper _dbHelper = DatabaseHelper.instance; // Mantido para acesso direto ao DB em transações e queries complexas
+  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   final LicensingService _licensingService = LicensingService();
   
-  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS ---
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
   final _projetoRepository = ProjetoRepository();
-  // ---------------------------------------
 
   Future<void> sincronizarDados() async {
     final user = _auth.currentUser;
@@ -39,14 +35,11 @@ class SyncService {
       throw Exception("Não foi possível encontrar uma licença válida para sincronizar os dados.");
     }
     final licenseId = licenseDoc.id;
-
     final licenseData = licenseDoc.data()!;
     
-    // --- CORREÇÃO PRINCIPAL AQUI ---
     final usuariosPermitidos = licenseData['usuariosPermitidos'] as Map<String, dynamic>? ?? {};
     final dadosDoUsuario = usuariosPermitidos[user.uid] as Map<String, dynamic>?;
-    final cargo = dadosDoUsuario?['cargo'] as String? ?? 'equipe'; // Lê o cargo de dentro do objeto
-    // -----------------------------
+    final cargo = dadosDoUsuario?['cargo'] as String? ?? 'equipe';
 
     if (cargo == 'gerente') {
       debugPrint("Sincronização em modo GERENTE: Upload e Download completos.");
@@ -78,7 +71,7 @@ class SyncService {
       batch.set(docRef, registro, firestore.SetOptions(merge: true));
     }
 
-    if(projetosIds.isEmpty) { // Adiciona verificação para evitar query vazia
+    if(projetosIds.isEmpty) {
         await batch.commit();
         debugPrint("Hierarquia de projetos próprios (sem atividades) enviada para a nuvem.");
         return;
@@ -112,6 +105,108 @@ class SyncService {
     
     await batch.commit();
     debugPrint("Hierarquia de projetos próprios enviada para a nuvem.");
+  }
+
+  // <<< MÉTODO DE EXCLUSÃO COMPLETO E CORRIGIDO >>>
+  Future<void> deletarProjetoCompletoDoFirebase(String licenseId, int projetoId) async {
+    debugPrint("INICIANDO EXCLUSÃO REMOTA COMPLETA para o projeto $projetoId...");
+    final clienteRef = _firestore.collection('clientes').doc(licenseId);
+    
+    // NOTA: O Firestore limita as operações em lote (batch) a 500.
+    // Para projetos muito grandes, esta exclusão no cliente pode falhar.
+    // A solução mais robusta para exclusões em cascata é usar uma Cloud Function.
+    firestore.WriteBatch batch = _firestore.batch();
+    int operationCount = 0;
+
+    Future<void> commitBatchIfNeeded() async {
+        if (operationCount >= 490) { // Deixa uma margem de segurança
+            await batch.commit();
+            batch = _firestore.batch();
+            operationCount = 0;
+            debugPrint(" > Lote de exclusão executado. Iniciando novo lote.");
+        }
+    }
+
+    // 1. Encontrar todos os IDs de atividades, fazendas e talhões do projeto
+    final atividadesSnap = await clienteRef.collection('atividades').where('projetoId', isEqualTo: projetoId).get();
+    final List<int> atividadeIds = atividadesSnap.docs.map((doc) => doc.data()['id'] as int).toList();
+    final List<int> talhaoIds = [];
+
+    if (atividadeIds.isNotEmpty) {
+        final fazendasSnap = await clienteRef.collection('fazendas').where('atividadeId', whereIn: atividadeIds).get();
+        final List<String> fazendaIdsStr = fazendasSnap.docs.map((doc) => doc.data()['id'] as String).toList();
+        
+        if (fazendaIdsStr.isNotEmpty) {
+            final talhoesSnap = await clienteRef.collection('talhoes').where('fazendaId', whereIn: fazendaIdsStr).get();
+            for (final doc in talhoesSnap.docs) {
+                talhaoIds.add(doc.data()['id'] as int);
+            }
+        }
+    }
+
+    // 2. Apagar todos os dados de COLETA (Parcelas e suas Árvores)
+    if (talhaoIds.isNotEmpty) {
+        final parcelasSnap = await clienteRef.collection('dados_coleta').where('talhaoId', whereIn: talhaoIds).get();
+        for (final doc in parcelasSnap.docs) {
+            final arvoresSnap = await doc.reference.collection('arvores').get();
+            for (final arvDoc in arvoresSnap.docs) {
+                batch.delete(arvDoc.reference);
+                operationCount++;
+                await commitBatchIfNeeded();
+            }
+            batch.delete(doc.reference);
+            operationCount++;
+            await commitBatchIfNeeded();
+        }
+        debugPrint(" > ${parcelasSnap.docs.length} parcelas e suas árvores marcadas para exclusão.");
+        
+        // 3. Apagar todos os dados de CUBAGEM (Cubagens e suas Seções)
+        final cubagensSnap = await clienteRef.collection('dados_cubagem').where('talhaoId', whereIn: talhaoIds).get();
+        for (final doc in cubagensSnap.docs) {
+            final secoesSnap = await doc.reference.collection('secoes').get();
+            for (final secDoc in secoesSnap.docs) {
+                batch.delete(secDoc.reference);
+                operationCount++;
+                await commitBatchIfNeeded();
+            }
+            batch.delete(doc.reference);
+            operationCount++;
+            await commitBatchIfNeeded();
+        }
+        debugPrint(" > ${cubagensSnap.docs.length} cubagens e suas seções marcadas para exclusão.");
+    }
+    
+    // 4. Apagar a hierarquia de metadados (Talhões, Fazendas, Atividades)
+    for (final id in talhaoIds) {
+      batch.delete(clienteRef.collection('talhoes').doc(id.toString()));
+      operationCount++;
+      await commitBatchIfNeeded();
+    }
+    // Repita para Fazendas e Atividades se eles tiverem IDs simples e conhecidos.
+    // A busca anterior já os encontrou.
+    if(atividadeIds.isNotEmpty) {
+      final fazendasSnap = await clienteRef.collection('fazendas').where('atividadeId', whereIn: atividadeIds).get();
+      for (final doc in fazendasSnap.docs) {
+        batch.delete(doc.reference);
+        operationCount++;
+        await commitBatchIfNeeded();
+      }
+    }
+    for (final doc in atividadesSnap.docs) {
+      batch.delete(doc.reference);
+      operationCount++;
+      await commitBatchIfNeeded();
+    }
+    
+    // 5. Apagar o projeto em si
+    final projetoRef = clienteRef.collection('projetos').doc(projetoId.toString());
+    batch.delete(projetoRef);
+    operationCount++;
+    debugPrint(" > Documento do projeto marcado para exclusão.");
+
+    // 6. Executar o lote final de operações
+    await batch.commit();
+    debugPrint("EXCLUSÃO REMOTA CONCLUÍDA.");
   }
 
   Future<void> _uploadColetasNaoSincronizadas(String licenseIdDoUsuarioLogado) async {

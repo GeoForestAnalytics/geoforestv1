@@ -1,4 +1,4 @@
-// lib/pages/atividades/detalhes_atividade_page.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/pages/atividades/detalhes_atividade_page.dart (VERSÃO COM SINTAXE CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
@@ -9,16 +9,13 @@ import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/pages/fazenda/form_fazenda_page.dart';
 import 'package:geoforestv1/pages/fazenda/detalhes_fazenda_page.dart';
 import 'package:geoforestv1/utils/navigation_helper.dart';
-
-// --- NOVO IMPORT DO REPOSITÓRIO ---
+import 'package:geoforestv1/pages/cubagem/plano_cubagem_selecao_page.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
-// ------------------------------------
-
-// O import do database_helper foi removido.
-// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class DetalhesAtividadePage extends StatefulWidget {
   final Atividade atividade;
+  
+  // <<< LINHA CORRIGIDA AQUI >>>
   const DetalhesAtividadePage({super.key, required this.atividade});
 
   @override
@@ -27,17 +24,18 @@ class DetalhesAtividadePage extends StatefulWidget {
 
 class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
   late Future<List<Fazenda>> _fazendasFuture;
-
-  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
   final _fazendaRepository = FazendaRepository();
-  // ---------------------------------------
-
   bool _isSelectionMode = false;
   final Set<String> _selectedFazendas = {};
 
   bool get _isAtividadeDeInventario {
-    final tipo = widget.atividade.tipo.toLowerCase();
-    return tipo.contains("ipc") || tipo.contains("ifc") || tipo.contains("inventário");
+    final tipo = widget.atividade.tipo.toUpperCase();
+    return tipo.contains("IPC") || tipo.contains("IFC") || tipo.contains("IFS") || tipo.contains("BIO") || tipo.contains("IFQ");
+  }
+
+  bool get _isAtividadeDeCubagem {
+    final tipo = widget.atividade.tipo.toUpperCase();
+    return tipo.contains("CUB");
   }
 
   @override
@@ -45,17 +43,38 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
     super.initState();
     _carregarFazendas();
   }
-
-  // --- MÉTODO ATUALIZADO ---
+  
   void _carregarFazendas() {
     if (mounted) {
       setState(() {
         _isSelectionMode = false;
         _selectedFazendas.clear();
-        // Usa o FazendaRepository
         _fazendasFuture = _fazendaRepository.getFazendasDaAtividade(widget.atividade.id!);
       });
     }
+  }
+
+  void _navegarParaNovaFazenda() async {
+    final bool? fazendaCriada = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FormFazendaPage(atividadeId: widget.atividade.id!),
+      ),
+    );
+    if (fazendaCriada == true && mounted) {
+      _carregarFazendas();
+    }
+  }
+  
+  void _navegarParaGerarPlanoDeCubagem() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PlanoCubagemSelecaoPage(
+          atividadeDeOrigem: widget.atividade,
+        ),
+      ),
+    );
   }
 
   void _toggleSelectionMode(String? fazendaId) {
@@ -81,7 +100,6 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
     });
   }
   
-  // --- MÉTODO ATUALIZADO ---
   Future<void> _deleteFazenda(Fazenda fazenda) async {
      final bool? confirmar = await showDialog<bool>(
       context: context,
@@ -100,7 +118,6 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
     );
 
     if (confirmar == true && mounted) {
-      // Usa o FazendaRepository
       await _fazendaRepository.deleteFazenda(fazenda.id, fazenda.atividadeId);
       
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -109,22 +126,6 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
       _carregarFazendas();
     }
   }
-
-  // O restante dos métodos (navegação, build, etc.) não precisa de alterações
-  // pois eles não interagem diretamente com o banco de dados.
-
-  void _navegarParaNovaFazenda() async {
-    final bool? fazendaCriada = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => FormFazendaPage(atividadeId: widget.atividade.id!),
-      ),
-    );
-    if (fazendaCriada == true && mounted) {
-      _carregarFazendas();
-    }
-  }
-
   void _navegarParaEdicaoFazenda(Fazenda fazenda) async {
     final bool? fazendaEditada = await Navigator.push<bool>(
       context,
@@ -181,7 +182,6 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
       ],
     );
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -212,7 +212,7 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 8.0),
             child: Text(
-              "Fazendas da Atividade",
+              _isAtividadeDeCubagem ? "Cubagens Manuais" : "Fazendas da Atividade",
               style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Theme.of(context).colorScheme.primary),
             ),
           ),
@@ -242,7 +242,6 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
                     ),
                   );
                 }
-
                 return ListView.builder(
                   padding: const EdgeInsets.only(bottom: 80),
                   itemCount: fazendas.length,
@@ -315,12 +314,19 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
             icon: Icons.add,
             activeIcon: Icons.close,
             children: [
+              if (_isAtividadeDeInventario || _isAtividadeDeCubagem)
+                SpeedDialChild(
+                  child: const Icon(Icons.add_business_outlined),
+                  label: 'Nova Fazenda',
+                  onTap: _navegarParaNovaFazenda,
+                ),
+
               if (_isAtividadeDeInventario)
                 SpeedDialChild(
-                child: const Icon(Icons.add_business_outlined),
-                label: 'Nova Fazenda',
-                onTap: _navegarParaNovaFazenda,
-              ),
+                  child: const Icon(Icons.rule_folder_outlined),
+                  label: 'Gerar Plano de Cubagem',
+                  onTap: _navegarParaGerarPlanoDeCubagem,
+                ),
             ],
         ),
     );
