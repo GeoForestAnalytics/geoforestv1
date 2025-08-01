@@ -40,6 +40,8 @@ class TalhaoRepository {
     return null;
   }
 
+  
+
   Future<List<Talhao>> getTalhoesDaFazenda(String fazendaId, int fazendaAtividadeId) async {
     final db = await _dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
@@ -81,4 +83,18 @@ class TalhaoRepository {
     ''', ids);
     return List.generate(talhoesMaps.length, (i) => Talhao.fromMap(talhoesMaps[i]));
   }
+
+  Future<List<Talhao>> getTodosOsTalhoes() async {
+    final db = await _dbHelper.database;
+    // Usamos a mesma query complexa para já trazer o nome da fazenda junto
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId
+      FROM talhoes T
+      INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
+      INNER JOIN atividades A ON F.atividadeId = A.id
+      ORDER BY T.nome ASC
+    ''');
+    return List.generate(maps.length, (i) => Talhao.fromMap(maps[i]));
+  }
+
 }

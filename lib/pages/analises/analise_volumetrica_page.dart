@@ -1,9 +1,11 @@
-// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO ESTRUTURALMENTE CORRETA)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 // Imports do projeto
+import 'package:geoforestv1/models/arvore_model.dart';
+import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
@@ -15,6 +17,7 @@ import 'package:geoforestv1/services/pdf_service.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+import 'package:geoforestv1/data/repositories/analise_repository.dart';
 
 class AnaliseVolumetricaPage extends StatefulWidget {
   const AnaliseVolumetricaPage({super.key});
@@ -30,6 +33,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   final _cubagemRepository = CubagemRepository();
   final _analysisService = AnalysisService();
   final _pdfService = PdfService();
+  final _analiseRepository = AnaliseRepository(); // << REPOSITÓRIO FALTANDO
 
   // Estados para o Filtro
   List<Projeto> _projetosDisponiveis = [];
@@ -66,24 +70,26 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       final licenseId = licenseProvider.licenseData!.id;
       final isGerente = licenseProvider.licenseData!.cargo == 'gerente';
 
-      // 1. Busca os projetos
       final projetos = isGerente
           ? await _projetoRepository.getTodosOsProjetosParaGerente()
           : await _projetoRepository.getTodosProjetos(licenseId);
-      
-      // 2. Busca talhões com cubagem (pela tabela de cubagens)
-      final todasCubagens = await _cubagemRepository.getTodasCubagens();
-      final idsTalhoesCubados = todasCubagens.map((a) => a.talhaoId).where((id) => id != null).toSet();
+      final projetosAtivos = projetos.where((p) => p.status == 'ativo').toList();
 
-      // 3. Busca talhões com inventário (pela tabela de parcelas)
-      final talhoesInventario = await _talhaoRepository.getTalhoesComParcelasConcluidas();
-      final idsTalhoesInventario = talhoesInventario.map((t) => t.id).toSet();
+      final todosOsTalhoes = await _talhaoRepository.getTodosOsTalhoes();
+      final todasCubagens = await _cubagemRepository.getTodasCubagens();
+      final idsTalhoesComCubagem = todasCubagens.map((a) => a.talhaoId).where((id) => id != null).toSet();
+      
+      final talhoesComInventarioConcluido = await _talhaoRepository.getTalhoesComParcelasConcluidas();
+      final idsTalhoesComInventario = talhoesComInventarioConcluido.map((t) => t.id).toSet();
+
+      final talhoesFiltradosComCubagem = todosOsTalhoes.where((t) => idsTalhoesComCubagem.contains(t.id)).toList();
+      final talhoesFiltradosComInventario = todosOsTalhoes.where((t) => idsTalhoesComInventario.contains(t.id)).toList();
 
       if (mounted) {
         setState(() {
-          _projetosDisponiveis = projetos.where((p) => p.status == 'ativo').toList();
-          _talhoesComCubagem = talhoesInventario.where((t) => idsTalhoesCubados.contains(t.id)).toList();
-          _talhoesComInventario = talhoesInventario.where((t) => idsTalhoesInventario.contains(t.id)).toList();
+          _projetosDisponiveis = projetosAtivos;
+          _talhoesComCubagem = talhoesFiltradosComCubagem;
+          _talhoesComInventario = talhoesFiltradosComInventario;
           _isLoading = false;
         });
       }
@@ -116,38 +122,83 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     setState(() { _isAnalyzing = true; _errorMessage = null; });
 
     try {
-      // 1. Coleta os dados de cubagem para a regressão
+      // ETAPA 1: GERAR A EQUAÇÃO DE VOLUME
       List<CubagemArvore> arvoresParaRegressao = [];
       for(final talhaoId in _talhoesCubadosSelecionados) {
         final cubagensDoTalhao = await _cubagemRepository.getTodasCubagensDoTalhao(talhaoId);
         arvoresParaRegressao.addAll(cubagensDoTalhao);
       }
       
-      // 2. Gera a equação de volume
       final resultadoRegressao = await _analysisService.gerarEquacaoSchumacherHall(arvoresParaRegressao);
       if (resultadoRegressao.containsKey('error')) {
         throw Exception(resultadoRegressao['error']);
       }
       
-      // 3. Aplica a equação aos talhões de inventário
-      // (Esta parte é mais complexa e precisaria de uma implementação mais detalhada,
-      // mas vamos simular o resultado para a UI funcionar)
+      // ETAPA 2: APLICAR A EQUAÇÃO E CALCULAR TOTAIS DO INVENTÁRIO
+      double volumeTotalLote = 0;
+      double areaTotalLote = 0;
+      double areaBasalMediaPonderada = 0;
+      int arvoresHaMediaPonderada = 0;
+      List<Talhao> talhoesInventarioAnalisados = [];
+
+      for (final talhaoId in _talhoesInventarioSelecionados) {
+          final talhao = _talhoesComInventario.firstWhere((t) => t.id == talhaoId);
+          talhoesInventarioAnalisados.add(talhao);
+          
+          final dadosAgregados = await _analiseRepository.getDadosAgregadosDoTalhao(talhaoId); 
+          final List<Parcela> parcelas = dadosAgregados['parcelas'];
+          final List<Arvore> arvores = dadosAgregados['arvores'];
+
+          if (parcelas.isEmpty || arvores.isEmpty) continue;
+          
+          final arvoresComVolume = _analysisService.aplicarEquacaoDeVolume(
+            arvoresDoInventario: arvores,
+            b0: resultadoRegressao['b0'], b1: resultadoRegressao['b1'], b2: resultadoRegressao['b2'],
+          );
+
+          final analiseTalhao = _analysisService.getTalhaoInsights(parcelas, arvoresComVolume);
+          
+          if (talhao.areaHa != null && talhao.areaHa! > 0) {
+              volumeTotalLote += (analiseTalhao.volumePorHectare * talhao.areaHa!); // Corrigido de .volumePorHectar
+              areaTotalLote += talhao.areaHa!;
+              areaBasalMediaPonderada += (analiseTalhao.areaBasalPorHectare * talhao.areaHa!);
+              arvoresHaMediaPonderada += (analiseTalhao.arvoresPorHectare * talhao.areaHa!).round();
+          }
+      }
       
+      // ETAPA 3: CALCULAR O SORTIMENTO MÉDIO
+      final Map<String, double> volumesAcumuladosSortimento = {};
+      for (final arvoreCubada in arvoresParaRegressao) {
+        if (arvoreCubada.id == null) continue;
+        final secoes = await _cubagemRepository.getSecoesPorArvoreId(arvoreCubada.id!);
+        final volumePorSortimento = _analysisService.classificarSortimentos(secoes);
+        
+        volumePorSortimento.forEach((sortimento, volume) {
+          volumesAcumuladosSortimento.update(sortimento, (value) => value + volume, ifAbsent: () => volume);
+        });
+      }
+      
+      double volumeTotalCubado = volumesAcumuladosSortimento.values.fold(0.0, (a, b) => a + b);
+      final Map<String, double> porcentagensSortimento = {};
+      if(volumeTotalCubado > 0) {
+        volumesAcumuladosSortimento.forEach((sortimento, volume) {
+          porcentagensSortimento[sortimento] = (volume / volumeTotalCubado) * 100;
+        });
+      }
+
+      // ETAPA 4: ATUALIZAR O ESTADO DA UI
       if (mounted) {
         setState(() {
           _resultadoRegressao = resultadoRegressao;
-          // Valores de exemplo para a UI:
           _tabelaProducaoInventario = {
-            'talhoes': _talhoesInventarioSelecionados.length.toString(),
-            'volume_ha': 250.5,
-            'arvores_ha': 850,
-            'area_basal_ha': 32.1,
-            'volume_total_lote': 25050.0,
-            'area_total_lote': 100.0,
+            'talhoes': talhoesInventarioAnalisados.map((t) => t.nome).join(', '),
+            'volume_ha': areaTotalLote > 0 ? volumeTotalLote / areaTotalLote : 0.0,
+            'arvores_ha': areaTotalLote > 0 ? (arvoresHaMediaPonderada / areaTotalLote).round() : 0,
+            'area_basal_ha': areaTotalLote > 0 ? areaBasalMediaPonderada / areaTotalLote : 0.0,
+            'volume_total_lote': volumeTotalLote,
+            'area_total_lote': areaTotalLote,
           };
-          _tabelaProducaoSortimento = {
-            'porcentagens': { '> 35cm': 10.0, '23-35cm': 35.0, '18-23cm': 40.0, '8-18cm': 15.0 }
-          };
+          _tabelaProducaoSortimento = { 'porcentagens': porcentagensSortimento };
           _isAnalyzing = false;
         });
       }
@@ -161,7 +212,8 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       }
     }
   }
-
+  
+  // <<< TODOS OS MÉTODOS DE BUILD AGORA ESTÃO DENTRO DA CLASSE >>>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -196,7 +248,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   }
 
   Widget _buildBody() {
-    // Lógica de filtro para exibição
     final List<Talhao> talhoesCubadosParaExibir = _projetoSelecionado == null
         ? _talhoesComCubagem
         : _talhoesComCubagem.where((t) => t.projetoId == _projetoSelecionado!.id).toList();
@@ -244,8 +295,8 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
             (id, selected) => setState(() => selected ? _talhoesInventarioSelecionados.add(id) : _talhoesInventarioSelecionados.remove(id))) ,
         
         if (_resultadoRegressao != null) _buildResultCard(),
-        // if (_tabelaProducaoSortimento != null) _buildSortmentTable(),
-        // if (_tabelaProducaoInventario != null) _buildProductionTable(),
+        if (_tabelaProducaoInventario != null) _buildProductionTable(),
+        if (_tabelaProducaoSortimento != null) _buildSortmentTable(),
       ],
     );
   }
@@ -289,18 +340,73 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Resultados da Análise', style: Theme.of(context).textTheme.titleLarge),
+            Text('Resultados da Regressão', style: Theme.of(context).textTheme.titleLarge),
             const Divider(),
             Text('Equação Gerada:', style: Theme.of(context).textTheme.titleMedium),
             SelectableText(
               _resultadoRegressao!['equacao'],
-              style: const TextStyle(fontFamily: 'monospace', backgroundColor: Colors.black12),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12, backgroundColor: Colors.black12),
             ),
             const SizedBox(height: 8),
-            Text('Coeficiente (R²): ${(_resultadoRegressao!['R2'] as double).toStringAsFixed(4)}'),
-            Text('Nº de Amostras Usadas: ${_resultadoRegressao!['n_amostras']}'),
+            _buildStatRow('Coeficiente (R²):', (_resultadoRegressao!['R2'] as double).toStringAsFixed(4)),
+            _buildStatRow('Nº de Amostras Usadas:', '${_resultadoRegressao!['n_amostras']}'),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildProductionTable() {
+    if (_tabelaProducaoInventario == null) return const SizedBox.shrink();
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Totais do Inventário', style: Theme.of(context).textTheme.titleLarge),
+            const Divider(),
+            _buildStatRow('Talhões Aplicados:', '${_tabelaProducaoInventario!['talhoes']}'),
+            _buildStatRow('Volume por Hectare:', '${(_tabelaProducaoInventario!['volume_ha'] as double).toStringAsFixed(2)} m³/ha'),
+            _buildStatRow('Árvores por Hectare:', '${_tabelaProducaoInventario!['arvores_ha']}'),
+            _buildStatRow('Área Basal por Hectare:', '${(_tabelaProducaoInventario!['area_basal_ha'] as double).toStringAsFixed(2)} m²/ha'),
+            const Divider(height: 15),
+            _buildStatRow('Volume Total para ${(_tabelaProducaoInventario!['area_total_lote'] as double).toStringAsFixed(2)} ha:', '${(_tabelaProducaoInventario!['volume_total_lote'] as double).toStringAsFixed(2)} m³'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSortmentTable() {
+    if (_tabelaProducaoSortimento == null) return const SizedBox.shrink();
+    final Map<String, double> porcentagens = _tabelaProducaoSortimento!['porcentagens'];
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Produção por Sortimento (Média)', style: Theme.of(context).textTheme.titleLarge),
+            const Divider(),
+            ...porcentagens.entries.map((entry) => _buildStatRow('${entry.key}:', '${entry.value.toStringAsFixed(1)}%')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(child: Text(label, style: const TextStyle(color: Colors.black54))),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        ],
       ),
     );
   }
