@@ -1,4 +1,4 @@
-// lib/pages/amostra/coleta_dados_page.dart (VERSÃO FINAL COMPLETA E CORRIGIDA)
+// lib/pages/amostra/coleta_dados_page.dart (VERSÃO COM NAVEGAÇÃO E LÓGICA DE SALVAMENTO CORRIGIDAS)
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -15,11 +15,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geoforestv1/services/permission_service.dart';
 import 'package:image/image.dart' as img;
 import 'package:gal/gal.dart';
+import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/utils/constants.dart';
 
-// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
-// ------------------------------------
 
 enum FormaParcela { retangular, circular }
 
@@ -37,10 +37,8 @@ class ColetaDadosPage extends StatefulWidget {
 class _ColetaDadosPageState extends State<ColetaDadosPage> {
   final _formKey = GlobalKey<FormState>();
   
-  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS ---
   final _parcelaRepository = ParcelaRepository();
   final _projetoRepository = ProjetoRepository();
-  // ---------------------------------------
   
   late Parcela _parcelaAtual;
 
@@ -67,9 +65,21 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   @override
   void initState() {
     super.initState();
+    _initializeProj4();
     _setupInitialData();
   }
   
+  void _initializeProj4() {
+    try {
+      proj4.Projection.get('EPSG:4326');
+    } catch (_) {
+      proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+      proj4Definitions.forEach((epsg, def) {
+        proj4.Projection.add('EPSG:$epsg', def);
+      });
+    }
+  }
+
   Future<void> _setupInitialData() async {
     setState(() { _salvando = true; });
     if (widget.parcelaParaEditar != null) {
@@ -95,7 +105,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
         nomeFazenda: widget.talhao!.fazendaNome,
         nomeTalhao: widget.talhao!.nome,
         idFazenda: widget.talhao!.fazendaId,
-        projetoId: widget.talhao!.projetoId, // Passa o ID do projeto para a nova parcela
+        projetoId: widget.talhao!.projetoId,
       );
     }
     _preencherControllersComDadosAtuais();
@@ -191,8 +201,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       
       if (_parcelaAtual.latitude != null && _parcelaAtual.longitude != null) {
         final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
-        // Simulação de EPSG, idealmente isso viria de um mapa no database_helper
-        final codigoEpsg = 31982; 
+        final codigoEpsg = zonasUtmSirgas2000[nomeZona] ?? 31982; 
         final projWGS84 = proj4.Projection.get('EPSG:4326')!;
         final projUTM = proj4.Projection.get('EPSG:$codigoEpsg')!;
         var pUtm = projWGS84.transform(projUTM, proj4.Point(x: _parcelaAtual.longitude!, y: _parcelaAtual.latitude!));
@@ -266,6 +275,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
   }
 
+  // <<< FUNÇÃO CORRIGIDA >>>
   Future<void> _salvarEIniciarColeta() async {
     if (!_formKey.currentState!.validate()) return;
     
@@ -288,10 +298,11 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
     try {
       final parcelaAtualizada = parcelaParaSalvar.copyWith(status: StatusParcela.emAndamento);
-      final parcelaSalva = await _parcelaRepository.saveFullColeta(parcelaAtualizada, []);
+      final parcelaSalva = await _parcelaRepository.saveFullColeta(parcelaAtualizada, _parcelaAtual.arvores);
 
       if (mounted) {
         await Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => InventarioPage(parcela: parcelaSalva)));
+        
         Navigator.pop(context, true); 
       }
     } catch (e) {
@@ -353,18 +364,38 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
   }
 
+  // <<< FUNÇÃO CORRIGIDA >>>
   Future<void> _navegarParaInventario() async {
     if (_salvando) return;
     
-    if ((double.tryParse(_larguraController.text.replaceAll(',', '.')) ?? 0) <= 0 && (double.tryParse(_raioController.text.replaceAll(',', '.')) ?? 0) <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Defina e salve a área da parcela antes de continuar.'), backgroundColor: Colors.orange));
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    final area = (_formaDaParcela == FormaParcela.retangular)
+      ? (double.tryParse(_larguraController.text.replaceAll(',', '.')) ?? 0) * (double.tryParse(_comprimentoController.text.replaceAll(',', '.')) ?? 0)
+      : math.pi * math.pow(double.tryParse(_raioController.text.replaceAll(',', '.')) ?? 0, 2);
+    if (area <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A área da parcela deve ser maior que zero.'), backgroundColor: Colors.orange));
       return;
     }
     
-    final foiAtualizado = await Navigator.push(context, MaterialPageRoute(builder: (context) => InventarioPage(parcela: _parcelaAtual)));
+    setState(() => _salvando = true);
+    final parcelaParaNavegar = _construirObjetoParcelaParaSalvar();
+    final parcelaSalva = await _parcelaRepository.saveFullColeta(parcelaParaNavegar, _parcelaAtual.arvores);
+    setState(() {
+      _parcelaAtual = parcelaSalva;
+      _salvando = false;
+    });
     
-    if (foiAtualizado == true && mounted) {
-      _recarregarTela();
+    if (mounted) {
+      final foiAtualizado = await Navigator.push(
+        context, 
+        MaterialPageRoute(builder: (context) => InventarioPage(parcela: _parcelaAtual))
+      );
+      
+      if (foiAtualizado == true && mounted) {
+        _recarregarTela();
+      }
     }
   }
   

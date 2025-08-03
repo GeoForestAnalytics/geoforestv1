@@ -1,4 +1,4 @@
-// lib/pages/amostra/form_parcela_page.dart (VERSÃO REFATORADA COM REPOSITÓRIOS)
+// lib/pages/amostra/form_parcela_page.dart (VERSÃO CORRIGIDA E FUNCIONAL)
 
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
@@ -10,9 +10,6 @@ import 'package:geolocator/geolocator.dart';
 // --- NOVO IMPORT DO REPOSITÓRIO ---
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 // ------------------------------------
-
-// O import do database_helper foi removido.
-// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 enum FormaParcela { retangular, circular }
 
@@ -28,9 +25,8 @@ class FormParcelaPage extends StatefulWidget {
 class _FormParcelaPageState extends State<FormParcelaPage> {
   final _formKey = GlobalKey<FormState>();
   
-  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
+  // --- INSTÂNCIA DO REPOSITÓRIO ---
   final _parcelaRepository = ParcelaRepository();
-  // ---------------------------------------
 
   final _idParcelaController = TextEditingController();
   final _observacaoController = TextEditingController();
@@ -115,7 +111,7 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
     }
   }
 
-  // --- MÉTODO ATUALIZADO ---
+  // <<< FUNÇÃO DE SALVAR COMPLETAMENTE CORRIGIDA >>>
   Future<void> _salvarEIniciarColeta() async {
     if (!_formKey.currentState!.validate()) return;
     
@@ -131,7 +127,7 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
 
     setState(() => _isSaving = true);
 
-    // Usa o ParcelaRepository para verificar a existência
+    // 1. Usa a função correta para verificar se a parcela já existe
     final parcelaExistente = await _parcelaRepository.getParcelaPorIdParcela(widget.talhao.id!, _idParcelaController.text.trim());
     if (parcelaExistente != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Este ID de Parcela já existe neste talhão.'), backgroundColor: Colors.red));
@@ -153,13 +149,14 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
       nomeTalhao: widget.talhao.nome,
       latitude: _latitude,
       longitude: _longitude,
-      projetoId: widget.talhao.projetoId, // Passa o ID do projeto para a nova parcela
+      projetoId: widget.talhao.projetoId,
     );
 
     try {
-      // Usa o ParcelaRepository para salvar
-      final parcelaSalva = await _parcelaRepository.saveParcela(novaParcela);
+      // 2. Usa a função de salvamento completa (que também salva o nome do líder)
+      final parcelaSalva = await _parcelaRepository.saveFullColeta(novaParcela, []);
       if (mounted) {
+        // 3. Substitui a tela atual pela de inventário para um fluxo de navegação limpo
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => InventarioPage(parcela: parcelaSalva)),
@@ -172,7 +169,6 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
     }
   }
 
-  // O método build e seus widgets auxiliares não precisam de nenhuma alteração.
   @override
   Widget build(BuildContext context) {
     return Scaffold(

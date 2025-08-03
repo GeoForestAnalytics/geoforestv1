@@ -1,9 +1,10 @@
-// lib/data/repositories/import_repository.dart (VERSÃO COMPLETA E FINAL - GARANTIDO)
+// lib/data/repositories/import_repository.dart (VERSÃO COM CORREÇÃO DO ERRO 'Codigo2')
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
+import 'package:firebase_auth/firebase_auth.dart';
 
 // Repositórios e Constantes
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -64,6 +65,15 @@ class ImportRepository {
     }
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      String? nomeDoResponsavel = prefs.getString('nome_lider');
+      if (nomeDoResponsavel == null || nomeDoResponsavel.isEmpty) {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          nomeDoResponsavel = user.displayName ?? user.email;
+        }
+      }
+
       await db.transaction((txn) async {
         for (final row in dataRows) {
           linhasProcessadas++;
@@ -101,7 +111,6 @@ class ImportRepository {
           
           final tipoLinha = ['IPC', 'IFC', 'AUD', 'IFS', 'BIO', 'IFQ'].any((e) => tipoAtividadeStr.contains(e)) ? TipoImportacao.inventario : (tipoAtividadeStr.contains('CUB') ? TipoImportacao.cubagem : TipoImportacao.desconhecido);
 
-          // <<< LÓGICA DE INVENTÁRIO RESTAURADA E COMPLETA >>>
           if (tipoLinha == TipoImportacao.inventario) {
               final idParcelaColeta = getValue(row, ['id_coleta_parcela', 'id_parcela']);
               if (idParcelaColeta == null) continue;
@@ -123,7 +132,6 @@ class ImportRepository {
                           final easting = double.tryParse(eastingStr.replaceAll(',', '.'));
                           final northing = double.tryParse(northingStr.replaceAll(',', '.'));
                           if (easting != null && northing != null) {
-                              final prefs = await SharedPreferences.getInstance();
                               final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
                               final codigoEpsg = zonasUtmSirgas2000[nomeZona] ?? 31982;
                               final projUTM = proj4.Projection.get('EPSG:$codigoEpsg') ?? proj4.Projection.parse(proj4Definitions[codigoEpsg]!);
@@ -152,7 +160,7 @@ class ImportRepository {
                       comprimento: double.tryParse(getValue(row, ['comprimento_m'])?.replaceAll(',', '.') ?? ''),
                       raio: double.tryParse(getValue(row, ['raio_m'])?.replaceAll(',', '.') ?? ''),
                       observacao: getValue(row, ['observacao_parcela']),
-                      nomeLider: getValue(row, ['lider_equipe'])
+                      nomeLider: getValue(row, ['lider_equipe']) ?? nomeDoResponsavel
                   );
                   parcelaDbId = await txn.insert('parcelas', novaParcela.toMap());
                   parcelasCriadas++;
@@ -165,6 +173,18 @@ class ImportRepository {
               if (codigoStr != null) {
                   final dominante = getValue(row, ['dominante'])?.toLowerCase() == 'sim' || getValue(row, ['dominante'])?.toLowerCase() == 'true';
                   final codigo2Str = getValue(row, ['codigo_arvore_2']);
+                  
+                  // <<< INÍCIO DA CORREÇÃO >>>
+                  Codigo2? finalCodigo2;
+                  if (codigo2Str != null) {
+                      // Usamos .where() para evitar erro se o código não for encontrado
+                      final matchingCodes = Codigo2.values.where((e) => e.name.toLowerCase() == codigo2Str.toLowerCase());
+                      if (matchingCodes.isNotEmpty) {
+                          finalCodigo2 = matchingCodes.first;
+                      }
+                  }
+                  // <<< FIM DA CORREÇÃO >>>
+
                   final novaArvore = Arvore(
                     cap: double.tryParse(getValue(row, ['cap_cm'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0, 
                     altura: double.tryParse(getValue(row, ['altura_m'])?.replaceAll(',', '.') ?? ''), 
@@ -172,7 +192,7 @@ class ImportRepository {
                     posicaoNaLinha: int.tryParse(getValue(row, ['posicao_na_linha']) ?? '0') ?? 0, 
                     dominante: dominante, 
                     codigo: Codigo.values.firstWhere((e) => e.name.toLowerCase() == codigoStr.toLowerCase(), orElse: () => Codigo.normal),
-                    codigo2: codigo2Str != null ? Codigo2.values.firstWhere((e) => e.name.toLowerCase() == codigo2Str.toLowerCase()) : null,
+                    codigo2: finalCodigo2, // Usando a variável corrigida
                     fimDeLinha: false
                   );
                   final arvoreMap = novaArvore.toMap();
@@ -181,7 +201,6 @@ class ImportRepository {
                   arvoresCriadas++;
               }
           } 
-          // <<< LÓGICA DE CUBAGEM COM CORREÇÃO DE TIPO DE DADO >>>
           else if (tipoLinha == TipoImportacao.cubagem) {
               final idArvore = getValue(row, ['identificador_arvore', 'id_db_arvore']);
               if (idArvore == null) continue;
@@ -199,7 +218,8 @@ class ImportRepository {
                   alturaBase: double.tryParse(getValue(row, ['altura_base_m'])?.replaceAll(',', '.') ?? '0') ?? 0, 
                   tipoMedidaCAP: getValue(row, ['tipo_medida_cap']) ?? 'fita', 
                   classe: getValue(row, ['classe']),
-                  isSynced: false
+                  isSynced: false,
+                  nomeLider: getValue(row, ['lider_equipe']) ?? nomeDoResponsavel
               );
 
               if (arvoreCubagem == null) {

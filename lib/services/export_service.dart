@@ -1,16 +1,14 @@
-// lib/services/export_service.dart (VERSÃO CORRIGIDA PARA ISOLATES)
+// lib/services/export_service.dart (VERSÃO DEFINITIVA - COMPLETA E CORRIGIDA)
 
-import 'dart:convert';
 import 'dart:io';
+import 'dart:convert';
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-// ... (outros imports)
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
-// ... (seus imports de modelos e repositórios)
+import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
@@ -29,12 +27,11 @@ import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/utils/constants.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
-
+import 'package:geoforestv1/widgets/manager_export_dialog.dart';
+import 'package:geoforestv1/models/cubagem_secao_model.dart';
 
 // --- PAYLOADS E FUNÇÕES PARA EXECUÇÃO EM BACKGROUND (COMPUTE) ---
-
 class _CsvParcelaPayload {
-  // ... (conteúdo da classe permanece o mesmo)
   final List<Map<String, dynamic>> parcelasMap;
   final String nomeLider;
   final String nomesAjudantes;
@@ -43,14 +40,18 @@ class _CsvParcelaPayload {
 }
 
 class _CsvCubagemPayload {
-  // ... (conteúdo da classe permanece o mesmo)
   final List<Map<String, dynamic>> cubagensMap;
-  _CsvCubagemPayload({required this.cubagensMap});
+  final String nomeLider;
+  final String nomesAjudantes;
+
+  _CsvCubagemPayload({
+    required this.cubagensMap,
+    required this.nomeLider,
+    required this.nomesAjudantes,
+  });
 }
 
-// <<< 1. NOVA FUNÇÃO DE INICIALIZAÇÃO PARA OS ISOLATES >>>
 void _initServicesForIsolate() {
-  // Garante que o FFI seja inicializado em plataformas desktop
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -58,16 +59,24 @@ void _initServicesForIsolate() {
 }
 
 Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) async {
-  // <<< 2. CHAMA A INICIALIZAÇÃO NO INÍCIO DA FUNÇÃO DO ISOLATE >>>
   _initServicesForIsolate();
-  
   final parcelaRepository = ParcelaRepository();
   final codigoEpsg = zonasUtmSirgas2000[payload.nomeZona] ?? 31982;
-  // ... (o resto da função permanece o mesmo)
-  final projWGS84 = proj4.Projection.parse('+proj=longlat +datum=WGS84 +no_defs');
-  final projUTM = proj4.Projection.parse(proj4Definitions[codigoEpsg]!);
+  
+  try {
+      proj4.Projection.get('EPSG:4326');
+  } catch(_) {
+      proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+      proj4Definitions.forEach((epsg, def) {
+        proj4.Projection.add('EPSG:$epsg', def);
+      });
+  }
+  final projWGS84 = proj4.Projection.get('EPSG:4326')!;
+  final projUTM = proj4.Projection.get('EPSG:$codigoEpsg')!;
+
   List<List<dynamic>> rows = [];
   rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'Talhao', 'ID_Coleta_Parcela', 'Area_m2', 'Largura_m', 'Comprimento_m', 'Raio_m', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Dominante']);
+  
   for (var pMap in payload.parcelasMap) {
     final p = Parcela.fromMap(pMap);
     String easting = '', northing = '';
@@ -76,15 +85,21 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
       easting = pUtm.x.toStringAsFixed(2);
       northing = pUtm.y.toStringAsFixed(2);
     }
-    final arvores = await parcelaRepository.getArvoresDaParcela(p.dbId!);
+    
+    List<Arvore> arvores = [];
+    if (p.dbId != null) {
+        arvores = await parcelaRepository.getArvoresDaParcela(p.dbId!);
+    }
+
+    final liderDaColeta = p.nomeLider ?? payload.nomeLider;
     if (arvores.isEmpty) {
-      rows.add(['IPC', payload.nomeLider, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null]);
+      rows.add(['IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null]);
     } else {
       Map<String, int> fusteCounter = {};
       for (final a in arvores) {
         String key = '${a.linha}-${a.posicaoNaLinha}';
         fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
-        rows.add(['IPC', payload.nomeLider, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.dominante ? 'Sim' : 'Não']);
+        rows.add(['IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.dominante ? 'Sim' : 'Não']);
       }
     }
   }
@@ -92,21 +107,24 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 }
 
 Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) async {
-  // <<< 3. CHAMA A INICIALIZAÇÃO AQUI TAMBÉM >>>
   _initServicesForIsolate();
-
   final cubagemRepository = CubagemRepository();
   List<List<dynamic>> rows = [];
-  // ... (o resto da função permanece o mesmo)
-  rows.add(['Atividade', 'id_db_arvore', 'id_fazenda', 'fazenda', 'talhao', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm']);
+  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'id_db_arvore', 'id_fazenda', 'fazenda', 'talhao', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm']);
   for (var cMap in payload.cubagensMap) {
     final arvore = CubagemArvore.fromMap(cMap);
-    final secoes = await cubagemRepository.getSecoesPorArvoreId(arvore.id!);
+    
+    List<CubagemSecao> secoes = [];
+    if (arvore.id != null) {
+      secoes = await cubagemRepository.getSecoesPorArvoreId(arvore.id!);
+    }
+    
+    final liderDaColeta = arvore.nomeLider ?? payload.nomeLider;
     if (secoes.isEmpty) {
-      rows.add(['CUB', arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao, arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, arvore.valorCAP, arvore.alturaBase, null, null, null, null, null]);
+      rows.add(['CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao, arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, arvore.valorCAP, arvore.alturaBase, null, null, null, null, null]);
     } else {
       for (var secao in secoes) {
-        rows.add(['CUB', arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao, arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, arvore.valorCAP, arvore.alturaBase, secao.alturaMedicao, secao.circunferencia, secao.casca1_mm, secao.casca2_mm, secao.diametroSemCasca.toStringAsFixed(2)]);
+        rows.add(['CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao, arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, arvore.valorCAP, arvore.alturaBase, secao.alturaMedicao, secao.circunferencia, secao.casca1_mm, secao.casca2_mm, secao.diametroSemCasca.toStringAsFixed(2)]);
       }
     }
   }
@@ -114,7 +132,6 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
 }
 
 class ExportService {
-  // ... (O resto da sua classe ExportService permanece exatamente o mesmo)
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
   final _projetoRepository = ProjetoRepository();
@@ -122,93 +139,147 @@ class ExportService {
   Future<void> exportarDados(BuildContext context) async {
     try {
       if (!await _requestPermission(context)) return;
-
       final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
-      final teamProvider = Provider.of<TeamProvider>(context, listen: false);
-      final user = FirebaseAuth.instance.currentUser;
-      
-      String? nomeDoColetor;
-
-      if (licenseProvider.licenseData?.cargo == 'gerente') {
-        nomeDoColetor = user?.displayName ?? user?.email;
-        debugPrint("Exportação em modo GERENTE. Coletor: $nomeDoColetor");
+      final cargo = licenseProvider.licenseData?.cargo;
+      if (cargo == 'gerente') {
+        await _showManagerExportDialog(context, isBackup: false);
       } else {
-        nomeDoColetor = teamProvider.lider;
-        debugPrint("Exportação em modo EQUIPE. Líder: $nomeDoColetor");
-      }
-      
-      if (nomeDoColetor == null || nomeDoColetor.isEmpty) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Identidade do coletor não encontrada. Verifique os dados da equipe ou da sua conta.'),
-            backgroundColor: Colors.red,
-          ));
-        }
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Buscando coletas de "$nomeDoColetor" para exportação...'),
-      ));
-
-      final List<Parcela> parcelas = await _parcelaRepository.getUnexportedConcludedParcelasByLider(nomeDoColetor);
-
-      if (parcelas.isEmpty) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).removeCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Nenhuma parcela nova concluída por você/sua equipe para exportar.'),
-            backgroundColor: Colors.orange,
-          ));
-        }
-        return;
-      }
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Gerando arquivo CSV em segundo plano...'),
-        ));
-      }
-      
-      final nomeArquivoColetor = nomeDoColetor.replaceAll(RegExp(r'[^\w]'), '_');
-      final String fName = 'geoforest_export_${nomeArquivoColetor}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.csv';
-      final path = await _gerarCsvParcela(parcelas, fName);
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        await Share.shareXFiles([XFile(path)], subject: 'Exportação GeoForest - Coleta de $nomeDoColetor');
-        await _parcelaRepository.marcarParcelasComoExportadas(parcelas.map((p) => p.dbId!).toList());
+        await _exportarDadosDaEquipe(context);
       }
     } catch (e, s) {
-      _handleExportError(context, 'exportar dados da equipe', e, s);
+      _handleExportError(context, 'iniciar exportação', e, s);
     }
   }
-
-
+  
   Future<void> exportarTodasAsParcelasBackup(BuildContext context) async {
     try {
       if (!await _requestPermission(context)) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando dados para o backup completo...')));
-      final List<Parcela> parcelas = await _parcelaRepository.getTodasAsParcelasConcluidasParaBackup();
-      if (parcelas.isEmpty) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).removeCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma parcela concluída encontrada para o backup.'), backgroundColor: Colors.orange));
-        }
-        return;
-      }
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando backup em segundo plano...')));
-      final String fName = 'geoforest_BACKUP_PARCELAS_${DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now())}.csv';
-      final path = await _gerarCsvParcela(parcelas, fName);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        await Share.shareXFiles([XFile(path)], subject: 'Backup Completo GeoForest - Parcelas');
+      final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
+      final cargo = licenseProvider.licenseData?.cargo;
+      if (cargo == 'gerente') {
+        await _showManagerExportDialog(context, isBackup: true);
+      } else {
+        await _exportarBackupDaEquipe(context);
       }
     } catch (e, s) {
-      _handleExportError(context, 'backup de parcelas', e, s);
+      _handleExportError(context, 'iniciar backup', e, s);
     }
   }
 
+  Future<void> _exportarDadosDaEquipe(BuildContext context) async {
+    final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+    final nomeDoColetor = teamProvider.lider;
+    if (nomeDoColetor == null || nomeDoColetor.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nome do líder não encontrado.')));
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Buscando coletas de "$nomeDoColetor"...')));
+    final List<Parcela> parcelas = await _parcelaRepository.getUnexportedConcludedParcelasByLider(nomeDoColetor);
+    
+    if (parcelas.isEmpty && context.mounted) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma parcela nova para exportar.'), backgroundColor: Colors.orange));
+      return;
+    }
+
+    final nomeArquivoColetor = nomeDoColetor.replaceAll(RegExp(r'[^\w]'), '_');
+    final String fName = 'geoforest_export_${nomeArquivoColetor}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.csv';
+    final path = await _gerarCsvParcela(parcelas, fName);
+    
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      await Share.shareXFiles([XFile(path)], subject: 'Exportação GeoForest - Coleta de $nomeDoColetor');
+      await _parcelaRepository.marcarParcelasComoExportadas(parcelas.map((p) => p.dbId!).toList());
+    }
+  }
+
+  Future<void> _exportarBackupDaEquipe(BuildContext context) async {
+    final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+    final nomeDoColetor = teamProvider.lider;
+    if (nomeDoColetor == null || nomeDoColetor.isEmpty) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando dados para o backup...')));
+    
+    final List<Parcela> parcelas = await _parcelaRepository.getConcludedParcelasByLiderParaBackup(nomeDoColetor);
+    
+    if (parcelas.isEmpty && context.mounted) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma parcela encontrada para seu backup.'), backgroundColor: Colors.orange));
+      return;
+    }
+    
+    final String fName = 'geoforest_MEU_BACKUP_${DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now())}.csv';
+    final path = await _gerarCsvParcela(parcelas, fName);
+    
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      await Share.shareXFiles([XFile(path)], subject: 'Meu Backup GeoForest - $nomeDoColetor');
+    }
+  }
+
+  Future<void> _showManagerExportDialog(BuildContext context, {required bool isBackup}) async {
+    final todosProjetos = await _projetoRepository.getTodosOsProjetosParaGerente();
+    final todosLideres = await _parcelaRepository.getDistinctLideres();
+    
+    if (context.mounted) {
+      final result = await showDialog<ExportFilters>(
+        context: context,
+        builder: (dialogContext) => ManagerExportDialog(
+          isBackup: isBackup,
+          projetosDisponiveis: todosProjetos,
+          lideresDisponiveis: todosLideres,
+        ),
+      );
+
+      if (result != null && context.mounted) {
+        _executarExportacaoGerente(context, result);
+      }
+    }
+  }
+
+  Future<void> _executarExportacaoGerente(BuildContext context, ExportFilters filters) async {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando dados com base nos filtros...')));
+    
+    debugPrint("--- [DEBUG EXPORT GERENTE] ---");
+    debugPrint("Modo Backup: ${filters.isBackup}");
+    debugPrint("Projetos Selecionados (IDs): ${filters.selectedProjetoIds.isEmpty ? 'TODOS' : filters.selectedProjetoIds}");
+    debugPrint("Líderes Selecionados: ${filters.selectedLideres.isEmpty ? 'TODOS' : filters.selectedLideres}");
+    debugPrint("---------------------------------");
+
+    List<Parcela> parcelasParaExportar;
+    if (filters.isBackup) {
+      parcelasParaExportar = await _parcelaRepository.getTodasConcluidasParcelasFiltrado(
+        projetoIds: filters.selectedProjetoIds.isNotEmpty ? filters.selectedProjetoIds : null,
+        lideresNomes: filters.selectedLideres.isNotEmpty ? filters.selectedLideres : null,
+      );
+    } else {
+      parcelasParaExportar = await _parcelaRepository.getUnexportedConcludedParcelasFiltrado(
+        projetoIds: filters.selectedProjetoIds.isNotEmpty ? filters.selectedProjetoIds : null,
+        lideresNomes: filters.selectedLideres.isNotEmpty ? filters.selectedLideres : null,
+      );
+    }
+    
+    debugPrint("[DEBUG EXPORT GERENTE] Parcelas encontradas no banco: ${parcelasParaExportar.length}");
+
+    if (parcelasParaExportar.isEmpty && context.mounted) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma parcela encontrada para os filtros selecionados.')));
+      return;
+    }
+
+    final tipo = filters.isBackup ? "BACKUP_GERENTE" : "EXPORT_GERENTE";
+    final String fName = 'geoforest_${tipo}_${DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now())}.csv';
+    final path = await _gerarCsvParcela(parcelasParaExportar, fName);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      await Share.shareXFiles([XFile(path)], subject: 'Exportação do Gerente - GeoForest');
+      if (!filters.isBackup) {
+        await _parcelaRepository.marcarParcelasComoExportadas(parcelasParaExportar.map((p) => p.dbId!).toList());
+      }
+    }
+  }
+  
   Future<void> exportarNovasCubagens(BuildContext context) async {
     try {
       if (!await _requestPermission(context)) return;
@@ -272,7 +343,7 @@ class ExportService {
       });
       final dir = await getApplicationDocumentsDirectory();
       final hoje = DateTime.now();
-      final fName = 'analise_talhao_${talhao.nome}_${DateFormat('yyyy-MM-dd_HH-mm').format(hoje)}.csv';
+      final fName = 'analise_talhao_${talhao.nome.replaceAll(' ', '_')}_${DateFormat('yyyy-MM-dd_HH-mm').format(hoje)}.csv';
       final path = '${dir.path}/$fName';
       final csvData = const ListToCsvConverter().convert(rows);
       await File(path).writeAsString(csvData, encoding: utf8);
@@ -340,7 +411,7 @@ class ExportService {
       _handleExportError(context, 'exportar plano de amostragem', e, s);
     }
   }
-
+  
   Future<void> exportarTudoComoZip({
     required BuildContext context,
     required List<Talhao> talhoes,
@@ -360,8 +431,8 @@ class ExportService {
       }
       await pastaDeExportacao.create(recursive: true);
 
-      await _gerarCsvParcelasParaZip(talhoes, '${pastaDeExportacao.path}/parcelas_coletadas.csv');
-      await _gerarCsvCubagensParaZip(talhoes, '${pastaDeExportacao.path}/cubagens_realizadas.csv');
+      await _gerarCsvParcelasParaZip(context, talhoes, '${pastaDeExportacao.path}/parcelas_coletadas.csv');
+      await _gerarCsvCubagensParaZip(context, talhoes, '${pastaDeExportacao.path}/cubagens_realizadas.csv');
 
       final zipFilePath = '${directory.path}/$nomePasta.zip';
       final zipFile = File(zipFilePath);
@@ -376,8 +447,6 @@ class ExportService {
       _handleExportError(context, 'criar pacote de exportação', e, s);
     }
   }
-
-  // --- MÉTODOS PRIVADOS AUXILIARES ---
 
   Future<String> _gerarCsvParcela(List<Parcela> parcelas, String nomeArquivo) async {
     final prefs = await SharedPreferences.getInstance();
@@ -401,7 +470,13 @@ class ExportService {
     }
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando CSV de cubagens em segundo plano...')));
 
-    final payload = _CsvCubagemPayload(cubagensMap: cubagens.map((c) => c.toMap()).toList());
+    final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+
+    final payload = _CsvCubagemPayload(
+      cubagensMap: cubagens.map((c) => c.toMap()).toList(),
+      nomeLider: teamProvider.lider ?? 'N/A',
+      nomesAjudantes: teamProvider.ajudantes ?? 'N/A',
+    );
     final String csvData = await compute(_generateCsvCubagemDataInIsolate, payload);
 
     final dir = await getApplicationDocumentsDirectory();
@@ -417,7 +492,7 @@ class ExportService {
     }
   }
 
-  Future<void> _gerarCsvParcelasParaZip(List<Talhao> talhoes, String filePath) async {
+  Future<void> _gerarCsvParcelasParaZip(BuildContext context, List<Talhao> talhoes, String filePath) async {
     final List<Parcela> todasAsParcelas = [];
     for (final talhao in talhoes) {
       final parcelasDoTalhao = await _parcelaRepository.getParcelasDoTalhao(talhao.id!);
@@ -428,16 +503,14 @@ class ExportService {
     }
   }
 
-  Future<void> _gerarCsvCubagensParaZip(List<Talhao> talhoes, String outputPath) async {
+  Future<void> _gerarCsvCubagensParaZip(BuildContext context, List<Talhao> talhoes, String outputPath) async {
     final List<CubagemArvore> todasAsCubagens = [];
     for (final talhao in talhoes) {
       final cubagensDoTalhao = await _cubagemRepository.getTodasCubagensDoTalhao(talhao.id!);
       todasAsCubagens.addAll(cubagensDoTalhao.where((c) => c.alturaTotal > 0));
     }
     if (todasAsCubagens.isNotEmpty) {
-      final payload = _CsvCubagemPayload(cubagensMap: todasAsCubagens.map((c) => c.toMap()).toList());
-      final csvData = await compute(_generateCsvCubagemDataInIsolate, payload);
-      await File(outputPath).writeAsString(csvData);
+      await _gerarCsvCubagem(context, todasAsCubagens, outputPath, false);
     }
   }
 

@@ -1,4 +1,4 @@
-// lib/main.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/main.dart (VERSÃO COM A CORREÇÃO CRÍTICA DE INICIALIZAÇÃO)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+// <<< 1. IMPORT NECESSÁRIO >>>
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'; 
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 
@@ -30,8 +31,8 @@ import 'package:geoforestv1/pages/gerente/gerente_map_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // <<< MUDANÇA CRÍTICA APLICADA AQUI >>>
-  // Inicializa o FFI para plataformas desktop antes de qualquer outra coisa.
+  // <<< 2. MUDANÇA CRÍTICA APLICADA AQUI >>>
+  // Inicializa o FFI para plataformas desktop ANTES de qualquer outra coisa.
   // Isso garante que a 'databaseFactory' esteja disponível globalmente para a
   // thread principal e para qualquer isolate (background thread) que for criado.
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -73,7 +74,7 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
       await SystemChrome.setPreferredOrientations(
         [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown],
       );
-      // A inicialização do FFI foi movida para o main(), então não é mais necessária aqui.
+      // <<< 3. A inicialização do FFI foi MOVIDA para o main(), então não é mais necessária aqui.
     } catch (e) {
       print("!!!!!! ERRO NA INICIALIZAÇÃO DOS SERVIÇOS: $e !!!!!");
       rethrow;
@@ -112,7 +113,7 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
   }
 }
 
-// MyApp
+// MyApp (Nenhuma mudança aqui, permanece igual)
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -190,7 +191,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// WIDGET AUTHCHECK (VERSÃO CORRIGIDA PARA SUBSTITUIR A ANTIGA)
+// AuthCheck (Nenhuma mudança aqui, permanece igual)
 class AuthCheck extends StatelessWidget {
   const AuthCheck({super.key});
 
@@ -199,20 +200,14 @@ class AuthCheck extends StatelessWidget {
     final loginController = context.watch<LoginController>();
     final licenseProvider = context.watch<LicenseProvider>();
 
-    // 1. Estado de Carregamento Inicial do Firebase Auth
     if (!loginController.isInitialized) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // 2. Usuário confirmado como Deslogado
     if (!loginController.isLoggedIn) {
       return const LoginPage();
     }
-
-    // A partir daqui, sabemos que o usuário ESTÁ LOGADO.
-    // Agora, vamos verificar o status da licença de forma segura.
-
-    // 3. Estado de Erro na Licença (ex: sem internet na hora da busca)
+    
     if (licenseProvider.error != null && !licenseProvider.isLoading) {
       return ErrorScreen(
         message: "Não foi possível verificar sua licença:\n${licenseProvider.error}",
@@ -220,20 +215,16 @@ class AuthCheck extends StatelessWidget {
       );
     }
 
-    // 4. Estado de Carregamento da Licença (CHAVE DA CORREÇÃO)
-    //    Força a tela de loading até que os dados da licença (licenseData)
-    //    estejam realmente prontos e não sejam nulos.
     if (licenseProvider.isLoading || licenseProvider.licenseData == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // 5. Estado Pronto: Todos os dados estão carregados e consistentes.
-    final license = licenseProvider.licenseData!; // Agora é seguro usar '!'
+    final license = licenseProvider.licenseData!;
     final bool isLicenseOk = (license.status == 'ativa' || license.status == 'trial');
 
     if (isLicenseOk) {
       if (license.cargo == 'gerente') {
-        return const GerenteMainPage(); // << Rota correta para o gerente
+        return const GerenteMainPage();
       } else {
         return const EquipePage();
       }
@@ -243,7 +234,7 @@ class AuthCheck extends StatelessWidget {
   }
 }
 
-// ErrorScreen
+// ErrorScreen (Nenhuma mudança aqui, permanece igual)
 class ErrorScreen extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;

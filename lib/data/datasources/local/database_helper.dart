@@ -1,11 +1,14 @@
-// lib/data/datasources/local/database_helper.dart (VERSÃO CORRIGIDA)
+// lib/data/datasources/local/database_helper.dart (VERSÃO REALMENTE COMPLETA E CORRIGIDA)
 
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
+// <<< DEFINIÇÕES COMPLETAS RESTAURADAS >>>
 final Map<int, String> proj4Definitions = {
   31978: '+proj=utm +zone=18 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
   31979: '+proj=utm +zone=19 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
@@ -18,6 +21,11 @@ final Map<int, String> proj4Definitions = {
 };
 
 void _initializeProj4InIsolate(Map<int, String> definitions) {
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+  
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   definitions.forEach((epsg, def) {
     proj4.Projection.add('EPSG:$epsg', def);
@@ -36,9 +44,10 @@ class DatabaseHelper {
 
   Future<Database> _initDatabase() async {
     await compute(_initializeProj4InIsolate, proj4Definitions);
+    
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 30,
+      version: 31, 
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -47,10 +56,7 @@ class DatabaseHelper {
 
   Future<void> _onConfigure(Database db) async => await db.execute('PRAGMA foreign_keys = ON');
 
-  // --- FUNÇÃO _onCreate CORRIGIDA ---
   Future<void> _onCreate(Database db, int version) async {
-    // A declaração da função aparece apenas uma vez.
-    // Todos os comandos `CREATE TABLE` estão em sequência direta.
      await db.execute('''
       CREATE TABLE projetos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,6 +163,7 @@ class DatabaseHelper {
         classe TEXT,
         exportada INTEGER DEFAULT 0 NOT NULL,
         isSynced INTEGER DEFAULT 0 NOT NULL,
+        nomeLider TEXT,
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
     ''');
@@ -210,6 +217,9 @@ class DatabaseHelper {
           break;
         case 30:
           await db.execute("ALTER TABLE projetos ADD COLUMN delegado_por_license_id TEXT");
+          break;
+        case 31:
+          await db.execute("ALTER TABLE cubagens_arvores ADD COLUMN nomeLider TEXT");
           break;
       }
     }

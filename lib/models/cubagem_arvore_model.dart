@@ -10,6 +10,7 @@ class CubagemArvore {
   String? classe;
   bool exportada;
   bool isSynced; // <<< CAMPO ADICIONADO
+  String? nomeLider;
 
   double alturaTotal;
   String tipoMedidaCAP;
@@ -26,6 +27,7 @@ class CubagemArvore {
     this.classe,
     this.exportada = false,
     this.isSynced = false, // <<< CAMPO ADICIONADO AO CONSTRUTOR
+    this.nomeLider, // <<< ADICIONAR AO CONSTRUTOR
     this.alturaTotal = 0,
     this.tipoMedidaCAP = 'fita',
     this.valorCAP = 0,
@@ -43,6 +45,7 @@ class CubagemArvore {
     String? classe,
     bool? exportada,
     bool? isSynced,
+    String? nomeLider, // <<< ADICIONAR AO COPYWITH
     double? alturaTotal,
     String? tipoMedidaCAP,
     double? valorCAP,
@@ -58,6 +61,7 @@ class CubagemArvore {
       classe: classe ?? this.classe,
       exportada: exportada ?? this.exportada,
       isSynced: isSynced ?? this.isSynced,
+      nomeLider: nomeLider ?? this.nomeLider, // <<< ADICIONAR AO COPYWITH
       alturaTotal: alturaTotal ?? this.alturaTotal,
       tipoMedidaCAP: tipoMedidaCAP ?? this.tipoMedidaCAP,
       valorCAP: valorCAP ?? this.valorCAP,
@@ -80,6 +84,7 @@ class CubagemArvore {
       'alturaBase': alturaBase,
       'exportada': exportada ? 1 : 0,
       'isSynced': isSynced ? 1 : 0, // <<< CAMPO ADICIONADO AO MAPA
+      'nomeLider': nomeLider, // <<< ADICIONAR AO MAPA
     };
   }
 
@@ -94,6 +99,7 @@ class CubagemArvore {
       classe: map['classe'],
       exportada: map['exportada'] == 1,
       isSynced: map['isSynced'] == 1, // <<< CAMPO ADICIONADO AO FACTORY
+      nomeLider: map['nomeLider'], // <<< LER DO MAPA
       alturaTotal: map['alturaTotal']?.toDouble() ?? 0,
       tipoMedidaCAP: map['tipoMedidaCAP'] ?? 'fita',
       valorCAP: map['valorCAP']?.toDouble() ?? 0,
