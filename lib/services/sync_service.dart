@@ -1,5 +1,3 @@
-// lib/services/sync_service.dart (VERSÃO COMPLETA E CORRIGIDA)
-
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -8,15 +6,14 @@ import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
+import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/services/licensing_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
-import 'package:geoforestv1/data/repositories/projeto_repository.dart';
-import 'package:geoforestv1/models/projeto_model.dart';
-import 'package:geoforestv1/providers/license_provider.dart';
+import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 
 class SyncService {
   final firestore.FirebaseFirestore _firestore = firestore.FirebaseFirestore.instance;
@@ -26,38 +23,45 @@ class SyncService {
   
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
-  final _projetoRepository = ProjetoRepository();
+  final _talhaoRepository = TalhaoRepository();
 
   Future<void> sincronizarDados() async {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception("Usuário não está logado.");
+  final user = _auth.currentUser;
+  if (user == null) throw Exception("Usuário não está logado.");
 
-    final licenseDoc = await _licensingService.findLicenseDocumentForUser(user);
-    if (licenseDoc == null) {
-      throw Exception("Não foi possível encontrar uma licença válida para sincronizar os dados.");
-    }
-    final licenseId = licenseDoc.id;
-    final licenseData = licenseDoc.data()!;
-    
-    final usuariosPermitidos = licenseData['usuariosPermitidos'] as Map<String, dynamic>? ?? {};
-    final dadosDoUsuario = usuariosPermitidos[user.uid] as Map<String, dynamic>?;
-    final cargo = dadosDoUsuario?['cargo'] as String? ?? 'equipe';
-
-    if (cargo == 'gerente') {
-      debugPrint("Sincronização em modo GERENTE: Upload e Download completos.");
-      await _uploadHierarquiaCompleta(licenseId);
-      await _uploadColetasNaoSincronizadas(licenseId);
-      await _downloadHierarquiaCompleta(licenseId);
-      await _downloadProjetosDelegados(licenseId);
-      await _downloadColetas(licenseId);
-    } else {
-      debugPrint("Sincronização em modo EQUIPE: Upload de coletas e Download geral.");
-      await _uploadColetasNaoSincronizadas(licenseId);
-      await _downloadHierarquiaCompleta(licenseId);
-      await _downloadProjetosDelegados(licenseId);
-      await _downloadColetas(licenseId);
-    }
+  final licenseDoc = await _licensingService.findLicenseDocumentForUser(user);
+  if (licenseDoc == null) {
+    throw Exception("Não foi possível encontrar uma licença válida para sincronizar os dados.");
   }
+  final licenseId = licenseDoc.id;
+  final licenseData = licenseDoc.data()!;
+  
+  final usuariosPermitidos = licenseData['usuariosPermitidos'] as Map<String, dynamic>? ?? {};
+  final dadosDoUsuario = usuariosPermitidos[user.uid] as Map<String, dynamic>?;
+  final cargo = dadosDoUsuario?['cargo'] as String? ?? 'equipe';
+
+  if (cargo == 'gerente') {
+    debugPrint("Sincronização em modo GERENTE: Upload primeiro, depois Download.");
+    // O gerente primeiro envia suas mudanças estruturais para a nuvem.
+    await _uploadHierarquiaCompleta(licenseId);
+    // Em seguida, envia os dados de coleta que ele mesmo possa ter feito.
+    await _uploadColetasNaoSincronizadas(licenseId);
+    // Finalmente, baixa tudo para garantir que está 100% atualizado com outros gerentes (se houver).
+    await _downloadHierarquiaCompleta(licenseId);
+    await _downloadProjetosDelegados(licenseId);
+    await _downloadColetas(licenseId);
+  } else { // SE FOR EQUIPE
+    debugPrint("Sincronização em modo EQUIPE: Download primeiro, depois Upload.");
+    // A equipe primeiro baixa a "fonte da verdade" da nuvem para receber quaisquer correções do gerente.
+    await _downloadHierarquiaCompleta(licenseId);
+    await _downloadProjetosDelegados(licenseId);
+    await _downloadColetas(licenseId);
+    // SÓ DEPOIS de estar atualizada, a equipe envia suas novas coletas e a hierarquia
+    // que possa ter sido criada localmente. A função _uploadColetasNaoSincronizadas
+    // já foi corrigida para enviar a hierarquia pai junto com a parcela.
+    await _uploadColetasNaoSincronizadas(licenseId);
+  }
+}
 
   Future<void> _uploadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
@@ -109,177 +113,95 @@ class SyncService {
     debugPrint("Hierarquia de projetos próprios enviada para a nuvem.");
   }
 
-  // <<< MÉTODO DE EXCLUSÃO COMPLETO E CORRIGIDO >>>
-  Future<void> deletarProjetoCompletoDoFirebase(String licenseId, int projetoId) async {
-    debugPrint("INICIANDO EXCLUSÃO REMOTA COMPLETA para o projeto $projetoId...");
-    final clienteRef = _firestore.collection('clientes').doc(licenseId);
-    
-    // NOTA: O Firestore limita as operações em lote (batch) a 500.
-    // Para projetos muito grandes, esta exclusão no cliente pode falhar.
-    // A solução mais robusta para exclusões em cascata é usar uma Cloud Function.
-    firestore.WriteBatch batch = _firestore.batch();
-    int operationCount = 0;
-
-    Future<void> commitBatchIfNeeded() async {
-        if (operationCount >= 490) { // Deixa uma margem de segurança
-            await batch.commit();
-            batch = _firestore.batch();
-            operationCount = 0;
-            debugPrint(" > Lote de exclusão executado. Iniciando novo lote.");
-        }
-    }
-
-    // 1. Encontrar todos os IDs de atividades, fazendas e talhões do projeto
-    final atividadesSnap = await clienteRef.collection('atividades').where('projetoId', isEqualTo: projetoId).get();
-    final List<int> atividadeIds = atividadesSnap.docs.map((doc) => doc.data()['id'] as int).toList();
-    final List<int> talhaoIds = [];
-
-    if (atividadeIds.isNotEmpty) {
-        final fazendasSnap = await clienteRef.collection('fazendas').where('atividadeId', whereIn: atividadeIds).get();
-        final List<String> fazendaIdsStr = fazendasSnap.docs.map((doc) => doc.data()['id'] as String).toList();
-        
-        if (fazendaIdsStr.isNotEmpty) {
-            final talhoesSnap = await clienteRef.collection('talhoes').where('fazendaId', whereIn: fazendaIdsStr).get();
-            for (final doc in talhoesSnap.docs) {
-                talhaoIds.add(doc.data()['id'] as int);
-            }
-        }
-    }
-
-    // 2. Apagar todos os dados de COLETA (Parcelas e suas Árvores)
-    if (talhaoIds.isNotEmpty) {
-        final parcelasSnap = await clienteRef.collection('dados_coleta').where('talhaoId', whereIn: talhaoIds).get();
-        for (final doc in parcelasSnap.docs) {
-            final arvoresSnap = await doc.reference.collection('arvores').get();
-            for (final arvDoc in arvoresSnap.docs) {
-                batch.delete(arvDoc.reference);
-                operationCount++;
-                await commitBatchIfNeeded();
-            }
-            batch.delete(doc.reference);
-            operationCount++;
-            await commitBatchIfNeeded();
-        }
-        debugPrint(" > ${parcelasSnap.docs.length} parcelas e suas árvores marcadas para exclusão.");
-        
-        // 3. Apagar todos os dados de CUBAGEM (Cubagens e suas Seções)
-        final cubagensSnap = await clienteRef.collection('dados_cubagem').where('talhaoId', whereIn: talhaoIds).get();
-        for (final doc in cubagensSnap.docs) {
-            final secoesSnap = await doc.reference.collection('secoes').get();
-            for (final secDoc in secoesSnap.docs) {
-                batch.delete(secDoc.reference);
-                operationCount++;
-                await commitBatchIfNeeded();
-            }
-            batch.delete(doc.reference);
-            operationCount++;
-            await commitBatchIfNeeded();
-        }
-        debugPrint(" > ${cubagensSnap.docs.length} cubagens e suas seções marcadas para exclusão.");
-    }
-    
-    // 4. Apagar a hierarquia de metadados (Talhões, Fazendas, Atividades)
-    for (final id in talhaoIds) {
-      batch.delete(clienteRef.collection('talhoes').doc(id.toString()));
-      operationCount++;
-      await commitBatchIfNeeded();
-    }
-    // Repita para Fazendas e Atividades se eles tiverem IDs simples e conhecidos.
-    // A busca anterior já os encontrou.
-    if(atividadeIds.isNotEmpty) {
-      final fazendasSnap = await clienteRef.collection('fazendas').where('atividadeId', whereIn: atividadeIds).get();
-      for (final doc in fazendasSnap.docs) {
-        batch.delete(doc.reference);
-        operationCount++;
-        await commitBatchIfNeeded();
-      }
-    }
-    for (final doc in atividadesSnap.docs) {
-      batch.delete(doc.reference);
-      operationCount++;
-      await commitBatchIfNeeded();
-    }
-    
-    // 5. Apagar o projeto em si
-    final projetoRef = clienteRef.collection('projetos').doc(projetoId.toString());
-    batch.delete(projetoRef);
-    operationCount++;
-    debugPrint(" > Documento do projeto marcado para exclusão.");
-
-    // 6. Executar o lote final de operações
-    await batch.commit();
-    debugPrint("EXCLUSÃO REMOTA CONCLUÍDA.");
-  }
-
   Future<void> _uploadColetasNaoSincronizadas(String licenseIdDoUsuarioLogado) async {
-    // ---- UPLOAD DE PARCELAS ----
+    final db = await _dbHelper.database;
+    final firestoreBatch = _firestore.batch();
+    final prefs = await SharedPreferences.getInstance();
+    final nomeLider = prefs.getString('nome_lider');
+
     final List<Parcela> parcelasNaoSincronizadas = await _parcelaRepository.getUnsyncedParcelas();
+    
     if (parcelasNaoSincronizadas.isNotEmpty) {
-      final batch = _firestore.batch();
-      final prefs = await SharedPreferences.getInstance();
-      final nomeLider = prefs.getString('nome_lider');
-
       for (final parcela in parcelasNaoSincronizadas) {
+        if (parcela.talhaoId == null) continue;
+
+        final talhaoLocal = await _talhaoRepository.getTalhaoById(parcela.talhaoId!);
+        if (talhaoLocal == null) continue;
+
+        final fazendaLocalResult = await db.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [talhaoLocal.fazendaId, talhaoLocal.fazendaAtividadeId]);
+        if (fazendaLocalResult.isEmpty) continue;
         
-        // <<< INÍCIO DA LÓGICA CORRIGIDA E SIMPLIFICADA >>>
-        Projeto? projetoPai;
-        if (parcela.projetoId != null) {
-          // Usa o atalho direto e confiável para encontrar o projeto
-          projetoPai = await _projetoRepository.getProjetoById(parcela.projetoId!);
-        } else {
-          // Mantenha a lógica antiga como um fallback, por segurança
-          projetoPai = await _projetoRepository.getProjetoPelaParcela(parcela);
-        }
-        // <<< FIM DA LÓGICA CORRIGIDA >>>
+        final atividadeLocalResult = await db.query('atividades', where: 'id = ?', whereArgs: [talhaoLocal.fazendaAtividadeId]);
+        if (atividadeLocalResult.isEmpty) continue;
 
-        String? licenseIdDeDestino;
-        if (projetoPai != null) {
-          licenseIdDeDestino = projetoPai.delegadoPorLicenseId ?? projetoPai.licenseId;
-          debugPrint("DIRECIONANDO Parcela ${parcela.idParcela} para licença: $licenseIdDeDestino");
-        }
+        final projetoLocalResult = await db.query('projetos', where: 'id = ?', whereArgs: [atividadeLocalResult.first['projetoId']]);
+        if (projetoLocalResult.isEmpty) continue;
 
+        final projetoPai = Projeto.fromMap(projetoLocalResult.first);
+        final atividadePai = atividadeLocalResult.first;
+        final fazendaPai = fazendaLocalResult.first;
+        final talhaoPai = talhaoLocal.toMap();
+
+        final licenseIdDeDestino = projetoPai.delegadoPorLicenseId ?? projetoPai.licenseId;
         if (licenseIdDeDestino == null) {
-          debugPrint("AVISO: Não foi possível determinar a licença de destino para a parcela ${parcela.idParcela} (Projeto ID: ${parcela.projetoId}). Pulando upload.");
+          debugPrint("AVISO: Licença de destino não encontrada para a parcela ${parcela.idParcela}. Pulando.");
           continue;
         }
 
-        final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('dados_coleta').doc(parcela.uuid);
-        final parcelaMap = parcela.toMap();
-        // Garante que o nome do líder atual seja enviado
-        final currentUser = FirebaseAuth.instance.currentUser;
-        final licenseProvider = LicenseProvider(); // Temporário, ideal seria injetar
-        await licenseProvider.fetchLicenseData();
-        if (licenseProvider.licenseData?.cargo == 'gerente') {
-          parcelaMap['nomeLider'] = currentUser?.displayName ?? currentUser?.email;
-        } else {
-          parcelaMap['nomeLider'] = nomeLider;
-        }
+        final projRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('projetos').doc(projetoPai.id.toString());
+        firestoreBatch.set(projRef, projetoPai.toMap(), firestore.SetOptions(merge: true));
+
+        final ativRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('atividades').doc(atividadePai['id'].toString());
+        firestoreBatch.set(ativRef, atividadePai, firestore.SetOptions(merge: true));
         
-        batch.set(docRef, parcelaMap, firestore.SetOptions(merge: true));
+        final fazendaDocId = "${fazendaPai['id']}_${fazendaPai['atividadeId']}";
+        final fazendaRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('fazendas').doc(fazendaDocId);
+        firestoreBatch.set(fazendaRef, fazendaPai, firestore.SetOptions(merge: true));
+
+        final talhaoRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('talhoes').doc(talhaoPai['id'].toString());
+        firestoreBatch.set(talhaoRef, talhaoPai, firestore.SetOptions(merge: true));
+
+        final parcelaDocRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('dados_coleta').doc(parcela.uuid);
+        final parcelaMap = parcela.toMap();
+        parcelaMap['nomeLider'] = nomeLider;
+        firestoreBatch.set(parcelaDocRef, parcelaMap, firestore.SetOptions(merge: true));
 
         final arvores = await _parcelaRepository.getArvoresDaParcela(parcela.dbId!);
         for (final arvore in arvores) {
-          final arvoreRef = docRef.collection('arvores').doc(arvore.id.toString());
-          batch.set(arvoreRef, arvore.toMap());
+          final arvoreRef = parcelaDocRef.collection('arvores').doc(arvore.id.toString());
+          firestoreBatch.set(arvoreRef, arvore.toMap());
         }
       }
-      await batch.commit();
+
+      await firestoreBatch.commit();
       for (final parcela in parcelasNaoSincronizadas) {
         await _parcelaRepository.markParcelaAsSynced(parcela.dbId!);
       }
-      debugPrint("${parcelasNaoSincronizadas.length} parcelas locais foram sincronizadas.");
+      debugPrint("${parcelasNaoSincronizadas.length} parcelas e suas hierarquias foram sincronizadas.");
     }
 
-    // ---- UPLOAD DE CUBAGENS (A lógica aqui já estava correta, mas revisada) ----
     final List<CubagemArvore> cubagensNaoSincronizadas = await _cubagemRepository.getUnsyncedCubagens();
     if (cubagensNaoSincronizadas.isNotEmpty) {
-      // ... (a lógica de upload de cubagem pode permanecer a mesma) ...
+      // A lógica de upload de cubagem pode permanecer a mesma por enquanto.
     }
   } 
+
   Future<void> _downloadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
     
     final projetosSnap = await _firestore.collection('clientes').doc(licenseId).collection('projetos').get();
+    final idsNaWeb = projetosSnap.docs.map((doc) => doc.data()['id'] as int).toSet();
+
+    final projetosLocais = await db.query('projetos', columns: ['id'], where: 'licenseId = ? AND delegado_por_license_id IS NULL', whereArgs: [licenseId]);
+    final idsLocais = projetosLocais.map((map) => map['id'] as int).toSet();
+
+    final idsParaDeletar = idsLocais.difference(idsNaWeb);
+
+    if (idsParaDeletar.isNotEmpty) {
+      await db.delete('projetos', where: 'id IN (${List.filled(idsParaDeletar.length, '?').join(',')})', whereArgs: idsParaDeletar.toList());
+      debugPrint("${idsParaDeletar.length} projetos obsoletos foram removidos do banco de dados local.");
+    }
+    
     for (var doc in projetosSnap.docs) {
       final data = doc.data();
       data['licenseId'] = licenseId; 
@@ -291,6 +213,15 @@ class SyncService {
     }
     
     final atividadesSnap = await _firestore.collection('clientes').doc(licenseId).collection('atividades').get();
+    final idsAtividadesNaWeb = atividadesSnap.docs.map((doc) => doc.data()['id'] as int).toSet();
+    
+    final atividadesLocais = await db.query('atividades', columns: ['id'], where: 'projetoId IN (SELECT id FROM projetos WHERE delegado_por_license_id IS NULL)');
+    final idsAtividadesLocais = atividadesLocais.map((map) => map['id'] as int).toSet();
+    final idsAtividadesParaDeletar = idsAtividadesLocais.difference(idsAtividadesNaWeb);
+    if (idsAtividadesParaDeletar.isNotEmpty) {
+      await db.delete('atividades', where: 'id IN (${List.filled(idsAtividadesParaDeletar.length, '?').join(',')})', whereArgs: idsAtividadesParaDeletar.toList());
+    }
+
     for (var doc in atividadesSnap.docs) {
       await db.insert('atividades', doc.data(), conflictAlgorithm: ConflictAlgorithm.replace);
     }
@@ -305,7 +236,7 @@ class SyncService {
       await db.insert('talhoes', doc.data(), conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
-    debugPrint("Hierarquia da própria licença baixada localmente.");
+    debugPrint("Hierarquia completa da própria licença (Projetos, Atividades, Fazendas, Talhões) foi baixada e sincronizada localmente.");
   }
 
   Future<void> _downloadProjetosDelegados(String licenseIdDoUsuarioLogado) async {

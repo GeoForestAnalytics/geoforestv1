@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 
 enum StatusParcela {
@@ -147,40 +148,50 @@ class Parcela {
   }
 
   factory Parcela.fromMap(Map<String, dynamic> map) {
-    List<String> paths = [];
-    if (map['photoPaths'] != null) {
-      try {
-        paths = List<String>.from(jsonDecode(map['photoPaths']));
-      } catch (e) {
-        print("Erro ao decodificar photoPaths: $e");
-      }
+  List<String> paths = [];
+  if (map['photoPaths'] != null) {
+    try {
+      paths = List<String>.from(jsonDecode(map['photoPaths']));
+    } catch (e) {
+      print("Erro ao decodificar photoPaths: $e");
     }
-
-    return Parcela(
-      dbId: map['id'],
-      uuid: map['uuid'],
-      talhaoId: map['talhaoId'],
-      idFazenda: map['idFazenda'],
-      nomeFazenda: map['nomeFazenda'],
-      nomeTalhao: map['nomeTalhao'],
-      idParcela: map['idParcela'],
-      areaMetrosQuadrados: map['areaMetrosQuadrados'],
-      observacao: map['observacao'],
-      latitude: map['latitude'],
-      longitude: map['longitude'],
-      dataColeta: map['dataColeta'] != null ? DateTime.parse(map['dataColeta']) : null,
-      status: StatusParcela.values.firstWhere(
-            (e) => e.name == map['status'],
-        orElse: () => StatusParcela.pendente,
-      ),
-      exportada: map['exportada'] == 1,
-      isSynced: map['isSynced'] == 1,
-      largura: map['largura'],
-      comprimento: map['comprimento'],
-      raio: map['raio'],
-      nomeLider: map['nomeLider'],
-      projetoId: map['projetoId'], // <<< LÊ O ID DO PROJETO DO MAPA
-      photoPaths: paths,
-    );
   }
+
+  // Lógica de data mais segura
+  DateTime? dataColetaFinal;
+  if (map['dataColeta'] is Timestamp) {
+    // Se o Firestore enviar um Timestamp (padrão para datas salvas via servidor)
+    dataColetaFinal = (map['dataColeta'] as Timestamp).toDate();
+  } else if (map['dataColeta'] is String) {
+    // Se for uma string (como vem do SQLite)
+    dataColetaFinal = DateTime.tryParse(map['dataColeta']);
+  }
+
+  return Parcela(
+    dbId: map['id'],
+    uuid: map['uuid'] ?? const Uuid().v4(), // Garante que o UUID nunca seja nulo
+    talhaoId: map['talhaoId'],
+    idFazenda: map['idFazenda'],
+    nomeFazenda: map['nomeFazenda'],
+    nomeTalhao: map['nomeTalhao'],
+    idParcela: map['idParcela'] ?? 'ID_N/A', // Evita erro se o ID for nulo
+    areaMetrosQuadrados: (map['areaMetrosQuadrados'] as num?)?.toDouble() ?? 0.0,
+    observacao: map['observacao'],
+    latitude: (map['latitude'] as num?)?.toDouble(),
+    longitude: (map['longitude'] as num?)?.toDouble(),
+    dataColeta: dataColetaFinal, // Usa a data segura
+    status: StatusParcela.values.firstWhere(
+          (e) => e.name == map['status'],
+      orElse: () => StatusParcela.pendente,
+    ),
+    exportada: map['exportada'] == 1,
+    isSynced: map['isSynced'] == 1,
+    largura: (map['largura'] as num?)?.toDouble(),
+    comprimento: (map['comprimento'] as num?)?.toDouble(),
+    raio: (map['raio'] as num?)?.toDouble(),
+    nomeLider: map['nomeLider'],
+    projetoId: map['projetoId'], // Mantém a leitura do projetoId
+    photoPaths: paths,
+  );
+}
 }

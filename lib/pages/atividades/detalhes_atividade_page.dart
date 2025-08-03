@@ -9,7 +9,6 @@ import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/pages/fazenda/form_fazenda_page.dart';
 import 'package:geoforestv1/pages/fazenda/detalhes_fazenda_page.dart';
 import 'package:geoforestv1/utils/navigation_helper.dart';
-import 'package:geoforestv1/pages/cubagem/plano_cubagem_selecao_page.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
 
 class DetalhesAtividadePage extends StatefulWidget {
@@ -66,16 +65,7 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
     }
   }
   
-  void _navegarParaGerarPlanoDeCubagem() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PlanoCubagemSelecaoPage(
-          atividadeDeOrigem: widget.atividade,
-        ),
-      ),
-    );
-  }
+ 
 
   void _toggleSelectionMode(String? fazendaId) {
     setState(() {
@@ -321,12 +311,7 @@ class _DetalhesAtividadePageState extends State<DetalhesAtividadePage> {
                   onTap: _navegarParaNovaFazenda,
                 ),
 
-              if (_isAtividadeDeInventario)
-                SpeedDialChild(
-                  child: const Icon(Icons.rule_folder_outlined),
-                  label: 'Gerar Plano de Cubagem',
-                  onTap: _navegarParaGerarPlanoDeCubagem,
-                ),
+              
             ],
         ),
     );

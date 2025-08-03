@@ -22,37 +22,47 @@ class TalhaoRepository {
   
   // AJUSTE 3: Adiciona um método para buscar um talhão específico (necessário para a UI)
   Future<Talhao?> getTalhaoById(int id) async {
-    final db = await _dbHelper.database;
-    final maps = await db.query('talhoes', where: 'id = ?', whereArgs: [id], limit: 1);
-    if (maps.isNotEmpty) {
-      final fazendaMap = await db.rawQuery('''
-          SELECT F.nome as fazendaNome 
-          FROM fazendas F
-          JOIN talhoes T ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
-          WHERE T.id = ?
-      ''', [id]);
-      final mapCompleto = Map<String, dynamic>.from(maps.first);
-      if (fazendaMap.isNotEmpty) {
-        mapCompleto['fazendaNome'] = fazendaMap.first['fazendaNome'];
-      }
-      return Talhao.fromMap(mapCompleto);
-    }
-    return null;
-  }
-
+  final db = await _dbHelper.database;
   
-
-  Future<List<Talhao>> getTalhoesDaFazenda(String fazendaId, int fazendaAtividadeId) async {
-    final db = await _dbHelper.database;
-    final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT T.*, F.nome as fazendaNome 
+  // <<< INÍCIO DA CORREÇÃO >>>
+  // A consulta agora faz JOIN com 'fazendas' E 'atividades' para pegar
+  // tanto o 'fazendaNome' quanto o 'projetoId'.
+  final maps = await db.rawQuery('''
+      SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId 
       FROM talhoes T
       INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
-      WHERE T.fazendaId = ? AND T.fazendaAtividadeId = ?
-      ORDER BY T.nome ASC
-    ''', [fazendaId, fazendaAtividadeId]);
-    return List.generate(maps.length, (i) => Talhao.fromMap(maps[i]));
+      INNER JOIN atividades A ON F.atividadeId = A.id
+      WHERE T.id = ?
+      LIMIT 1
+  ''', [id]);
+  // <<< FIM DA CORREÇÃO >>>
+
+  if (maps.isNotEmpty) {
+    // Agora o 'maps.first' já contém o 'projetoId', e o factory Talhao.fromMap
+    // que você corrigiu saberá como lê-lo.
+    return Talhao.fromMap(maps.first);
   }
+  return null;
+}
+
+// MÉTODO getTalhoesDaFazenda CORRIGIDO
+Future<List<Talhao>> getTalhoesDaFazenda(String fazendaId, int fazendaAtividadeId) async {
+  final db = await _dbHelper.database;
+
+  // <<< INÍCIO DA CORREÇÃO >>>
+  // A mesma lógica de JOIN é aplicada aqui.
+  final List<Map<String, dynamic>> maps = await db.rawQuery('''
+    SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId 
+    FROM talhoes T
+    INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
+    INNER JOIN atividades A ON F.atividadeId = A.id
+    WHERE T.fazendaId = ? AND T.fazendaAtividadeId = ?
+    ORDER BY T.nome ASC
+  ''', [fazendaId, fazendaAtividadeId]);
+  // <<< FIM DA CORREÇÃO >>>
+  
+  return List.generate(maps.length, (i) => Talhao.fromMap(maps[i]));
+}
 
   Future<void> deleteTalhao(int id) async {
     final db = await _dbHelper.database;

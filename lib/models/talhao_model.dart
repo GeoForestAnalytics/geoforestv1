@@ -79,6 +79,7 @@ class Talhao {
       id: map['id'],
       fazendaId: map['fazendaId'],
       fazendaAtividadeId: map['fazendaAtividadeId'],
+      projetoId: map['projetoId'],
       nome: map['nome'],
       areaHa: map['areaHa'],
       idadeAnos: map['idadeAnos'],

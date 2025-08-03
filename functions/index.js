@@ -1,4 +1,4 @@
-// functions/index.js (VERSÃO FINAL REVISADA)
+// functions/index.js (VERSÃO FINAL LIMPA E CORRIGIDA)
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
@@ -7,7 +7,12 @@ admin.initializeApp();
 const auth = admin.auth();
 const db = admin.firestore();
 
-exports.updateUserLicenseClaim = functions.firestore
+// =========================================================================
+// FUNÇÃO 1: Atualiza os Custom Claims quando um usuário é adicionado/removido
+// =========================================================================
+exports.updateUserLicenseClaim = functions
+    .region("southamerica-east1")
+    .firestore
     .document("clientes/{licenseId}")
     .onWrite(async (change, context) => {
       const licenseId = context.params.licenseId;
@@ -54,8 +59,11 @@ exports.updateUserLicenseClaim = functions.firestore
       return null;
     });
 
+// =========================================================================
+// FUNÇÃO 2: Adiciona um novo membro à equipe (chamada pelo app)
+// =========================================================================
 exports.adicionarMembroEquipe = functions
-    .region("southamerica-east1") // Confirme se esta é sua região
+    .region("southamerica-east1")
     .https.onCall(async (data, context) => {
       if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "Ação não autenticada.");
@@ -94,13 +102,17 @@ exports.adicionarMembroEquipe = functions
           nome: name,
           adicionadoEm: admin.firestore.FieldValue.serverTimestamp()
         };
+        
+        console.log(`---> VAI ATUALIZAR COM A VERSÃO CORRIGIDA (arrayUnion) <---`);
 
         await licenseDoc.ref.update({
-          [`usuariosPermitidos.${userRecord.uid}`]: novoMembroData,
+            [`usuariosPermitidos.${userRecord.uid}`]: novoMembroData,
+            "uidsPermitidos": admin.firestore.FieldValue.arrayUnion(userRecord.uid),
         });
 
         console.log(`Licença atualizada com sucesso para o novo membro ${userRecord.uid}`);
         return { success: true, message: `Usuário '${name}' adicionado com sucesso!` };
+
       } catch (error) {
         console.error("Falha ao criar membro da equipe:", error);
         if (error.code === 'auth/email-already-exists') {
@@ -108,4 +120,84 @@ exports.adicionarMembroEquipe = functions
         }
         throw new functions.https.HttpsError("internal", "Ocorreu um erro interno.");
       }
+    });
+
+// =========================================================================
+// FUNÇÃO 3: Deleta um projeto e todos os seus dados (chamada pelo app)
+// =========================================================================
+exports.deletarProjeto = functions
+    .region("southamerica-east1")
+    .https.onCall(async (data, context) => {
+        if (!context.auth) {
+            throw new functions.https.HttpsError("unauthenticated", "Ação não autenticada.");
+        }
+
+        const gerenteUid = context.auth.uid;
+        const { projetoId } = data;
+
+        if (!projetoId) {
+            throw new functions.https.HttpsError("invalid-argument", "O ID do projeto é obrigatório.");
+        }
+
+        console.log(`Gerente ${gerenteUid} solicitou a exclusão do projeto ${projetoId}`);
+
+        const licenseQuery = await db.collection("clientes")
+            .where(`usuariosPermitidos.${gerenteUid}.cargo`, "==", "gerente")
+            .limit(1).get();
+
+        if (licenseQuery.empty) {
+            throw new functions.https.HttpsError("permission-denied", "Você não tem permissão para excluir projetos.");
+        }
+
+        const licenseDoc = licenseQuery.docs[0];
+        const clienteRef = licenseDoc.ref;
+        const batchSize = 400; 
+        let batch = db.batch();
+        let operationCount = 0;
+
+        async function commitBatchIfNeeded() {
+            if (operationCount >= batchSize) {
+                console.log(`Executando lote com ${operationCount} operações...`);
+                await batch.commit();
+                batch = db.batch();
+                operationCount = 0;
+            }
+        }
+
+        try {
+            const atividadesSnap = await clienteRef.collection('atividades').where('projetoId', '==', projetoId).get();
+            const atividadeIds = atividadesSnap.docs.map((doc) => doc.data()['id']);
+
+            if (atividadeIds.length > 0) {
+                const fazendasSnap = await clienteRef.collection('fazendas').where('atividadeId', 'in', atividadeIds).get();
+                const fazendaIdsStr = fazendasSnap.docs.map((doc) => doc.data()['id']);
+
+                if (fazendaIdsStr.length > 0) {
+                    const talhoesSnap = await clienteRef.collection('talhoes').where('fazendaId', 'in', fazendaIdsStr).get();
+                    const talhaoIds = talhoesSnap.docs.map((doc) => doc.data()['id']);
+
+                    if (talhaoIds.length > 0) {
+                        const parcelasSnap = await clienteRef.collection('dados_coleta').where('talhaoId', 'in', talhaoIds).get();
+                        for (const doc of parcelasSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
+                        
+                        const cubagensSnap = await clienteRef.collection('dados_cubagem').where('talhaoId', 'in', talhaoIds).get();
+                        for (const doc of cubagensSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
+                    }
+                    for (const doc of talhoesSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
+                }
+                for (const doc of fazendasSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
+            }
+            for (const doc of atividadesSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
+
+            batch.delete(clienteRef.collection('projetos').doc(projetoId.toString()));
+            operationCount++;
+
+            await batch.commit(); 
+            console.log(`Projeto ${projetoId} e todos os seus dados foram excluídos com sucesso.`);
+            return { success: true, message: "Projeto excluído com sucesso." };
+
+        } catch (error) {
+            console.error("Falha ao excluir projeto:", error);
+            throw new functions.https.HttpsError("internal", "Ocorreu um erro interno ao tentar excluir o projeto.");
+        }
     });

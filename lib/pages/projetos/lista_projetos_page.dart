@@ -15,6 +15,7 @@ import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/data/repositories/import_repository.dart';
 import 'package:geoforestv1/services/sync_service.dart'; // <<< 1. IMPORTE O SYNC SERVICE
 import 'form_projeto_page.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class ListaProjetosPage extends StatefulWidget {
   final String title;
@@ -176,66 +177,70 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
 
   // <<< 3. SUBSTITUA COMPLETAMENTE ESTE MÉTODO >>>
   Future<void> _deletarProjetosSelecionados() async {
-    if (_selectedProjetos.isEmpty || !mounted) return;
-    if (!_isGerente) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Apenas gerentes podem apagar projetos.')));
-      return;
-    }
-
-    final confirmar = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-              title: const Text('Confirmar Exclusão'),
-              content: Text('Tem certeza que deseja apagar os ${_selectedProjetos.length} projetos selecionados e TODOS os seus dados locais e na nuvem? Esta ação é PERMANENTE.'),
-              actions: [
-                TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
-                FilledButton(
-                    onPressed: () => Navigator.of(ctx).pop(true),
-                    style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                    child: const Text('Apagar')),
-              ],
-            ));
-            
-    if (confirmar != true) return;
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Excluindo projetos... Isso pode levar um momento.'),
-          duration: Duration(seconds: 10)));
-    }
-    
-    final licenseId = context.read<LicenseProvider>().licenseData?.id;
-    if (licenseId == null) {
-        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro: Licença não encontrada.'), backgroundColor: Colors.red));
-        return;
-    }
-
-    bool houveErro = false;
-    for (final id in _selectedProjetos) {
-      try {
-        // Passo 1: Apagar no Firebase
-        await _syncService.deletarProjetoCompletoDoFirebase(licenseId, id);
-        
-        // Passo 2: Apagar localmente
-        await _projetoRepository.deleteProjeto(id);
-
-      } catch (e) {
-        houveErro = true;
-        debugPrint("Erro ao apagar projeto $id: $e");
-        if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao apagar o projeto $id.'), backgroundColor: Colors.red));
-        break; 
-      }
-    }
-    
-    if (mounted) {
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        if (!houveErro) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Projetos excluídos com sucesso!'), backgroundColor: Colors.green));
-        }
-    }
-    _clearSelection();
-    await _checkUserRoleAndLoadProjects();
+  if (_selectedProjetos.isEmpty || !mounted) return;
+  if (!_isGerente) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Apenas gerentes podem apagar projetos.')));
+    return;
   }
+
+  final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+            title: const Text('Confirmar Exclusão'),
+            content: Text('Tem certeza que deseja apagar os ${_selectedProjetos.length} projetos selecionados e TODOS os seus dados? Esta ação é PERMANENTE.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
+              FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Apagar')),
+            ],
+          ));
+          
+  if (confirmar != true) return;
+
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enviando ordem de exclusão para o servidor...'),
+        duration: Duration(seconds: 10)));
+  }
+  
+  bool houveErro = false;
+  for (final id in _selectedProjetos) {
+    try {
+      // <<< INÍCIO DA MUDANÇA >>>
+      // Chama a Cloud Function em vez do SyncService local
+      final functions = FirebaseFunctions.instanceFor(region: 'southamerica-east1');
+      final callable = functions.httpsCallable('deletarProjeto');
+      await callable.call({'projetoId': id});
+      // <<< FIM DA MUDANÇA >>>
+      
+      // Se a função na nuvem foi bem-sucedida, apaga localmente
+      await _projetoRepository.deleteProjeto(id);
+
+    } catch (e) {
+      houveErro = true;
+      debugPrint("Erro ao apagar projeto $id: $e");
+      if(mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+           // Mostra a mensagem de erro que vem da Cloud Function
+           content: Text('Falha ao apagar o projeto $id: ${(e as FirebaseFunctionsException).message}'),
+           backgroundColor: Colors.red,
+         ));
+      }
+      break; 
+    }
+  }
+  
+  if (mounted) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      if (!houveErro) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Projetos excluídos com sucesso!'), backgroundColor: Colors.green));
+      }
+  }
+  _clearSelection();
+  await _checkUserRoleAndLoadProjects();
+}
 
   void _navegarParaEdicao(Projeto projeto) async {
     final bool? projetoEditado = await Navigator.push<bool>(

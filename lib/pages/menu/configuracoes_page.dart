@@ -3,7 +3,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/controller/login_controller.dart';
-import 'package:geoforestv1/pages/menu/login_page.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -112,21 +111,18 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
   }
 
   Future<void> _handleLogout() async {
-    await _mostrarDialogoLimpeza(
-      titulo: 'Confirmar Saída',
-      conteudo: 'Tem certeza de que deseja sair da sua conta?',
-      isDestructive: false,
-      onConfirmar: () async {
-        await context.read<LoginController>().signOut();
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const LoginPage()),
-            (Route<dynamic> route) => false,
-          );
-        }
-      },
-    );
-  }
+  await _mostrarDialogoLimpeza(
+    titulo: 'Confirmar Saída',
+    conteudo: 'Tem certeza de que deseja sair da sua conta?',
+    isDestructive: false,
+    onConfirmar: () async {
+      // Apenas chame o signOut. O AuthCheck, que está ouvindo
+      // as mudanças no LoginController, vai automaticamente
+      // redirecionar para a LoginPage.
+      await context.read<LoginController>().signOut();
+    },
+  );
+}
 
   Future<void> _diagnosticarPermissoes() async {
     final statusStorage = await Permission.storage.status;
