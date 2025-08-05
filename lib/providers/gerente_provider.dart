@@ -1,13 +1,31 @@
-// lib/providers/gerente_provider.dart (VERSÃO FINAL COMPLETA E CORRIGIDA)
+// lib/providers/gerente_provider.dart (VERSÃO COM MAPEAMENTO DE TALHÕES CORRIGIDO)
 
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
+import 'package:geoforestv1/data/repositories/talhao_repository.dart'; // <<< 1. IMPORT NECESSÁRIO
+import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/services/gerente_service.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+
+class DesempenhoCubagem {
+  final String nome;
+  final int pendentes;
+  final int concluidas;
+  final int exportadas;
+  final int total;
+
+  DesempenhoCubagem({
+    required this.nome,
+    this.pendentes = 0,
+    this.concluidas = 0,
+    this.exportadas = 0,
+    this.total = 0,
+  });
+}
 
 class DesempenhoFazenda {
   final String nome;
@@ -29,13 +47,19 @@ class DesempenhoFazenda {
 
 class GerenteProvider with ChangeNotifier {
   final GerenteService _gerenteService = GerenteService();
-  StreamSubscription? _dadosColetaSubscription;
+  final TalhaoRepository _talhaoRepository = TalhaoRepository(); // <<< 2. INSTÂNCIA DO REPOSITÓRIO
 
-  bool _isLoading = true;
-  String? _error;
+  StreamSubscription? _dadosColetaSubscription;
+  StreamSubscription? _dadosCubagemSubscription;
+  List<CubagemArvore> _cubagensSincronizadas = [];
   List<Parcela> _parcelasSincronizadas = [];
   List<Projeto> _projetos = [];
   
+  // <<< 3. MAPA CONFIÁVEL PARA RELACIONAR TALHÃO E PROJETO >>>
+  Map<int, int> _talhaoToProjetoMap = {};
+
+  bool _isLoading = true;
+  String? _error;
   Set<int> _selectedProjetoIds = {};
 
   // GETTERS
@@ -45,6 +69,7 @@ class GerenteProvider with ChangeNotifier {
   Set<int> get selectedProjetoIds => _selectedProjetoIds;
 
   List<Parcela> get parcelasFiltradas {
+    // ... (este getter não precisa de alteração)
     final idsProjetosAtivos = projetosDisponiveis.map((p) => p.id).toSet();
 
     List<Parcela> parcelasVisiveis;
@@ -60,6 +85,44 @@ class GerenteProvider with ChangeNotifier {
     return parcelasVisiveis;
   }
   
+  // ===================================================================
+  // <<< 4. GETTER DE CUBAGEM AGORA USA O MAPA CONFIÁVEL >>>
+  // ===================================================================
+  List<DesempenhoCubagem> get desempenhoPorCubagem {
+    if (_cubagensSincronizadas.isEmpty) return [];
+
+    List<CubagemArvore> cubagensFiltradas;
+    if (_selectedProjetoIds.isEmpty) {
+       final idsProjetosAtivos = projetosDisponiveis.map((p) => p.id).toSet();
+       cubagensFiltradas = _cubagensSincronizadas.where((c) {
+         final projetoId = _talhaoToProjetoMap[c.talhaoId];
+         return projetoId != null && idsProjetosAtivos.contains(projetoId);
+       }).toList();
+    } else {
+      cubagensFiltradas = _cubagensSincronizadas.where((c) {
+        final projetoId = _talhaoToProjetoMap[c.talhaoId];
+        return projetoId != null && _selectedProjetoIds.contains(projetoId);
+      }).toList();
+    }
+
+    if (cubagensFiltradas.isEmpty) return [];
+
+    final grupoPorTalhao = groupBy(cubagensFiltradas, (CubagemArvore c) => "${c.nomeFazenda} / ${c.nomeTalhao}");
+    
+    return grupoPorTalhao.entries.map((entry) {
+      final nome = entry.key;
+      final cubagens = entry.value;
+      return DesempenhoCubagem(
+        nome: nome,
+        pendentes: cubagens.where((c) => c.alturaTotal == 0).length,
+        concluidas: cubagens.where((c) => c.alturaTotal > 0).length,
+        exportadas: cubagens.where((c) => c.exportada).length,
+        total: cubagens.length,
+      );
+    }).toList()..sort((a,b) => a.nome.compareTo(b.nome));
+  }
+  
+  // ... (outros getters e métodos não precisam de alteração)
   Map<String, int> get progressoPorEquipe {
     final parcelasConcluidas = parcelasFiltradas.where((p) => p.status == StatusParcela.concluida).toList();
     if (parcelasConcluidas.isEmpty) return {};
@@ -111,12 +174,10 @@ class GerenteProvider with ChangeNotifier {
     }).toList()..sort((a,b) => a.nome.compareTo(b.nome));
   }
 
-  // CONSTRUTOR SIMPLIFICADO
   GerenteProvider() {
     initializeDateFormatting('pt_BR', null);
   }
 
-  // MÉTODOS DE CONTROLE
   void toggleProjetoSelection(int projetoId) {
     if (_selectedProjetoIds.contains(projetoId)) {
       _selectedProjetoIds.remove(projetoId);
@@ -131,19 +192,31 @@ class GerenteProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  // ===================================================================
+  // <<< 5. MÉTODO DE INICIALIZAÇÃO AGORA CONSTRÓI O MAPA PRIMEIRO >>>
+  // ===================================================================
   Future<void> iniciarMonitoramento() async {
     _dadosColetaSubscription?.cancel();
+    _dadosCubagemSubscription?.cancel();
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
+      // Busca os projetos
       _projetos = await _gerenteService.getTodosOsProjetosStream();
       _projetos.sort((a, b) => a.nome.compareTo(b.nome));
+      
+      // Constrói o mapa de referência ANTES de ouvir os streams
+      final todosOsTalhoes = await _talhaoRepository.getTodosOsTalhoes();
+      _talhaoToProjetoMap = {
+        for (var talhao in todosOsTalhoes)
+          if (talhao.id != null && talhao.projetoId != null) talhao.id!: talhao.projetoId!
+      };
       
       _dadosColetaSubscription = _gerenteService.getDadosColetaStream().listen(
         (listaDeParcelas) {
           _parcelasSincronizadas = listaDeParcelas;
-          _isLoading = false;
+          if (_isLoading) _isLoading = false;
           _error = null;
           notifyListeners();
         },
@@ -153,6 +226,17 @@ class GerenteProvider with ChangeNotifier {
           notifyListeners();
         },
       );
+
+      _dadosCubagemSubscription = _gerenteService.getDadosCubagemStream().listen(
+        (listaDeCubagens) {
+          _cubagensSincronizadas = listaDeCubagens;
+          notifyListeners();
+        },
+        onError: (e) {
+          debugPrint("Erro no stream de cubagens: $e");
+        },
+      );
+
     } catch (e) {
       _error = "Erro ao buscar lista de projetos: $e";
       _isLoading = false;
@@ -163,6 +247,7 @@ class GerenteProvider with ChangeNotifier {
   @override
   void dispose() {
     _dadosColetaSubscription?.cancel();
+    _dadosCubagemSubscription?.cancel();
     super.dispose();
   }
 }

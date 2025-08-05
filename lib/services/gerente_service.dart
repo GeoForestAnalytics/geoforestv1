@@ -1,8 +1,9 @@
-// lib/services/gerente_service.dart (VERSÃO ROBUSTA COM DEBUG)
+// lib/services/gerente_service.dart (VERSÃO COMPLETA E CORRIGIDA)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart'; // Para o debugPrint
+import 'package:flutter/foundation.dart';
+import 'package:geoforestv1/models/cubagem_arvore_model.dart'; // <<< 1. IMPORT NECESSÁRIO
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/services/licensing_service.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
@@ -81,6 +82,46 @@ class GerenteService {
       }
     } catch (e) {
       debugPrint("--- [GerenteService] ERRO CRÍTICO no stream de coletas: $e");
+      yield* Stream.error(e); 
+    }
+  }
+
+  // ===================================================================
+  // <<< 2. NOVO MÉTODO PARA BUSCAR DADOS DE CUBAGEM >>>
+  // ===================================================================
+  /// Retorna um "fluxo" (Stream) de dados em tempo real da coleção de cubagens.
+  Stream<List<CubagemArvore>> getDadosCubagemStream() async* {
+    try {
+      final licenseId = await _getLicenseId();
+      debugPrint("--- [GerenteService] Iniciando stream para ouvir CUBAGENS da licença: $licenseId");
+
+      final stream = _firestore
+          .collection('clientes')
+          .doc(licenseId)
+          .collection('dados_cubagem') // Aponta para a coleção correta
+          .snapshots();
+
+      await for (final querySnapshot in stream) {
+        debugPrint("--- [GerenteService] Stream de CUBAGENS recebeu ${querySnapshot.docs.length} documentos.");
+        
+        final cubagens = querySnapshot.docs
+            .map((doc) {
+              try {
+                // Usa o construtor correto do modelo de cubagem
+                return CubagemArvore.fromMap(doc.data());
+              } catch (e) {
+                debugPrint("--- [GerenteService] ERRO ao converter um documento de cubagem do Firestore: $e. Dados: ${doc.data()}");
+                return null;
+              }
+            })
+            .where((c) => c != null) // Filtra quaisquer que falharam na conversão
+            .cast<CubagemArvore>()
+            .toList();
+            
+        yield cubagens; // Envia a lista de cubagens atualizada
+      }
+    } catch (e) {
+      debugPrint("--- [GerenteService] ERRO CRÍTICO no stream de cubagens: $e");
       yield* Stream.error(e); 
     }
   }

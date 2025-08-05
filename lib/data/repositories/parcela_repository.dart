@@ -1,4 +1,4 @@
-// lib/data/repositories/parcela_repository.dart (VERSÃO COM CORREÇÃO DE INTEGRIDADE DO PROJETOID)
+// lib/data/repositories/parcela_repository.dart (VERSÃO COM CORREÇÃO DE INTEGRIDADE DO PROJETOID E LÍDERES)
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -22,21 +22,32 @@ class ParcelaRepository {
       final d = p.dataColeta ?? DateTime.now();
       pMap['dataColeta'] = d.toIso8601String();
 
-      // Lógica de segurança para garantir que o projetoId está presente
+      // ===================================================================
+      // ====================== INÍCIO DA CORREÇÃO =========================
+      // ===================================================================
+      // Lógica de segurança para garantir que o projetoId está presente.
+      // Se a parcela não tem um projetoId, mas tem um talhaoId...
       if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
+        // ... fazemos uma consulta rápida para encontrar o projeto pai.
         final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
-          SELECT A.projetoId 
+          SELECT A.projetoId
           FROM talhoes T
           INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
           INNER JOIN atividades A ON F.atividadeId = A.id
           WHERE T.id = ?
           LIMIT 1
         ''', [pMap['talhaoId']]);
+
+        // Se encontrarmos, atualizamos o mapa que será salvo no banco.
         if (talhaoInfo.isNotEmpty) {
           pMap['projetoId'] = talhaoInfo.first['projetoId'];
-          p.copyWith(projetoId: talhaoInfo.first['projetoId'] as int?);
+          // Atualiza também o objeto original para consistência
+          p = p.copyWith(projetoId: talhaoInfo.first['projetoId'] as int?);
         }
       }
+      // ===================================================================
+      // ======================= FIM DA CORREÇÃO ===========================
+      // ===================================================================
 
       final prefs = await SharedPreferences.getInstance();
       String? nomeDoResponsavel = prefs.getString('nome_lider');
@@ -68,24 +79,27 @@ class ParcelaRepository {
     });
     return p;
   }
-  
+
   Future<void> saveBatchParcelas(List<Parcela> parcelas) async {
     final db = await _dbHelper.database;
     final batch = db.batch();
     for (final p in parcelas) {
-      batch.insert('parcelas', p.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert('parcelas', p.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
   }
 
   Future<int> updateParcela(Parcela p) async {
     final db = await _dbHelper.database;
-    return await db.update('parcelas', p.toMap(), where: 'id = ?', whereArgs: [p.dbId]);
+    return await db
+        .update('parcelas', p.toMap(), where: 'id = ?', whereArgs: [p.dbId]);
   }
-  
+
   Future<void> updateParcelaStatus(int parcelaId, StatusParcela novoStatus) async {
     final db = await _dbHelper.database;
-    await db.update('parcelas', {'status': novoStatus.name}, where: 'id = ?', whereArgs: [parcelaId]);
+    await db.update('parcelas', {'status': novoStatus.name},
+        where: 'id = ?', whereArgs: [parcelaId]);
   }
 
   // --- MÉTODOS DE CONSULTA (GET) ---
@@ -96,7 +110,7 @@ class ParcelaRepository {
     if (maps.isNotEmpty) return Parcela.fromMap(maps.first);
     return null;
   }
-  
+
   Future<Parcela?> getParcelaPorIdParcela(int talhaoId, String idParcela) async {
     final db = await _dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -110,16 +124,22 @@ class ParcelaRepository {
     }
     return null;
   }
-  
+
   Future<List<Parcela>> getParcelasDoTalhao(int talhaoId) async {
     final db = await _dbHelper.database;
-    final maps = await db.query('parcelas', where: 'talhaoId = ?', whereArgs: [talhaoId], orderBy: 'dataColeta DESC');
+    final maps = await db.query('parcelas',
+        where: 'talhaoId = ?',
+        whereArgs: [talhaoId],
+        orderBy: 'dataColeta DESC');
     return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
   }
 
   Future<List<Arvore>> getArvoresDaParcela(int parcelaId) async {
     final db = await _dbHelper.database;
-    final maps = await db.query('arvores', where: 'parcelaId = ?', whereArgs: [parcelaId], orderBy: 'linha, posicaoNaLinha, id');
+    final maps = await db.query('arvores',
+        where: 'parcelaId = ?',
+        whereArgs: [parcelaId],
+        orderBy: 'linha, posicaoNaLinha, id');
     return List.generate(maps.length, (i) => Arvore.fromMap(maps[i]));
   }
 
@@ -138,81 +158,133 @@ class ParcelaRepository {
 
   // --- MÉTODOS PARA EXPORTAÇÃO ---
 
-  Future<List<Parcela>> getUnexportedConcludedParcelasByLider(String nomeLider) async {
+  Future<List<Parcela>> getUnexportedConcludedParcelasByLider(
+      String nomeLider) async {
     final db = await _dbHelper.database;
-    final maps = await db.query('parcelas', where: 'status = ? AND exportada = ? AND nomeLider = ?', whereArgs: [StatusParcela.concluida.name, 0, nomeLider]);
-    return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
-  }
-  
-  Future<List<Parcela>> getConcludedParcelasByLiderParaBackup(String nomeLider) async {
-    final db = await _dbHelper.database;
-    final maps = await db.query('parcelas', where: 'status = ? AND nomeLider = ?', whereArgs: [StatusParcela.concluida.name, nomeLider]);
+    final maps = await db.query('parcelas',
+        where: 'status = ? AND exportada = ? AND nomeLider = ?',
+        whereArgs: [StatusParcela.concluida.name, 0, nomeLider]);
     return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
   }
 
-  Future<List<Parcela>> getUnexportedConcludedParcelasFiltrado({Set<int>? projetoIds, Set<String>? lideresNomes}) async {
+  Future<List<Parcela>> getConcludedParcelasByLiderParaBackup(
+      String nomeLider) async {
+    final db = await _dbHelper.database;
+    final maps = await db.query('parcelas',
+        where: 'status = ? AND nomeLider = ?',
+        whereArgs: [StatusParcela.concluida.name, nomeLider]);
+    return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
+  }
+
+  Future<List<Parcela>> getUnexportedConcludedParcelasFiltrado(
+      {Set<int>? projetoIds, Set<String>? lideresNomes}) async {
     final db = await _dbHelper.database;
     String whereClause = 'status = ? AND exportada = ? AND projetoId IS NOT NULL';
     List<dynamic> whereArgs = [StatusParcela.concluida.name, 0];
 
     if (projetoIds != null && projetoIds.isNotEmpty) {
-      whereClause += ' AND projetoId IN (${List.filled(projetoIds.length, '?').join(',')})';
+      whereClause +=
+          ' AND projetoId IN (${List.filled(projetoIds.length, '?').join(',')})';
       whereArgs.addAll(projetoIds);
     }
     if (lideresNomes != null && lideresNomes.isNotEmpty) {
-      whereClause += ' AND nomeLider IN (${List.filled(lideresNomes.length, '?').join(',')})';
+      whereClause +=
+          ' AND nomeLider IN (${List.filled(lideresNomes.length, '?').join(',')})';
       whereArgs.addAll(lideresNomes);
     }
 
-    final maps = await db.query('parcelas', where: whereClause, whereArgs: whereArgs);
+    final maps =
+        await db.query('parcelas', where: whereClause, whereArgs: whereArgs);
     return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
   }
 
-  Future<List<Parcela>> getTodasConcluidasParcelasFiltrado({Set<int>? projetoIds, Set<String>? lideresNomes}) async {
+  Future<List<Parcela>> getTodasConcluidasParcelasFiltrado(
+      {Set<int>? projetoIds, Set<String>? lideresNomes}) async {
     final db = await _dbHelper.database;
     String whereClause = 'status = ? AND projetoId IS NOT NULL';
     List<dynamic> whereArgs = [StatusParcela.concluida.name];
 
     if (projetoIds != null && projetoIds.isNotEmpty) {
-        whereClause += ' AND projetoId IN (${List.filled(projetoIds.length, '?').join(',')})';
-        whereArgs.addAll(projetoIds);
+      whereClause +=
+          ' AND projetoId IN (${List.filled(projetoIds.length, '?').join(',')})';
+      whereArgs.addAll(projetoIds);
     }
     if (lideresNomes != null && lideresNomes.isNotEmpty) {
-        whereClause += ' AND nomeLider IN (${List.filled(lideresNomes.length, '?').join(',')})';
-        whereArgs.addAll(lideresNomes);
+      whereClause +=
+          ' AND nomeLider IN (${List.filled(lideresNomes.length, '?').join(',')})';
+      whereArgs.addAll(lideresNomes);
     }
 
-    final maps = await db.query('parcelas', where: whereClause, whereArgs: whereArgs);
+    final maps =
+        await db.query('parcelas', where: whereClause, whereArgs: whereArgs);
     return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
   }
-  
+
   Future<void> marcarParcelasComoExportadas(List<int> ids) async {
     if (ids.isEmpty) return;
     final db = await _dbHelper.database;
-    await db.update('parcelas', {'exportada': 1}, where: 'id IN (${List.filled(ids.length, '?').join(',')})', whereArgs: ids);
+    await db.update('parcelas', {'exportada': 1},
+        where: 'id IN (${List.filled(ids.length, '?').join(',')})',
+        whereArgs: ids);
   }
 
+  // ===================================================================
+  // ==================== MÉTODO getDistinctLideres ATUALIZADO =========
+  // ===================================================================
   Future<Set<String>> getDistinctLideres() async {
     final db = await _dbHelper.database;
-    final maps = await db.query('parcelas', distinct: true, columns: ['nomeLider']);
-    return maps.map((map) => map['nomeLider'] as String?).whereType<String>().toSet();
+
+    // 1. Busca todos os nomes de líderes que NÃO SÃO NULOS ou vazios.
+    final maps = await db.query(
+        'parcelas',
+        distinct: true,
+        columns: ['nomeLider'],
+        where: 'nomeLider IS NOT NULL AND nomeLider != ?',
+        whereArgs: ['']
+    );
+    final lideres = maps.map((map) => map['nomeLider'] as String).toSet();
+
+    // 2. Faz uma segunda verificação para ver se existe ALGUMA parcela
+    //    onde o nome do líder é NULO ou VAZIO (o caso do gerente).
+    final gerenteMaps = await db.query(
+      'parcelas',
+      columns: ['id'], // Só precisamos saber se existe, não precisamos dos dados
+      where: 'nomeLider IS NULL OR nomeLider = ?',
+      whereArgs: [''],
+      limit: 1, // A consulta para assim que encontrar o primeiro registro
+    );
+
+    // 3. Se a segunda consulta encontrou pelo menos um resultado,
+    //    adicionamos "Gerente" à nossa lista de filtros.
+    if (gerenteMaps.isNotEmpty) {
+      lideres.add('Gerente');
+    }
+
+    return lideres;
   }
+  // ===================================================================
+  // ======================= FIM DA ATUALIZAÇÃO ========================
+  // ===================================================================
+
 
   // --- MÉTODOS DE LIMPEZA ---
 
   Future<void> deletarMultiplasParcelas(List<int> ids) async {
     if (ids.isEmpty) return;
     final db = await _dbHelper.database;
-    await db.delete('parcelas', where: 'id IN (${List.filled(ids.length, '?').join(',')})', whereArgs: ids);
+    await db.delete('parcelas',
+        where: 'id IN (${List.filled(ids.length, '?').join(',')})',
+        whereArgs: ids);
   }
 
   Future<int> limparParcelasExportadas() async {
     final db = await _dbHelper.database;
-    final count = await db.delete('parcelas', where: 'exportada = ?', whereArgs: [1]);
+    final count =
+        await db.delete('parcelas', where: 'exportada = ?', whereArgs: [1]);
     debugPrint('$count parcelas exportadas foram apagadas.');
     return count;
   }
-  
+
   Future<void> limparTodasAsParcelas() async {
     final db = await _dbHelper.database;
     await db.delete('parcelas');

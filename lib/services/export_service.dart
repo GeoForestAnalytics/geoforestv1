@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO COM CORREÇÃO DE ISOLATE E ENCODING)
+// lib/services/export_service.dart (VERSÃO DEFINITIVA COM COORDENAÇÃO DE DADOS)
 
 import 'dart:io';
 import 'dart:convert';
@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+// Imports do projeto
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -25,13 +26,17 @@ import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/utils/constants.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/widgets/manager_export_dialog.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
+import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
-// --- PAYLOADS E FUNÇÕES PARA EXECUÇÃO EM BACKGROUND (COMPUTE) ---
+// ===================================================================
+// <<< MUDANÇA 1: ATUALIZAÇÃO DO PAYLOAD PARA INCLUIR AS ÁRVORES >>>
+// ===================================================================
+// Este objeto agora carrega todos os dados necessários para o Isolate.
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
+  final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
   final String nomeLider;
   final String nomesAjudantes;
   final String nomeZona;
@@ -39,6 +44,7 @@ class _CsvParcelaPayload {
 
   _CsvParcelaPayload({
     required this.parcelasMap,
+    required this.arvoresPorParcelaMap,
     required this.nomeLider,
     required this.nomesAjudantes,
     required this.nomeZona,
@@ -48,27 +54,30 @@ class _CsvParcelaPayload {
 
 class _CsvCubagemPayload {
   final List<Map<String, dynamic>> cubagensMap;
+  final Map<int, List<Map<String, dynamic>>> secoesPorCubagemMap;
   final String nomeLider;
   final String nomesAjudantes;
 
   _CsvCubagemPayload({
     required this.cubagensMap,
+    required this.secoesPorCubagemMap,
     required this.nomeLider,
     required this.nomesAjudantes,
   });
 }
 
-
-
+// ===================================================================
+// <<< MUDANÇA 2: REMOÇÃO DA CONSULTA AO BANCO DENTRO DOS ISOLATES >>>
+// ===================================================================
+// Esta função agora é "pura": ela apenas recebe dados e os formata.
 Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) async {
-  final parcelaRepository = ParcelaRepository();
-  final codigoEpsg = zonasUtmSirgas2000[payload.nomeZona] ?? 31982;
-
+  // Inicializa as projeções de coordenadas
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
     proj4.Projection.add('EPSG:$epsg', def);
   });
   
+  final codigoEpsg = zonasUtmSirgas2000[payload.nomeZona] ?? 31982;
   final projWGS84 = proj4.Projection.get('EPSG:4326');
   final projUTM = proj4.Projection.get('EPSG:$codigoEpsg');
 
@@ -88,11 +97,9 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
       northing = pUtm.y.toStringAsFixed(2);
     }
     
-    List<Arvore> arvores = [];
-    final parcelaId = p.dbId;
-    if (parcelaId != null) {
-        arvores = await parcelaRepository.getArvoresDaParcela(parcelaId);
-    }
+    // Nenhuma consulta ao banco aqui! As árvores vêm direto do payload.
+    final arvoresMap = payload.arvoresPorParcelaMap[p.dbId] ?? [];
+    final arvores = arvoresMap.map((aMap) => Arvore.fromMap(aMap)).toList();
 
     final liderDaColeta = p.nomeLider ?? payload.nomeLider;
     if (arvores.isEmpty) {
@@ -110,17 +117,13 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 }
 
 Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) async {
-  final cubagemRepository = CubagemRepository();
   List<List<dynamic>> rows = [];
   rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'id_db_arvore', 'id_fazenda', 'fazenda', 'talhao', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm']);
   for (var cMap in payload.cubagensMap) {
     final arvore = CubagemArvore.fromMap(cMap);
     
-    List<CubagemSecao> secoes = [];
-    final arvoreId = arvore.id;
-    if (arvoreId != null) {
-      secoes = await cubagemRepository.getSecoesPorArvoreId(arvoreId);
-    }
+    final secoesMap = payload.secoesPorCubagemMap[arvore.id] ?? [];
+    final secoes = secoesMap.map((sMap) => CubagemSecao.fromMap(sMap)).toList();
     
     final liderDaColeta = arvore.nomeLider ?? payload.nomeLider;
     if (secoes.isEmpty) {
@@ -133,6 +136,7 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
   }
   return const ListToCsvConverter().convert(rows);
 }
+
 
 class ExportService {
   final _parcelaRepository = ParcelaRepository();
@@ -187,6 +191,8 @@ class ExportService {
 
     final nomeArquivoColetor = nomeDoColetor.replaceAll(RegExp(r'[^\w]'), '_');
     final String fName = 'geoforest_export_${nomeArquivoColetor}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.csv';
+    
+    // A chamada para _gerarCsvParcela agora é responsável por buscar as árvores
     final path = await _gerarCsvParcela(parcelas, fName);
     
     if (context.mounted) {
@@ -278,6 +284,45 @@ class ExportService {
     }
   }
   
+  // ===================================================================
+  // <<< MUDANÇA 3: A FUNÇÃO "_gerarCsvParcela" AGORA É A COORDENADORA >>>
+  // ===================================================================
+  Future<String> _gerarCsvParcela(List<Parcela> parcelas, String nomeArquivo) async {
+    // 1. Prepara o mapa para guardar as árvores
+    final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap = {};
+    
+    // 2. Antes de chamar o compute, busca TODAS as árvores necessárias na thread principal
+    for (final parcela in parcelas) {
+      if (parcela.dbId != null) {
+        final arvores = await _parcelaRepository.getArvoresDaParcela(parcela.dbId!);
+        arvoresPorParcelaMap[parcela.dbId!] = arvores.map((a) => a.toMap()).toList();
+      }
+    }
+
+    // 3. Prepara o payload com TODOS os dados já coletados
+    final prefs = await SharedPreferences.getInstance();
+    final payload = _CsvParcelaPayload(
+      parcelasMap: parcelas.map((p) => p.toMap()).toList(),
+      arvoresPorParcelaMap: arvoresPorParcelaMap,
+      nomeLider: prefs.getString('nome_lider') ?? 'N/A',
+      nomesAjudantes: prefs.getString('nomes_ajudantes') ?? 'N/A',
+      nomeZona: prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S',
+      proj4Defs: proj4Definitions,
+    );
+
+    // 4. Envia o pacote completo para o isolate, que agora só formata o texto
+    final String csvData = await compute(_generateCsvParcelaDataInIsolate, payload);
+
+    // 5. Salva o arquivo e retorna o caminho
+    final dir = await getApplicationDocumentsDirectory();
+    final path = '${dir.path}/$nomeArquivo';
+    final bom = [0xEF, 0xBB, 0xBF];
+    final bytes = utf8.encode(csvData);
+    await File(path).writeAsBytes([...bom, ...bytes]);
+    return path;
+  }
+  
+  // O restante do arquivo continua aqui...
   Future<void> exportarNovasCubagens(BuildContext context) async {
     try {
       if (!await _requestPermission(context)) return;
@@ -302,7 +347,53 @@ class ExportService {
     }
   }
 
-  Future<void> exportarAnaliseTalhaoCsv({
+  Future<void> _gerarCsvCubagem(BuildContext context, List<CubagemArvore> cubagens, String nomeArquivoOuCaminhoCompleto, bool marcarComoExportado) async {
+    if (cubagens.isEmpty) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma cubagem encontrada para exportar.'), backgroundColor: Colors.orange));
+      return;
+    }
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando CSV de cubagens em segundo plano...')));
+
+    final Map<int, List<Map<String, dynamic>>> secoesPorCubagemMap = {};
+    for (final cubagem in cubagens) {
+      if (cubagem.id != null) {
+        final secoes = await _cubagemRepository.getSecoesPorArvoreId(cubagem.id!);
+        secoesPorCubagemMap[cubagem.id!] = secoes.map((s) => s.toMap()).toList();
+      }
+    }
+    
+    final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+    final payload = _CsvCubagemPayload(
+      cubagensMap: cubagens.map((c) => c.toMap()).toList(),
+      secoesPorCubagemMap: secoesPorCubagemMap,
+      nomeLider: teamProvider.lider ?? 'N/A',
+      nomesAjudantes: teamProvider.ajudantes ?? 'N/A',
+    );
+    final String csvData = await compute(_generateCsvCubagemDataInIsolate, payload);
+    
+    String path;
+    if (nomeArquivoOuCaminhoCompleto.contains('/')) {
+        path = nomeArquivoOuCaminhoCompleto;
+    } else {
+        final dir = await getApplicationDocumentsDirectory();
+        path = '${dir.path}/$nomeArquivoOuCaminhoCompleto';
+    }
+    
+    final bom = [0xEF, 0xBB, 0xBF];
+    final bytes = utf8.encode(csvData);
+    await File(path).writeAsBytes([...bom, ...bytes]);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      await Share.shareXFiles([XFile(path)], subject: 'Exportação de Cubagens GeoForest');
+      if (marcarComoExportado) {
+        final idsParaMarcar = cubagens.map((c) => c.id).whereType<int>().toList();
+        await _cubagemRepository.marcarCubagensComoExportadas(idsParaMarcar);
+      }
+    }
+  }
+
+    Future<void> exportarAnaliseTalhaoCsv({
     required BuildContext context,
     required Talhao talhao,
     required TalhaoAnalysisResult analise,
@@ -443,70 +534,6 @@ class ExportService {
       }
     } catch (e, s) {
       _handleExportError(context, 'criar pacote de exportação', e, s);
-    }
-  }
-
-  Future<String> _gerarCsvParcela(List<Parcela> parcelas, String nomeArquivoOuCaminhoCompleto) async {
-    final prefs = await SharedPreferences.getInstance();
-    final payload = _CsvParcelaPayload(
-      parcelasMap: parcelas.map((p) => p.toMap()).toList(),
-      nomeLider: prefs.getString('nome_lider') ?? 'N/A',
-      nomesAjudantes: prefs.getString('nomes_ajudantes') ?? 'N/A',
-      nomeZona: prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S',
-      proj4Defs: proj4Definitions,
-    );
-    final String csvData = await compute(_generateCsvParcelaDataInIsolate, payload);
-
-    String path;
-    if (nomeArquivoOuCaminhoCompleto.contains('/')) {
-        path = nomeArquivoOuCaminhoCompleto;
-    } else {
-        final dir = await getApplicationDocumentsDirectory();
-        path = '${dir.path}/$nomeArquivoOuCaminhoCompleto';
-    }
-
-    final bom = [0xEF, 0xBB, 0xBF];
-    final bytes = utf8.encode(csvData);
-    await File(path).writeAsBytes([...bom, ...bytes]);
-    
-    return path;
-  }
-
-  Future<void> _gerarCsvCubagem(BuildContext context, List<CubagemArvore> cubagens, String nomeArquivoOuCaminhoCompleto, bool marcarComoExportado) async {
-    if (cubagens.isEmpty) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma cubagem encontrada para exportar.'), backgroundColor: Colors.orange));
-      return;
-    }
-    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando CSV de cubagens em segundo plano...')));
-
-    final teamProvider = Provider.of<TeamProvider>(context, listen: false);
-
-    final payload = _CsvCubagemPayload(
-      cubagensMap: cubagens.map((c) => c.toMap()).toList(),
-      nomeLider: teamProvider.lider ?? 'N/A',
-      nomesAjudantes: teamProvider.ajudantes ?? 'N/A',
-    );
-    final String csvData = await compute(_generateCsvCubagemDataInIsolate, payload);
-    
-    String path;
-    if (nomeArquivoOuCaminhoCompleto.contains('/')) {
-        path = nomeArquivoOuCaminhoCompleto;
-    } else {
-        final dir = await getApplicationDocumentsDirectory();
-        path = '${dir.path}/$nomeArquivoOuCaminhoCompleto';
-    }
-    
-    final bom = [0xEF, 0xBB, 0xBF];
-    final bytes = utf8.encode(csvData);
-    await File(path).writeAsBytes([...bom, ...bytes]);
-
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).removeCurrentSnackBar();
-      await Share.shareXFiles([XFile(path)], subject: 'Exportação de Cubagens GeoForest');
-      if (marcarComoExportado) {
-        final idsParaMarcar = cubagens.map((c) => c.id).whereType<int>().toList();
-        await _cubagemRepository.marcarCubagensComoExportadas(idsParaMarcar);
-      }
     }
   }
 
