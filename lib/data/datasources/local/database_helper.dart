@@ -1,14 +1,11 @@
-// lib/data/datasources/local/database_helper.dart (VERSÃO REALMENTE COMPLETA E CORRIGIDA)
+// lib/data/datasources/local/database_helper.dart (VERSÃO FINAL E SIMPLIFICADA)
 
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
-import 'package:proj4dart/proj4dart.dart' as proj4;
 import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
-// <<< DEFINIÇÕES COMPLETAS RESTAURADAS >>>
+// O mapa de definições permanece, pois é usado em outros lugares (main.dart e export_service.dart)
 final Map<int, String> proj4Definitions = {
   31978: '+proj=utm +zone=18 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
   31979: '+proj=utm +zone=19 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
@@ -20,18 +17,6 @@ final Map<int, String> proj4Definitions = {
   31985: '+proj=utm +zone=25 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
 };
 
-void _initializeProj4InIsolate(Map<int, String> definitions) {
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  }
-  
-  proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
-  definitions.forEach((epsg, def) {
-    proj4.Projection.add('EPSG:$epsg', def);
-  });
-}
-
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._privateConstructor();
   static Database? _database;
@@ -42,9 +27,10 @@ class DatabaseHelper {
 
   Future<Database> get database async => _database ??= await _initDatabase();
 
+  // <<< ESTA É A MUDANÇA CRÍTICA >>>
+  // A inicialização agora é direta, sem 'compute'. Ela confia na inicialização
+  // global que já foi feita no seu main.dart.
   Future<Database> _initDatabase() async {
-    await compute(_initializeProj4InIsolate, proj4Definitions);
-    
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
       version: 31, 
@@ -56,6 +42,8 @@ class DatabaseHelper {
 
   Future<void> _onConfigure(Database db) async => await db.execute('PRAGMA foreign_keys = ON');
 
+  // O resto do seu arquivo (onCreate, onUpgrade, etc.) permanece exatamente o mesmo.
+  // ... cole o resto do seu código de _onCreate, _onUpgrade, e deleteDatabaseFile aqui ...
   Future<void> _onCreate(Database db, int version) async {
      await db.execute('''
       CREATE TABLE projetos (

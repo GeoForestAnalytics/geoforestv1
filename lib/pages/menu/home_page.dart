@@ -1,4 +1,4 @@
-// lib/pages/menu/home_page.dart (VERSÃO REFINADA)
+// lib/pages/menu/home_page.dart (VERSÃO COM EXPORTAÇÃO SIMPLIFICADA)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -96,9 +96,37 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // <<< FUNÇÃO DE EXPORTAÇÃO REFINADA >>>
+  // <<< FUNÇÃO DE EXPORTAÇÃO REFINADA E SIMPLIFICADA >>>
   void _mostrarDialogoExportacao(BuildContext context) {
+    // Instancia o serviço
     final exportService = ExportService();
+
+    // Função auxiliar para evitar repetição de código ao perguntar o tipo de exportação
+    void _mostrarDialogoTipo(BuildContext mainDialogContext, {required Function() onNovas, required Function() onTodas}) {
+        showDialog(
+            context: mainDialogContext,
+            builder: (dialogCtx) => AlertDialog(
+                title: const Text('Tipo de Exportação'),
+                content: const Text('Deseja exportar apenas os dados novos ou um backup completo?'),
+                actions: [
+                    TextButton(
+                        child: const Text('Apenas Novas'),
+                        onPressed: () {
+                            Navigator.of(dialogCtx).pop(); // Fecha o diálogo de alerta
+                            onNovas(); // Executa a função para exportar novos dados
+                        },
+                    ),
+                    ElevatedButton(
+                        child: const Text('Todas (Backup)'),
+                        onPressed: () {
+                            Navigator.of(dialogCtx).pop(); // Fecha o diálogo de alerta
+                            onTodas(); // Executa a função para exportar todos os dados
+                        },
+                    ),
+                ],
+            ),
+        );
+    }
 
     showModalBottomSheet(
       context: context,
@@ -110,36 +138,28 @@ class _HomePageState extends State<HomePage> {
                 style: Theme.of(context).textTheme.titleLarge),
           ),
           ListTile(
-            leading: const Icon(Icons.upload_file_outlined, color: Colors.green),
-            title: const Text('Exportar Novas Coletas (CSV)'),
+            leading: const Icon(Icons.table_rows_outlined, color: Colors.green),
+            title: const Text('Coletas de Parcela (CSV)'),
             onTap: () {
-              Navigator.of(ctx).pop();
-              exportService.exportarDados(context);
+              Navigator.of(ctx).pop(); // Fecha o BottomSheet
+              // Chama a função auxiliar passando os métodos corretos do serviço
+              _mostrarDialogoTipo(
+                  context,
+                  onNovas: () => exportService.exportarDados(context),
+                  onTodas: () => exportService.exportarTodasAsParcelasBackup(context),
+              );
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.archive_outlined, color: Colors.blue),
-            title: const Text('Backup Completo de Coletas (CSV)'),
-            onTap: () {
-              Navigator.of(ctx).pop();
-              exportService.exportarTodasAsParcelasBackup(context);
-            },
-          ),
-          const Divider(),
           ListTile(
             leading: const Icon(Icons.table_chart_outlined, color: Colors.brown),
-            title: const Text('Exportar Novas Cubagens (CSV)'),
+            title: const Text('Cubagens Rigorosas (CSV)'),
             onTap: () {
-              Navigator.of(ctx).pop();
-              exportService.exportarNovasCubagens(context);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.backup_table_outlined, color: Colors.orange),
-            title: const Text('Backup Completo de Cubagens (CSV)'),
-            onTap: () {
-              Navigator.of(ctx).pop();
-              exportService.exportarTodasCubagensBackup(context);
+              Navigator.of(ctx).pop(); // Fecha o BottomSheet
+              _mostrarDialogoTipo(
+                  context,
+                  onNovas: () => exportService.exportarNovasCubagens(context),
+                  onTodas: () => exportService.exportarTodasCubagensBackup(context),
+              );
             },
           ),
           const Divider(),

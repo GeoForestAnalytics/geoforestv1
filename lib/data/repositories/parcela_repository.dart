@@ -1,4 +1,4 @@
-// lib/data/repositories/parcela_repository.dart (VERSÃO CORRIGIDA E COMPLETA)
+// lib/data/repositories/parcela_repository.dart (VERSÃO COM CORREÇÃO DE INTEGRIDADE DO PROJETOID)
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -12,6 +12,7 @@ class ParcelaRepository {
 
   // --- MÉTODOS DE SALVAMENTO E ATUALIZAÇÃO ---
 
+  // <<< ESTE MÉTODO FOI CORRIGIDO PARA GARANTIR O PROJETOID >>>
   Future<Parcela> saveFullColeta(Parcela p, List<Arvore> arvores) async {
     final db = await _dbHelper.database;
     await db.transaction((txn) async {
@@ -21,7 +22,22 @@ class ParcelaRepository {
       final d = p.dataColeta ?? DateTime.now();
       pMap['dataColeta'] = d.toIso8601String();
 
-      // Lógica robusta para identificar o responsável pela coleta
+      // Lógica de segurança para garantir que o projetoId está presente
+      if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
+        final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
+          SELECT A.projetoId 
+          FROM talhoes T
+          INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
+          INNER JOIN atividades A ON F.atividadeId = A.id
+          WHERE T.id = ?
+          LIMIT 1
+        ''', [pMap['talhaoId']]);
+        if (talhaoInfo.isNotEmpty) {
+          pMap['projetoId'] = talhaoInfo.first['projetoId'];
+          p.copyWith(projetoId: talhaoInfo.first['projetoId'] as int?);
+        }
+      }
+
       final prefs = await SharedPreferences.getInstance();
       String? nomeDoResponsavel = prefs.getString('nome_lider');
       if (nomeDoResponsavel == null || nomeDoResponsavel.isEmpty) {
@@ -81,15 +97,12 @@ class ParcelaRepository {
     return null;
   }
   
-  // <<< MÉTODO QUE FALTAVA ADICIONADO AQUI >>>
-  /// Busca uma parcela específica pelo seu ID textual (ex: 'P01') dentro de um talhão.
-  /// Retorna a [Parcela] se encontrada, caso contrário retorna null.
   Future<Parcela?> getParcelaPorIdParcela(int talhaoId, String idParcela) async {
     final db = await _dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.query(
       'parcelas',
       where: 'talhaoId = ? AND idParcela = ?',
-      whereArgs: [talhaoId, idParcela.trim()], // Adicionado .trim() por segurança
+      whereArgs: [talhaoId, idParcela.trim()],
     );
 
     if (maps.isNotEmpty) {
@@ -139,7 +152,7 @@ class ParcelaRepository {
 
   Future<List<Parcela>> getUnexportedConcludedParcelasFiltrado({Set<int>? projetoIds, Set<String>? lideresNomes}) async {
     final db = await _dbHelper.database;
-    String whereClause = 'status = ? AND exportada = ?';
+    String whereClause = 'status = ? AND exportada = ? AND projetoId IS NOT NULL';
     List<dynamic> whereArgs = [StatusParcela.concluida.name, 0];
 
     if (projetoIds != null && projetoIds.isNotEmpty) {
@@ -157,7 +170,7 @@ class ParcelaRepository {
 
   Future<List<Parcela>> getTodasConcluidasParcelasFiltrado({Set<int>? projetoIds, Set<String>? lideresNomes}) async {
     final db = await _dbHelper.database;
-    String whereClause = 'status = ?';
+    String whereClause = 'status = ? AND projetoId IS NOT NULL';
     List<dynamic> whereArgs = [StatusParcela.concluida.name];
 
     if (projetoIds != null && projetoIds.isNotEmpty) {
@@ -182,7 +195,6 @@ class ParcelaRepository {
   Future<Set<String>> getDistinctLideres() async {
     final db = await _dbHelper.database;
     final maps = await db.query('parcelas', distinct: true, columns: ['nomeLider']);
-    // Filtra nulos e converte para um Set para ter apenas valores únicos
     return maps.map((map) => map['nomeLider'] as String?).whereType<String>().toSet();
   }
 
