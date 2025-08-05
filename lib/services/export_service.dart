@@ -499,6 +499,7 @@ class ExportService {
       todasAsParcelas.addAll(parcelasDoTalhao.where((p) => p.status == StatusParcela.concluida));
     }
     if (todasAsParcelas.isNotEmpty) {
+      // O nome do arquivo aqui é o caminho completo, não precisa de um nome separado.
       await _gerarCsvParcela(todasAsParcelas, filePath);
     }
   }

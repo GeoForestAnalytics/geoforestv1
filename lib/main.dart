@@ -1,4 +1,4 @@
-// lib/main.dart (VERSÃO COM A CORREÇÃO CRÍTICA DE INICIALIZAÇÃO)
+// lib/main.dart (VERSÃO FINAL COM TODAS AS CORREÇÕES DE INICIALIZAÇÃO)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -6,10 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
-// <<< 1. IMPORT NECESSÁRIO >>>
 import 'package:sqflite_common_ffi/sqflite_ffi.dart'; 
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
+
+// <<< 1. IMPORTS ADICIONAIS PARA INICIALIZAÇÃO GLOBAL DO PROJ4 >>>
+import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:proj4dart/proj4dart.dart' as proj4;
 
 // Importações do Projeto
 import 'package:geoforestv1/pages/menu/home_page.dart';
@@ -26,15 +29,31 @@ import 'package:geoforestv1/pages/gerente/gerente_main_page.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/pages/gerente/gerente_map_page.dart';
 
+// <<< 2. FUNÇÃO GLOBAL PARA INICIALIZAR AS DEFINIÇÕES DE PROJEÇÃO >>>
+// Garante que as definições de coordenadas estejam disponíveis tanto para a
+// thread principal (usada na exportação) quanto para qualquer isolate.
+void initializeProj4Definitions() {
+  try {
+    // Verifica se já foi inicializado para não fazer de novo.
+    proj4.Projection.get('EPSG:4326');
+  } catch (_) {
+    debugPrint("Inicializando definições Proj4 para o escopo global...");
+    proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+    proj4Definitions.forEach((epsg, def) {
+      proj4.Projection.add('EPSG:$epsg', def);
+    });
+  }
+}
 
 // PONTO DE ENTRADA PRINCIPAL DO APP
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // <<< 2. MUDANÇA CRÍTICA APLICADA AQUI >>>
-  // Inicializa o FFI para plataformas desktop ANTES de qualquer outra coisa.
-  // Isso garante que a 'databaseFactory' esteja disponível globalmente para a
-  // thread principal e para qualquer isolate (background thread) que for criado.
+  // <<< 3. INICIALIZAÇÃO DO PROJ4 APLICADA AQUI >>>
+  // Isso resolve o problema de exportação de coordenadas.
+  initializeProj4Definitions();
+
+  // A sua correção crítica para o FFI, que já estava correta, permanece aqui.
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -48,7 +67,7 @@ Future<void> main() async {
   runApp(const AppServicesLoader());
 }
 
-// AppServicesLoader
+// AppServicesLoader (Nenhuma mudança aqui, permanece igual)
 class AppServicesLoader extends StatefulWidget {
   const AppServicesLoader({super.key});
 
@@ -74,7 +93,6 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
       await SystemChrome.setPreferredOrientations(
         [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown],
       );
-      // <<< 3. A inicialização do FFI foi MOVIDA para o main(), então não é mais necessária aqui.
     } catch (e) {
       print("!!!!!! ERRO NA INICIALIZAÇÃO DOS SERVIÇOS: $e !!!!!");
       rethrow;

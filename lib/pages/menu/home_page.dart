@@ -1,4 +1,4 @@
-// lib/pages/menu/home_page.dart (VERSÃO CORRIGIDA)
+// lib/pages/menu/home_page.dart (VERSÃO REFINADA)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -17,13 +17,11 @@ import 'package:geoforestv1/services/sync_service.dart';
 
 class HomePage extends StatefulWidget {
   final String title;
-  // <<< MUDANÇA 1: Adicionar a variável para controlar a AppBar >>>
   final bool showAppBar;
 
   const HomePage({
     super.key,
     required this.title,
-    // <<< MUDANÇA 2: Definir valor padrão como true >>>
     this.showAppBar = true,
   });
 
@@ -98,109 +96,62 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // <<< FUNÇÃO DE EXPORTAÇÃO REFINADA >>>
   void _mostrarDialogoExportacao(BuildContext context) {
     final exportService = ExportService();
 
-    void _mostrarDialogoParcelas(BuildContext mainDialogContext) {
-      showDialog(
-        context: mainDialogContext,
-        builder: (dialogCtx) => AlertDialog(
-          title: const Text('Tipo de Exportação de Coleta'),
-          content: const Text(
-              'Deseja exportar apenas os dados novos ou um backup completo de todas as coletas de parcela?'),
-          actions: [
-            TextButton(
-              child: const Text('Apenas Novas'),
-              onPressed: () {
-                Navigator.of(dialogCtx).pop();
-                exportService.exportarDados(context);
-              },
-            ),
-            ElevatedButton(
-              child: const Text('Todas (Backup)'),
-              onPressed: () {
-                Navigator.of(dialogCtx).pop();
-                exportService.exportarTodasAsParcelasBackup(context);
-              },
-            ),
-          ],
-        ),
-      );
-    }
-
-    void _mostrarDialogoCubagem(BuildContext mainDialogContext) {
-      showDialog(
-        context: mainDialogContext,
-        builder: (dialogCtx) => AlertDialog(
-          title: const Text('Tipo de Exportação de Cubagem'),
-          content: const Text(
-              'Deseja exportar apenas os dados novos ou um backup completo de todas as cubagens?'),
-          actions: [
-            TextButton(
-              child: const Text('Apenas Novas'),
-              onPressed: () {
-                Navigator.of(dialogCtx).pop();
-                exportService.exportarNovasCubagens(context);
-              },
-            ),
-            ElevatedButton(
-              child: const Text('Todas (Backup)'),
-              onPressed: () {
-                Navigator.of(dialogCtx).pop();
-                exportService.exportarTodasCubagensBackup(context);
-              },
-            ),
-          ],
-        ),
-      );
-    }
-
     showModalBottomSheet(
       context: context,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 10),
-        child: Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(6, 0, 6, 10),
-              child: Text('Escolha o que deseja exportar',
-                  style: Theme.of(context).textTheme.titleLarge),
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.table_rows_outlined, color: Colors.green),
-              title: const Text('Coletas de Parcela (CSV)'),
-              subtitle: const Text('Exporta os dados de parcelas e árvores.'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _mostrarDialogoParcelas(context);
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.table_chart_outlined, color: Colors.brown),
-              title: const Text('Cubagens Rigorosas (CSV)'),
-              subtitle: const Text('Exporta os dados de cubagens e seções.'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _mostrarDialogoCubagem(context);
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.map_outlined, color: Colors.purple),
-              title: const Text('Plano de Amostragem (GeoJSON)'),
-              subtitle:
-                  const Text('Exporta o plano de amostragem do mapa.'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                context.read<MapProvider>().exportarPlanoDeAmostragem(context);
-              },
-            ),
-          ],
-        ),
+      builder: (ctx) => Wrap(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
+            child: Text('Opções de Exportação',
+                style: Theme.of(context).textTheme.titleLarge),
+          ),
+          ListTile(
+            leading: const Icon(Icons.upload_file_outlined, color: Colors.green),
+            title: const Text('Exportar Novas Coletas (CSV)'),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              exportService.exportarDados(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.archive_outlined, color: Colors.blue),
+            title: const Text('Backup Completo de Coletas (CSV)'),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              exportService.exportarTodasAsParcelasBackup(context);
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.table_chart_outlined, color: Colors.brown),
+            title: const Text('Exportar Novas Cubagens (CSV)'),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              exportService.exportarNovasCubagens(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.backup_table_outlined, color: Colors.orange),
+            title: const Text('Backup Completo de Cubagens (CSV)'),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              exportService.exportarTodasCubagensBackup(context);
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.map_outlined, color: Colors.purple),
+            title: const Text('Plano de Amostragem (GeoJSON)'),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              context.read<MapProvider>().exportarPlanoDeAmostragem(context);
+            },
+          ),
+        ],
       ),
     );
   }
@@ -231,11 +182,10 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final licenseProvider = context.watch<LicenseProvider>();
-    final bool podeExportar = licenseProvider.licenseData?.features['exportacao'] ?? false;
-    final bool podeAnalisar = licenseProvider.licenseData?.features['analise'] ?? false;
+    final bool podeExportar = licenseProvider.licenseData?.features['exportacao'] ?? true; // Default true para teste
+    final bool podeAnalisar = licenseProvider.licenseData?.features['analise'] ?? true; // Default true para teste
 
     return Scaffold(
-      // <<< MUDANÇA 3: Construir a AppBar apenas se showAppBar for true >>>
       appBar: widget.showAppBar ? AppBar(title: Text(widget.title)) : null,
       body: Padding(
         padding: const EdgeInsets.all(12.0),

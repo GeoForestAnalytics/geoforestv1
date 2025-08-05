@@ -1,4 +1,4 @@
-// lib/widgets/manager_export_dialog.dart (VERSÃO CORRIGIDA E MELHORADA)
+// lib/widgets/manager_export_dialog.dart (VERSÃO COM REFINAMENTO VISUAL)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
@@ -70,6 +70,8 @@ class _ManagerExportDialogState extends State<ManagerExportDialog> {
 
     return AlertDialog(
       title: Text(widget.isBackup ? 'Filtros para Backup' : 'Filtros de Exportação'),
+      // Adicionado padding ao content para dar um respiro
+      contentPadding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
@@ -78,26 +80,19 @@ class _ManagerExportDialogState extends State<ManagerExportDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Deixe em branco para incluir todos.', style: TextStyle(color: Colors.grey)),
-              const Divider(),
+              const SizedBox(height: 16),
               
-              // Seção de Projetos
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Projetos', style: TextStyle(fontWeight: FontWeight.bold)),
-                  if (widget.projetosDisponiveis.isNotEmpty)
-                    TextButton(onPressed: () => _toggleAllProjetos(!allProjetosSelected), child: Text(allProjetosSelected ? 'Limpar' : 'Todos')),
-                ],
-              ),
-              if (widget.projetosDisponiveis.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text('Nenhum projeto disponível.', style: TextStyle(color: Colors.grey)),
-                )
-              else
-                ...widget.projetosDisponiveis.map((projeto) {
+              // <<< INÍCIO DO REFINAMENTO VISUAL >>>
+              // Seção de Projetos agrupada em um Card
+              _buildFilterSection(
+                title: 'Projetos',
+                isEmpty: widget.projetosDisponiveis.isEmpty,
+                emptyText: 'Nenhum projeto disponível.',
+                allSelected: allProjetosSelected,
+                onToggleAll: (value) => _toggleAllProjetos(value),
+                children: widget.projetosDisponiveis.map((projeto) {
                   return CheckboxListTile(
-                    title: Text(projeto.nome),
+                    title: Text(projeto.nome, overflow: TextOverflow.ellipsis),
                     value: _selectedProjetoIds.contains(projeto.id),
                     onChanged: (value) {
                       setState(() {
@@ -110,30 +105,19 @@ class _ManagerExportDialogState extends State<ManagerExportDialog> {
                     },
                   );
                 }).toList(),
-
-              const Divider(),
-
-              // <<< INÍCIO DA CORREÇÃO PRINCIPAL >>>
-              // Seção de Equipes
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Equipes', style: TextStyle(fontWeight: FontWeight.bold)),
-                  if (widget.lideresDisponiveis.isNotEmpty)
-                    TextButton(onPressed: () => _toggleAllLideres(!allLideresSelected), child: Text(allLideresSelected ? 'Limpar' : 'Todas')),
-                ],
               ),
-              // Verifica se a lista de líderes está vazia e mostra uma mensagem.
-              if (widget.lideresDisponiveis.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text('Nenhuma equipe com coletas encontradas.', style: TextStyle(color: Colors.grey)),
-                )
-              else
-                // Constrói a lista de Checkboxes a partir do Set
-                ...widget.lideresDisponiveis.map((lider) {
+              const SizedBox(height: 16),
+
+              // Seção de Equipes agrupada em um Card
+              _buildFilterSection(
+                title: 'Equipes',
+                isEmpty: widget.lideresDisponiveis.isEmpty,
+                emptyText: 'Nenhuma equipe com coletas encontradas.',
+                allSelected: allLideresSelected,
+                onToggleAll: (value) => _toggleAllLideres(value),
+                children: widget.lideresDisponiveis.map((lider) {
                   return CheckboxListTile(
-                    title: Text(lider),
+                    title: Text(lider, overflow: TextOverflow.ellipsis),
                     value: _selectedLideres.contains(lider),
                     onChanged: (value) {
                       setState(() {
@@ -146,7 +130,8 @@ class _ManagerExportDialogState extends State<ManagerExportDialog> {
                     },
                   );
                 }).toList(),
-              // <<< FIM DA CORREÇÃO PRINCIPAL >>>
+              ),
+              // <<< FIM DO REFINAMENTO VISUAL >>>
             ],
           ),
         ),
@@ -165,6 +150,57 @@ class _ManagerExportDialogState extends State<ManagerExportDialog> {
           child: const Text('Exportar'),
         )
       ],
+    );
+  }
+
+  // <<< WIDGET AUXILIAR PARA CRIAR AS SEÇÕES >>>
+  Widget _buildFilterSection({
+    required String title,
+    required bool isEmpty,
+    required String emptyText,
+    required bool allSelected,
+    required ValueChanged<bool?> onToggleAll,
+    required List<Widget> children,
+  }) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+                if (!isEmpty)
+                  TextButton(onPressed: () => onToggleAll(!allSelected), child: Text(allSelected ? 'Limpar' : 'Todos')),
+              ],
+            ),
+            const Divider(height: 1),
+            if (isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(emptyText, style: const TextStyle(color: Colors.grey)),
+              )
+            else
+              // Constrain the height to prevent the dialog from growing too large
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200), // Adjust height as needed
+                child: ListView(
+                  shrinkWrap: true,
+                  children: children,
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
