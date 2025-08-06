@@ -1,11 +1,13 @@
-// lib/pages/projetos/lista_projetos_page.dart (VERSÃO ATUALIZADA COM EXCLUSÃO COMPLETA)
+// lib/pages/projetos/lista_projetos_page.dart (VERSÃO FINAL COM DELEGAÇÃO)
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 // Imports do projeto
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
@@ -13,9 +15,8 @@ import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/pages/projetos/detalhes_projeto_page.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/data/repositories/import_repository.dart';
-import 'package:geoforestv1/services/sync_service.dart'; // <<< 1. IMPORTE O SYNC SERVICE
+import 'package:geoforestv1/services/sync_service.dart';
 import 'form_projeto_page.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 
 class ListaProjetosPage extends StatefulWidget {
   final String title;
@@ -34,14 +35,12 @@ class ListaProjetosPage extends StatefulWidget {
 class _ListaProjetosPageState extends State<ListaProjetosPage> {
   final _projetoRepository = ProjetoRepository();
   final _importRepository = ImportRepository();
-  final _syncService = SyncService(); // <<< 2. INSTANCIE O SYNC SERVICE
+  final _syncService = SyncService();
   
   List<Projeto> projetos = [];
   bool _isLoading = true;
-
   bool _isSelectionMode = false;
   final Set<int> _selectedProjetos = {};
-  
   bool _isGerente = false;
 
   @override
@@ -81,15 +80,136 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     }
   }
 
+  // ===================================================================
+  // <<< FUNÇÃO DE DELEGAR PROJETO (Ação do Gerente) >>>
+  // ===================================================================
   Future<void> _delegarProjeto(Projeto projeto) async {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Funcionalidade de delegação a ser implementada em um serviço.')));
+    final bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delegar Projeto"),
+        content: Text("Você gerará uma chave de acesso para o projeto '${projeto.nome}'. Compartilhe esta chave com a empresa contratada para que ela possa coletar e sincronizar os dados para você.\n\nDeseja continuar?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text("Cancelar")),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text("Gerar Chave")),
+        ],
+      ),
+    );
+
+    if (confirmar != true || !mounted) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final functions = FirebaseFunctions.instanceFor(region: 'southamerica-east1');
+      final callable = functions.httpsCallable('delegarProjeto');
+      final result = await callable.call(<String, dynamic>{
+        'projetoId': projeto.id,
+        'nomeProjeto': projeto.nome,
+      });
+
+      final chave = result.data['chave'];
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text("Chave Gerada com Sucesso!"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Envie esta chave para a empresa contratada:"),
+              const SizedBox(height: 16),
+              SelectableText(chave, style: const TextStyle(fontWeight: FontWeight.bold, backgroundColor: Colors.black12)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: chave));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Chave copiada!")));
+              },
+              child: const Text("Copiar Chave"),
+            ),
+            FilledButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text("Fechar")),
+          ],
+        ),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro [${e.code}]: ${e.message}"), backgroundColor: Colors.red));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro inesperado: $e"), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  // ===================================================================
+  // <<< FUNÇÕES DE VINCULAR PROJETO (Ação do Terceiro) >>>
+  // ===================================================================
+  Future<void> _vincularProjetoComChave(String chave) async {
+    if (chave.trim().isEmpty) return;
+    Navigator.of(context).pop(); // Fecha o BottomSheet
+    setState(() => _isLoading = true);
+
+    try {
+      final functions = FirebaseFunctions.instanceFor(region: 'southamerica-east1');
+      final callable = functions.httpsCallable('vincularProjetoDelegado');
+      await callable.call({'chave': chave.trim()});
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Projeto vinculado! Sincronizando para baixar os dados..."),
+        backgroundColor: Colors.green,
+      ));
+      
+      await _syncService.sincronizarDados();
+      await _checkUserRoleAndLoadProjects();
+
+    } on FirebaseFunctionsException catch (e) {
+       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro [${e.code}]: ${e.message}"), backgroundColor: Colors.red));
+      }
+    } catch (e) {
+       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro inesperado: $e"), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _mostrarDialogoInserirChave() async {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Funcionalidade de vínculo a ser implementada em um serviço.')));
+    final controller = TextEditingController();
+    final chave = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Vincular Projeto Delegado"),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: "Cole a chave aqui"),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text("Cancelar")),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(controller.text), child: const Text("Vincular")),
+        ],
+      ),
+    );
+
+    if (chave != null && chave.isNotEmpty && mounted) {
+      await _vincularProjetoComChave(chave);
+    }
   }
 
-  Future<void> _toggleArchiveStatus(Projeto projeto) async {
+  // ... (O resto das suas funções _toggleArchiveStatus, _iniciarImportacao, etc., permanecem as mesmas)
+    Future<void> _toggleArchiveStatus(Projeto projeto) async {
     final novoStatus = projeto.status == 'ativo' ? 'arquivado' : 'ativo';
     final projetoAtualizado = projeto.copyWith(status: novoStatus);
     await _projetoRepository.updateProjeto(projetoAtualizado);
@@ -261,9 +381,9 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       .then((_) => _checkUserRoleAndLoadProjects());
   }
 
+
   @override
   Widget build(BuildContext context) {
-    // ... seu método build continua igual ...
     return Scaffold(
       appBar: _isSelectionMode ? _buildSelectionAppBar() : _buildNormalAppBar(),
       body: _isLoading
@@ -397,10 +517,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
                 leading: const Icon(Icons.key_outlined),
                 title: const Text('Vincular Projeto Delegado'),
                 subtitle: const Text('Insira a chave fornecida pelo seu cliente'),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  _mostrarDialogoInserirChave();
-                },
+                onTap: () => _mostrarDialogoInserirChave(),
               ),
             ],
           ),

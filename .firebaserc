@@ -1,6 +1,6 @@
 {
   "projects": {
-    "default": "geoforestanalytics-0315",
+    "default": "geoforestv1",
     "y": "geoforestcollector"
   },
   "targets": {},

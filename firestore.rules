@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Regra para a coleção de clientes (licenças)
+    match /clientes/{licenseId} {
+
+      // Qualquer usuário autenticado pode tentar LER um documento de licença.
+      // A segurança real acontece nas subcoleções. Isso permite que a Cloud Function
+      // verifique a existência de documentos sem falhar.
+      allow read: if request.auth != null;
+
+      // Um usuário SÓ PODE CRIAR um documento de licença para SI MESMO.
+      // Isso acontece durante o registro, quando o UID dele se torna o ID da licença.
+      allow create: if request.auth.uid == licenseId;
+      
+      // APENAS UM GERENTE pode ATUALIZAR o documento da licença
+      // (ex: para adicionar/remover membros no mapa 'usuariosPermitidos').
+      // Verificamos isso através do Custom Claim que a sua função já cria!
+      allow update: if request.auth.token.licenseId == licenseId &&
+                     request.auth.token.cargo == 'gerente';
+      
+      // Ninguém pode deletar um documento de licença diretamente (mais seguro).
+      allow delete: if false;
+
+
+      // Regra para TODAS as subcoleções (projetos, dados_coleta, etc.)
+      match /{subcollection}/{docId=**} {
+
+        // PERMISSÃO DE LEITURA E ESCRITA:
+        // Permite a operação SOMENTE SE o 'licenseId' carimbado no token do usuário
+        // for exatamente o mesmo que o {licenseId} do documento que ele está tentando acessar.
+        //
+        // Isso é super eficiente (0 leituras extras) e muito seguro.
+        allow read, write: if request.auth.token.licenseId == licenseId;
+      }
+    }
+
+    // Regra de delegação. Permite que qualquer usuário autenticado leia e atualize
+    // uma chave. A lógica de segurança aqui fica na sua Cloud Function,
+    // que verifica se a chave está 'pendente', o que é uma abordagem válida.
+    match /{path=**}/chavesDeDelegacao/{chaveId} {
+      allow read, update: if request.auth != null;
+    }
+  }
+}

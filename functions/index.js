@@ -1,7 +1,8 @@
-// functions/index.js (VERSÃO FINAL LIMPA E CORRIGIDA)
+// functions/index.js (VERSÃO FINAL COMPLETA COM CUSTOM CLAIMS)
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const { v4: uuidv4 } = require("uuid");
 
 admin.initializeApp();
 const auth = admin.auth();
@@ -65,37 +66,24 @@ exports.updateUserLicenseClaim = functions
 exports.adicionarMembroEquipe = functions
     .region("southamerica-east1")
     .https.onCall(async (data, context) => {
-      if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "Ação não autenticada.");
+      if (!context.auth || !context.auth.token.cargo || context.auth.token.cargo !== 'gerente') {
+        throw new functions.https.HttpsError("permission-denied", "Você não tem permissão para adicionar membros.");
       }
-
+      
       const { email, password, name, cargo } = data;
       if (!email || !password || !name || !cargo || password.length < 6) {
         throw new functions.https.HttpsError("invalid-argument", "Dados inválidos.");
       }
 
-      const managerUid = context.auth.uid;
-      const licenseQuery = await db
-        .collection("clientes")
-        .where(`usuariosPermitidos.${managerUid}.cargo`, "==", "gerente")
-        .limit(1)
-        .get();
-
-      if (licenseQuery.empty) {
-        throw new functions.https.HttpsError("permission-denied", "Você não tem permissão para adicionar membros.");
-      }
-
-      const licenseDoc = licenseQuery.docs[0];
+      const managerLicenseId = context.auth.token.licenseId;
 
       try {
-        console.log(`Gerente ${managerUid} tentando criar usuário ${email}`);
         const userRecord = await admin.auth().createUser({
           email: email,
           password: password,
           displayName: name,
         });
 
-        console.log(`Usuário ${userRecord.uid} criado. Atualizando licença ${licenseDoc.id}`);
         const novoMembroData = {
           cargo: cargo,
           email: email,
@@ -103,22 +91,18 @@ exports.adicionarMembroEquipe = functions
           adicionadoEm: admin.firestore.FieldValue.serverTimestamp()
         };
         
-        console.log(`---> VAI ATUALIZAR COM A VERSÃO CORRIGIDA (arrayUnion) <---`);
-
-        await licenseDoc.ref.update({
+        await db.collection("clientes").doc(managerLicenseId).update({
             [`usuariosPermitidos.${userRecord.uid}`]: novoMembroData,
             "uidsPermitidos": admin.firestore.FieldValue.arrayUnion(userRecord.uid),
         });
 
-        console.log(`Licença atualizada com sucesso para o novo membro ${userRecord.uid}`);
         return { success: true, message: `Usuário '${name}' adicionado com sucesso!` };
 
       } catch (error) {
-        console.error("Falha ao criar membro da equipe:", error);
         if (error.code === 'auth/email-already-exists') {
             throw new functions.https.HttpsError("already-exists", "Este email já está em uso.");
         }
-        throw new functions.https.HttpsError("internal", "Ocorreu um erro interno.");
+        throw new functions.https.HttpsError("internal", "Ocorreu um erro interno ao criar membro.");
       }
     });
 
@@ -128,76 +112,139 @@ exports.adicionarMembroEquipe = functions
 exports.deletarProjeto = functions
     .region("southamerica-east1")
     .https.onCall(async (data, context) => {
-        if (!context.auth) {
-            throw new functions.https.HttpsError("unauthenticated", "Ação não autenticada.");
+      if (!context.auth || !context.auth.token.cargo || context.auth.token.cargo !== 'gerente') {
+        throw new functions.https.HttpsError("permission-denied", "Você não tem permissão para excluir projetos.");
+      }
+
+      const { projetoId } = data;
+      if (!projetoId) {
+        throw new functions.https.HttpsError("invalid-argument", "O ID do projeto é obrigatório.");
+      }
+      
+      const licenseId = context.auth.token.licenseId;
+      const clienteRef = db.collection("clientes").doc(licenseId);
+      const batchSize = 400;
+      let batch = db.batch();
+      let operationCount = 0;
+
+      async function commitBatchIfNeeded() {
+        if (operationCount >= batchSize) {
+          await batch.commit();
+          batch = db.batch();
+          operationCount = 0;
         }
+      }
 
-        const gerenteUid = context.auth.uid;
-        const { projetoId } = data;
+      try {
+        const atividadesSnap = await clienteRef.collection('atividades').where('projetoId', '==', projetoId).get();
+        const atividadeIds = atividadesSnap.docs.map((doc) => doc.data()['id']);
 
-        if (!projetoId) {
-            throw new functions.https.HttpsError("invalid-argument", "O ID do projeto é obrigatório.");
-        }
+        if (atividadeIds.length > 0) {
+          const fazendasSnap = await clienteRef.collection('fazendas').where('atividadeId', 'in', atividadeIds).get();
+          const fazendaIdsStr = fazendasSnap.docs.map((doc) => doc.data()['id']);
 
-        console.log(`Gerente ${gerenteUid} solicitou a exclusão do projeto ${projetoId}`);
+          if (fazendaIdsStr.length > 0) {
+            const talhoesSnap = await clienteRef.collection('talhoes').where('fazendaId', 'in', fazendaIdsStr).get();
+            const talhaoIds = talhoesSnap.docs.map((doc) => doc.data()['id']);
 
-        const licenseQuery = await db.collection("clientes")
-            .where(`usuariosPermitidos.${gerenteUid}.cargo`, "==", "gerente")
-            .limit(1).get();
-
-        if (licenseQuery.empty) {
-            throw new functions.https.HttpsError("permission-denied", "Você não tem permissão para excluir projetos.");
-        }
-
-        const licenseDoc = licenseQuery.docs[0];
-        const clienteRef = licenseDoc.ref;
-        const batchSize = 400; 
-        let batch = db.batch();
-        let operationCount = 0;
-
-        async function commitBatchIfNeeded() {
-            if (operationCount >= batchSize) {
-                console.log(`Executando lote com ${operationCount} operações...`);
-                await batch.commit();
-                batch = db.batch();
-                operationCount = 0;
+            if (talhaoIds.length > 0) {
+              const parcelasSnap = await clienteRef.collection('dados_coleta').where('talhaoId', 'in', talhaoIds).get();
+              for (const doc of parcelasSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
+              
+              const cubagensSnap = await clienteRef.collection('dados_cubagem').where('talhaoId', 'in', talhaoIds).get();
+              for (const doc of cubagensSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
             }
+            for (const doc of talhoesSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
+          }
+          for (const doc of fazendasSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
         }
+        for (const doc of atividadesSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
 
-        try {
-            const atividadesSnap = await clienteRef.collection('atividades').where('projetoId', '==', projetoId).get();
-            const atividadeIds = atividadesSnap.docs.map((doc) => doc.data()['id']);
+        batch.delete(clienteRef.collection('projetos').doc(projetoId.toString()));
+        operationCount++;
 
-            if (atividadeIds.length > 0) {
-                const fazendasSnap = await clienteRef.collection('fazendas').where('atividadeId', 'in', atividadeIds).get();
-                const fazendaIdsStr = fazendasSnap.docs.map((doc) => doc.data()['id']);
-
-                if (fazendaIdsStr.length > 0) {
-                    const talhoesSnap = await clienteRef.collection('talhoes').where('fazendaId', 'in', fazendaIdsStr).get();
-                    const talhaoIds = talhoesSnap.docs.map((doc) => doc.data()['id']);
-
-                    if (talhaoIds.length > 0) {
-                        const parcelasSnap = await clienteRef.collection('dados_coleta').where('talhaoId', 'in', talhaoIds).get();
-                        for (const doc of parcelasSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
-                        
-                        const cubagensSnap = await clienteRef.collection('dados_cubagem').where('talhaoId', 'in', talhaoIds).get();
-                        for (const doc of cubagensSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
-                    }
-                    for (const doc of talhoesSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
-                }
-                for (const doc of fazendasSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
-            }
-            for (const doc of atividadesSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
-
-            batch.delete(clienteRef.collection('projetos').doc(projetoId.toString()));
-            operationCount++;
-
-            await batch.commit(); 
-            console.log(`Projeto ${projetoId} e todos os seus dados foram excluídos com sucesso.`);
-            return { success: true, message: "Projeto excluído com sucesso." };
-
-        } catch (error) {
-            console.error("Falha ao excluir projeto:", error);
-            throw new functions.https.HttpsError("internal", "Ocorreu um erro interno ao tentar excluir o projeto.");
+        if (operationCount > 0) {
+          await batch.commit();
         }
+        
+        return { success: true, message: "Projeto excluído com sucesso." };
+
+      } catch (error) {
+        console.error("Falha ao excluir projeto:", error);
+        throw new functions.https.HttpsError("internal", "Ocorreu um erro interno ao tentar excluir o projeto.");
+      }
+    });
+
+// =========================================================================
+// FUNÇÃO 4: Gerar a chave de delegação (Ação do Gerente)
+// =========================================================================
+exports.delegarProjeto = functions
+    .region("southamerica-east1")
+    .https.onCall(async (data, context) => {
+      if (!context.auth || !context.auth.token.cargo || context.auth.token.cargo !== 'gerente') {
+        throw new functions.https.HttpsError("permission-denied", "Apenas gerentes podem delegar projetos.");
+      }
+
+      const { projetoId, nomeProjeto } = data;
+      if (!projetoId || !nomeProjeto) {
+        throw new functions.https.HttpsError("invalid-argument", "Dados do projeto inválidos.");
+      }
+      
+      const managerLicenseId = context.auth.token.licenseId;
+      const chaveId = uuidv4();
+      const chaveRef = db.collection("clientes").doc(managerLicenseId).collection("chavesDeDelegacao").doc(chaveId);
+
+      await chaveRef.set({
+        status: "pendente",
+        licenseIdConvidada: null,
+        empresaConvidada: "Aguardando Vínculo",
+        dataCriacao: admin.firestore.FieldValue.serverTimestamp(),
+        projetosPermitidos: [projetoId],
+        nomesProjetos: [nomeProjeto],
+      });
+
+      console.log(`Chave ${chaveId} gerada para o projeto ${projetoId} pela licença ${managerLicenseId}`);
+      return { chave: chaveId };
+    });
+
+// =========================================================================
+// FUNÇÃO 5: Vincular o projeto usando a chave (Ação do Terceiro)
+// =========================================================================
+exports.vincularProjetoDelegado = functions
+    .region("southamerica-east1")
+    .https.onCall(async (data, context) => {
+      if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Ação não autenticada.");
+      }
+
+      const contractorLicenseId = context.auth.uid;
+      const { chave } = data;
+
+      if (!chave) {
+        throw new functions.https.HttpsError("invalid-argument", "Uma chave de delegação é necessária.");
+      }
+
+      const query = db.collectionGroup("chavesDeDelegacao").where(admin.firestore.FieldPath.documentId(), "==", chave);
+      const snapshot = await query.get();
+
+      if (snapshot.empty) {
+        throw new functions.https.HttpsError("not-found", "Chave inválida ou não encontrada.");
+      }
+
+      const doc = snapshot.docs[0];
+      const docData = doc.data();
+
+      if (docData.status !== "pendente") {
+        throw new functions.https.HttpsError("already-exists", "Esta chave já foi utilizada ou foi revogada.");
+      }
+
+      await doc.ref.update({
+        status: "ativa",
+        licenseIdConvidada: contractorLicenseId,
+        empresaConvidada: context.auth.token.name || context.auth.token.email,
+        dataVinculo: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`Chave ${chave} vinculada com sucesso à licença ${contractorLicenseId}.`);
+      return { success: true, message: "Projeto vinculado com sucesso!" };
     });
