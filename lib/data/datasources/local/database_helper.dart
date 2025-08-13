@@ -33,7 +33,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 31, 
+      version: 32, 
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -115,6 +115,8 @@ class DatabaseHelper {
         photoPaths TEXT,
         nomeLider TEXT,
         projetoId INTEGER,
+        municipio TEXT, 
+        estado TEXT,
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
     ''');

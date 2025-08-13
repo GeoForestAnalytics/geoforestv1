@@ -44,8 +44,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
   final _nomeFazendaController = TextEditingController();
   final _idFazendaController = TextEditingController();
-  final _municipioController = TextEditingController();
-  final _estadoController = TextEditingController();
   final _talhaoParcelaController = TextEditingController();
   final _idParcelaController = TextEditingController();
   final _observacaoController = TextEditingController();
@@ -94,8 +92,8 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
         nomeTalhao: widget.talhao!.nome,
         idFazenda: widget.talhao!.fazendaId,
         projetoId: widget.talhao!.projetoId,
-        municipio: widget.talhao!.municipio, // <-- CORREÇÃO APLICADA
-        estado: widget.talhao!.estado,       // <-- CORREÇÃO APLICADA
+        municipio: widget.talhao!.municipio, 
+        estado: widget.talhao!.estado,       
       );
     }
     _preencherControllersComDadosAtuais();
@@ -107,8 +105,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     _nomeFazendaController.text = p.nomeFazenda ?? '';
     _talhaoParcelaController.text = p.nomeTalhao ?? '';
     _idFazendaController.text = p.idFazenda ?? '';
-    _municipioController.text = p.municipio ?? '';
-    _estadoController.text = p.estado ?? '';
     _idParcelaController.text = p.idParcela;
     _observacaoController.text = p.observacao ?? '';
     _larguraController.clear();
@@ -131,8 +127,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   void dispose() {
     _nomeFazendaController.dispose();
     _idFazendaController.dispose();
-    _municipioController.dispose();
-    _estadoController.dispose();
     _talhaoParcelaController.dispose();
     _idParcelaController.dispose();
     _observacaoController.dispose();
@@ -492,26 +486,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
                       ),
                     ),
                   TextFormField(controller: _nomeFazendaController, enabled: false, decoration: const InputDecoration(labelText: 'Nome da Fazenda', border: OutlineInputBorder(), prefixIcon: Icon(Icons.business))),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _municipioController,
-                          enabled: false,
-                          decoration: const InputDecoration(labelText: 'Município', border: OutlineInputBorder()),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _estadoController,
-                          enabled: false,
-                          decoration: const InputDecoration(labelText: 'Estado', border: OutlineInputBorder()),
-                        ),
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 16),
                   TextFormField(controller: _idFazendaController, enabled: false, decoration: const InputDecoration(labelText: 'Código da Fazenda', border: OutlineInputBorder(), prefixIcon: Icon(Icons.pin_outlined))),
                   const SizedBox(height: 16),
