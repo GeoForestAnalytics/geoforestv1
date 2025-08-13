@@ -1,4 +1,4 @@
-// lib/pages/menu/map_import_page.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/pages/menu/map_import_page.dart (VERSÃO COM CHAMADA CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,13 +9,7 @@ import 'package:geoforestv1/providers/map_provider.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-
-// --- NOVO IMPORT DO REPOSITÓRIO ---
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
-// ------------------------------------
-
-// O import do database_helper foi removido.
-// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class MapImportPage extends StatefulWidget {
   const MapImportPage({super.key});
@@ -89,7 +83,8 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
 
     if (isPlano == null || !mounted) return;
 
-    final resultMessage = await provider.processarImportacaoDeArquivo(isPlanoDeAmostragem: isPlano);
+    // <<< AQUI ESTÁ A CORREÇÃO PRINCIPAL DESTE ARQUIVO >>>
+    final resultMessage = await provider.processarImportacaoDeArquivo(isPlanoDeAmostragem: isPlano, context: context);
     
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resultMessage), duration: const Duration(seconds: 5)));
@@ -112,50 +107,12 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
       return;
     }
 
-    final density = await _showDensityDialog();
-    if (density == null || !mounted) return;
+    // A função que mostra o diálogo agora está dentro do provider
+    final resultMessage = await provider.showDensityDialogAndGenerateSamples(context);
     
-    final resultMessage = await provider.gerarAmostrasParaAtividade(hectaresPerSample: density);
-    
-    if(mounted) {
+    if(mounted && resultMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resultMessage), duration: const Duration(seconds: 4)));
     }
-  }
-
-  Future<double?> _showDensityDialog() {
-    final densityController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    return showDialog<double>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Densidade da Amostragem'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: densityController,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'Hectares por amostra', suffixText: 'ha'),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            validator: (value) {
-              if (value == null || value.isEmpty) return 'Campo obrigatório';
-              if (double.tryParse(value.replaceAll(',', '.')) == null) return 'Número inválido';
-              return null;
-            }
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(context, double.parse(densityController.text.replaceAll(',', '.')));
-              }
-            },
-            child: const Text('Gerar'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _handleLocationButtonPressed() async {
@@ -295,10 +252,7 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
                           return;
                         }
                         
-                        // --- CORREÇÃO PRINCIPAL AQUI ---
-                        // Instancia o repositório e usa o método correto.
                         final parcela = await ParcelaRepository().getParcelaById(dbId);
-                        // -----------------------------
                         
                         if (!mounted || parcela == null) return;
 

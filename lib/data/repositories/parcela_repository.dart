@@ -1,4 +1,4 @@
-// lib/data/repositories/parcela_repository.dart (VERSÃO COM CORREÇÃO DE INTEGRIDADE DO PROJETOID E LÍDERES)
+// lib/data/repositories/parcela_repository.dart (VERSÃO COM getTodasAsParcelas)
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -12,7 +12,6 @@ class ParcelaRepository {
 
   // --- MÉTODOS DE SALVAMENTO E ATUALIZAÇÃO ---
 
-  // <<< ESTE MÉTODO FOI CORRIGIDO PARA GARANTIR O PROJETOID >>>
   Future<Parcela> saveFullColeta(Parcela p, List<Arvore> arvores) async {
     final db = await _dbHelper.database;
     await db.transaction((txn) async {
@@ -22,13 +21,7 @@ class ParcelaRepository {
       final d = p.dataColeta ?? DateTime.now();
       pMap['dataColeta'] = d.toIso8601String();
 
-      // ===================================================================
-      // ====================== INÍCIO DA CORREÇÃO =========================
-      // ===================================================================
-      // Lógica de segurança para garantir que o projetoId está presente.
-      // Se a parcela não tem um projetoId, mas tem um talhaoId...
       if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
-        // ... fazemos uma consulta rápida para encontrar o projeto pai.
         final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
           SELECT A.projetoId
           FROM talhoes T
@@ -38,16 +31,11 @@ class ParcelaRepository {
           LIMIT 1
         ''', [pMap['talhaoId']]);
 
-        // Se encontrarmos, atualizamos o mapa que será salvo no banco.
         if (talhaoInfo.isNotEmpty) {
           pMap['projetoId'] = talhaoInfo.first['projetoId'];
-          // Atualiza também o objeto original para consistência
           p = p.copyWith(projetoId: talhaoInfo.first['projetoId'] as int?);
         }
       }
-      // ===================================================================
-      // ======================= FIM DA CORREÇÃO ===========================
-      // ===================================================================
 
       final prefs = await SharedPreferences.getInstance();
       String? nomeDoResponsavel = prefs.getString('nome_lider');
@@ -103,6 +91,13 @@ class ParcelaRepository {
   }
 
   // --- MÉTODOS DE CONSULTA (GET) ---
+
+  // <<< NOVO MÉTODO ADICIONADO AQUI >>>
+  Future<List<Parcela>> getTodasAsParcelas() async {
+    final db = await _dbHelper.database;
+    final maps = await db.query('parcelas', orderBy: 'dataColeta DESC');
+    return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
+  }
 
   Future<Parcela?> getParcelaById(int id) async {
     final db = await _dbHelper.database;
@@ -228,13 +223,8 @@ class ParcelaRepository {
         whereArgs: ids);
   }
 
-  // ===================================================================
-  // ==================== MÉTODO getDistinctLideres ATUALIZADO =========
-  // ===================================================================
   Future<Set<String>> getDistinctLideres() async {
     final db = await _dbHelper.database;
-
-    // 1. Busca todos os nomes de líderes que NÃO SÃO NULOS ou vazios.
     final maps = await db.query(
         'parcelas',
         distinct: true,
@@ -243,29 +233,18 @@ class ParcelaRepository {
         whereArgs: ['']
     );
     final lideres = maps.map((map) => map['nomeLider'] as String).toSet();
-
-    // 2. Faz uma segunda verificação para ver se existe ALGUMA parcela
-    //    onde o nome do líder é NULO ou VAZIO (o caso do gerente).
     final gerenteMaps = await db.query(
       'parcelas',
-      columns: ['id'], // Só precisamos saber se existe, não precisamos dos dados
+      columns: ['id'],
       where: 'nomeLider IS NULL OR nomeLider = ?',
       whereArgs: [''],
-      limit: 1, // A consulta para assim que encontrar o primeiro registro
+      limit: 1,
     );
-
-    // 3. Se a segunda consulta encontrou pelo menos um resultado,
-    //    adicionamos "Gerente" à nossa lista de filtros.
     if (gerenteMaps.isNotEmpty) {
       lideres.add('Gerente');
     }
-
     return lideres;
   }
-  // ===================================================================
-  // ======================= FIM DA ATUALIZAÇÃO ========================
-  // ===================================================================
-
 
   // --- MÉTODOS DE LIMPEZA ---
 

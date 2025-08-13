@@ -1,8 +1,9 @@
-// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO FINAL COM GRÁFICO DE GAUGE)
+// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO FINAL COM TODAS AS CORREÇÕES)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart'; 
 import 'package:geoforestv1/providers/gerente_provider.dart';
+import 'package:geoforestv1/services/export_service.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 
@@ -15,11 +16,12 @@ class GerenteDashboardPage extends StatefulWidget {
 
 class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
   
+  final _exportService = ExportService();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Usando context.read para chamar o método do provider uma única vez.
       context.read<GerenteProvider>().iniciarMonitoramento();
     });
   }
@@ -40,60 +42,76 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
         final concluidas = provider.parcelasFiltradas.where((p) => p.status == StatusParcela.concluida).length;
         final progressoGeral = totalPlanejado > 0 ? concluidas / totalPlanejado : 0.0;
         
-        return Scaffold(
-          body: RefreshIndicator(
-            onRefresh: () async => context.read<GerenteProvider>().iniciarMonitoramento(),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 90.0),
-              children: [
-                _buildMultiSelectProjectFilter(context, provider),
-                const SizedBox(height: 16),
-                
-                _buildSummaryCard(
-                  context: context,
-                  title: 'Progresso Inventário',
-                  value: '${(progressoGeral * 100).toStringAsFixed(0)}%',
-                  subtitle: '$concluidas de $totalPlanejado parcelas concluídas',
-                  progress: progressoGeral,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 24),
+        // <<< MUDANÇA 1: REMOVIDO O SCAFFOLD DAQUI >>>
+        // O Scaffold agora está no GerenteMainPage
+        return RefreshIndicator(
+          onRefresh: () async => context.read<GerenteProvider>().iniciarMonitoramento(),
+          child: ListView(
+            // Padding ajustado para dar espaço no final para os botões
+            padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
+            children: [
+              _buildMultiSelectProjectFilter(context, provider),
+              const SizedBox(height: 16),
+              
+              _buildSummaryCard(
+                context: context,
+                title: 'Progresso Inventário',
+                value: '${(progressoGeral * 100).toStringAsFixed(0)}%',
+                subtitle: '$concluidas de $totalPlanejado parcelas concluídas',
+                progress: progressoGeral,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 24),
 
-                // ===================================================================
-                // NOVA CHAMADA PARA O GRÁFICO DE GAUGE
-                // ===================================================================
-                if (provider.progressoPorEquipe.isNotEmpty)
-                  _buildRadialGaugesCard(context, provider.progressoPorEquipe),
+              if (provider.progressoPorEquipe.isNotEmpty)
+                _buildRadialGaugesCard(context, provider.progressoPorEquipe),
+              const SizedBox(height: 24),
+              
+              if (provider.coletasPorMes.isNotEmpty)
+                _buildBarChartWithTrendLineCard(context, provider.coletasPorMes),
+              const SizedBox(height: 24),
+              
+              if (provider.desempenhoPorFazenda.isNotEmpty)
+                _buildFazendaDataTableCard(context, provider.desempenhoPorFazenda),
+              
+              if (provider.desempenhoPorCubagem.isNotEmpty) ...[
                 const SizedBox(height: 24),
-                
-                if (provider.coletasPorMes.isNotEmpty)
-                  _buildBarChartWithTrendLineCard(context, provider.coletasPorMes),
-                const SizedBox(height: 24),
-                
-                if (provider.desempenhoPorFazenda.isNotEmpty)
-                  _buildFazendaDataTableCard(context, provider.desempenhoPorFazenda),
-                
-                if (provider.desempenhoPorCubagem.isNotEmpty) ...[
-                  const SizedBox(height: 24),
-                  _buildCubagemDataTableCard(context, provider.desempenhoPorCubagem),
-                ],
+                _buildCubagemDataTableCard(context, provider.desempenhoPorCubagem),
               ],
-            ),
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => Navigator.pushNamed(context, '/gerente_map'),
-            icon: const Icon(Icons.map_outlined),
-            label: const Text('Mapa Geral'),
+              
+              // <<< MUDANÇA 2: BOTÕES MOVIDOS PARA O FINAL DA LISTVIEW >>>
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: () {
+                  // Passa os IDs dos projetos selecionados para a função de exportação
+                  final Set<int> projetosFiltrados = provider.selectedProjetoIds;
+                  _exportService.exportarDesenvolvimentoEquipes(context, projetoIdsFiltrados: projetosFiltrados);
+                },
+                icon: const Icon(Icons.download_outlined),
+                label: const Text('Exportar Desenvolvimento das Equipes'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pushNamed(context, '/gerente_map'),
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('Mapa Geral'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12)
+                ),
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  // ===================================================================
-  // MÉTODOS AUXILIARES DE CONSTRUÇÃO DE WIDGETS
-  // ===================================================================
-
+  // O resto dos métodos de build (gráficos, tabelas, etc.) permanecem exatamente iguais.
   Widget _buildMultiSelectProjectFilter(BuildContext context, GerenteProvider provider) {
     String displayText;
     if (provider.selectedProjetoIds.isEmpty) {
@@ -126,7 +144,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                           title: Text(projeto.nome),
                           value: provider.selectedProjetoIds.contains(projeto.id),
                           onChanged: (bool? value) {
-                            // Usando context.read dentro do callback para evitar problemas.
                             context.read<GerenteProvider>().toggleProjetoSelection(projeto.id!);
                             setDialogState(() {});
                           },
@@ -191,9 +208,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
     );
   }
 
-  // ===================================================================
-  // WIDGET DE GRÁFICO DE BARRAS RADIAIS (ALTERNATIVA FINAL)
-  // ===================================================================
   Widget _buildRadialGaugesCard(BuildContext context, Map<String, int> data) {
     if (data.isEmpty) {
       return Card(
@@ -211,8 +225,8 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
       );
     }
 
-    // Encontra o valor máximo para usar como a meta de 100% nos gauges.
     final maxValue = data.values.reduce((a, b) => a > b ? a : b).toDouble();
+    if (maxValue == 0) return const SizedBox.shrink();
     final entries = data.entries.toList();
 
     return Card(
@@ -227,15 +241,14 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 24),
-            // Usa um GridView para organizar os medidores.
             GridView.builder(
               shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(), // Desabilita o scroll do grid.
+              physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3, // 3 medidores por linha, ajuste conforme necessário.
+                crossAxisCount: 3,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
-                childAspectRatio: 0.8, // Proporção para garantir que o texto caiba.
+                childAspectRatio: 0.8,
               ),
               itemCount: entries.length,
               itemBuilder: (context, index) {
@@ -250,21 +263,18 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          // O PieChart que cria o efeito de gauge.
                           PieChart(
                             PieChartData(
-                              startDegreeOffset: -90, // Começa o gráfico no topo.
+                              startDegreeOffset: -90,
                               sectionsSpace: 0,
-                              centerSpaceRadius: 25, // Ajuste o tamanho do buraco.
+                              centerSpaceRadius: 25,
                               sections: [
-                                // A barra de progresso.
                                 PieChartSectionData(
                                   value: percentage,
                                   color: Theme.of(context).colorScheme.primary,
                                   radius: 8,
                                   showTitle: false,
                                 ),
-                                // O fundo cinza que representa o restante.
                                 PieChartSectionData(
                                   value: 100 - percentage,
                                   color: Colors.grey.shade300,
@@ -274,7 +284,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                               ],
                             ),
                           ),
-                          // Texto com o valor no centro do gauge.
                           Text(
                             entry.value.toString(),
                             style: TextStyle(
@@ -287,7 +296,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    // Nome da equipe abaixo do gauge.
                     Text(
                       entry.key,
                       textAlign: TextAlign.center,

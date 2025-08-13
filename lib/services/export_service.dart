@@ -1,17 +1,18 @@
-// lib/services/export_service.dart (VERSÃO DEFINITIVA COM COORDENAÇÃO DE DADOS)
+// lib/services/export_service.dart (VERSÃO COM CONTAGEM DE COVAS E FUSTES CORRIGIDA)
 
 import 'dart:io';
 import 'dart:convert';
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:geoforestv1/data/repositories/atividade_repository.dart';
+import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:provider/provider.dart';
 
 // Imports do projeto
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
-import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/services/permission_service.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -25,15 +26,13 @@ import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
+import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/utils/constants.dart';
 import 'package:geoforestv1/widgets/manager_export_dialog.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
-// ===================================================================
-// <<< MUDANÇA 1: ATUALIZAÇÃO DO PAYLOAD PARA INCLUIR AS ÁRVORES >>>
-// ===================================================================
-// Este objeto agora carrega todos os dados necessários para o Isolate.
+// PAYLOADS PARA ISOLATES
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
@@ -66,12 +65,20 @@ class _CsvCubagemPayload {
   });
 }
 
-// ===================================================================
-// <<< MUDANÇA 2: REMOÇÃO DA CONSULTA AO BANCO DENTRO DOS ISOLATES >>>
-// ===================================================================
-// Esta função agora é "pura": ela apenas recebe dados e os formata.
+class _DevEquipePayload {
+  final List<Map<String, dynamic>> coletasData;
+  final String nomeZona;
+  final Map<int, String> proj4Defs;
+
+  _DevEquipePayload({
+    required this.coletasData,
+    required this.nomeZona,
+    required this.proj4Defs,
+  });
+}
+
+// FUNÇÕES EXECUTADAS EM ISOLATE (SEGUNDO PLANO)
 Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) async {
-  // Inicializa as projeções de coordenadas
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
     proj4.Projection.add('EPSG:$epsg', def);
@@ -97,7 +104,6 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
       northing = pUtm.y.toStringAsFixed(2);
     }
     
-    // Nenhuma consulta ao banco aqui! As árvores vêm direto do payload.
     final arvoresMap = payload.arvoresPorParcelaMap[p.dbId] ?? [];
     final arvores = arvoresMap.map((aMap) => Arvore.fromMap(aMap)).toList();
 
@@ -137,12 +143,219 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
   return const ListToCsvConverter().convert(rows);
 }
 
+Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
+  proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+  payload.proj4Defs.forEach((epsg, def) {
+    proj4.Projection.add('EPSG:$epsg', def);
+  });
+  
+  final codigoEpsg = zonasUtmSirgas2000[payload.nomeZona] ?? 31982;
+  final projWGS84 = proj4.Projection.get('EPSG:4326');
+  final projUTM = proj4.Projection.get('EPSG:$codigoEpsg');
+
+  if (projWGS84 == null || projUTM == null) {
+      return 'ERRO,"Não foi possível inicializar o sistema de projeção de coordenadas."';
+  }
+
+  List<List<dynamic>> rows = [];
+  rows.add([
+    'Projeto', 'Atividade', 'Fazenda', 'Talhao', 'ID_Amostra_Cubagem', 'Area_Talhao_ha',
+    'Situacao', 'Data_Alteracao', 'Responsavel', 'Coord_X_UTM', 'Coord_Y_UTM', 'Area_Parcela_m2',
+    'Largura_m', 'Comprimento_m', 'Observacao_Parcela', 'Total_Fustes', 'Total_Covas', 'Total_Falhas', 'Total_Codigos_Especiais'
+  ]);
+
+  for (final rowData in payload.coletasData) {
+    String easting = '', northing = '';
+    final lat = rowData['latitude'] as double?;
+    final lon = rowData['longitude'] as double?;
+    if (lat != null && lon != null) {
+      var pUtm = projWGS84.transform(projUTM, proj4.Point(x: lon, y: lat));
+      easting = pUtm.x.toStringAsFixed(2);
+      northing = pUtm.y.toStringAsFixed(2);
+    }
+    
+    rows.add([
+      rowData['projeto_nome'],
+      rowData['atividade_tipo'],
+      rowData['fazenda_nome'],
+      rowData['talhao_nome'],
+      rowData['id_coleta'],
+      rowData['talhao_area_ha'],
+      rowData['situacao'],
+      rowData['data_alteracao'],
+      rowData['responsavel'],
+      easting,
+      northing,
+      rowData['parcela_area_m2'],
+      rowData['parcela_largura_m'],
+      rowData['parcela_comprimento_m'],
+      rowData['parcela_observacao'],
+      rowData['total_fustes'],
+      rowData['total_covas'],
+      rowData['total_falhas'],
+      rowData['total_codigos_especiais'],
+    ]);
+  }
+
+  return const ListToCsvConverter().convert(rows);
+}
+
 
 class ExportService {
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
   final _projetoRepository = ProjetoRepository();
+  final _atividadeRepository = AtividadeRepository();
+  final _talhaoRepository = TalhaoRepository();
+  
+  Future<void> exportarDesenvolvimentoEquipes(BuildContext context, {Set<int>? projetoIdsFiltrados}) async {
+    try {
+      if (!await _requestPermission(context)) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Gerando relatório completo... Isso pode levar um momento.'),
+        duration: Duration(seconds: 20),
+      ));
 
+      final todosProjetos = await _projetoRepository.getTodosOsProjetosParaGerente();
+      final projetos = (projetoIdsFiltrados == null || projetoIdsFiltrados.isEmpty)
+          ? todosProjetos
+          : todosProjetos.where((p) => projetoIdsFiltrados.contains(p.id!)).toList();
+      
+      if (projetos.isEmpty) {
+        if(context.mounted) {
+          ScaffoldMessenger.of(context).removeCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum projeto encontrado para o filtro selecionado.'), backgroundColor: Colors.orange));
+        }
+        return;
+      }
+
+      final projetosMap = {for (var p in projetos) p.id: p};
+      final Set<int> idsProjetosFiltrados = projetos.map((p) => p.id!).toSet();
+
+      final todasAtividades = await _atividadeRepository.getTodasAsAtividades();
+      final atividades = todasAtividades.where((a) => idsProjetosFiltrados.contains(a.projetoId)).toList();
+      final atividadesMap = {for (var a in atividades) a.id: a};
+
+      final todosTalhoes = await _talhaoRepository.getTodosOsTalhoes();
+      final talhoes = todosTalhoes.where((t) => atividadesMap.containsKey(t.fazendaAtividadeId)).toList();
+      final talhoesMap = {for (var t in talhoes) t.id: t};
+
+      final List<Map<String, dynamic>> allColetasData = [];
+
+      final todasAsParcelas = await _parcelaRepository.getTodasAsParcelas();
+      final parcelasFiltradas = todasAsParcelas.where((p) => talhoesMap.containsKey(p.talhaoId));
+
+      for (final parcela in parcelasFiltradas) {
+        if (parcela.talhaoId == null) continue;
+        final talhao = talhoesMap[parcela.talhaoId];
+        if (talhao == null) continue;
+        final atividade = atividadesMap[talhao.fazendaAtividadeId];
+        if (atividade == null) continue;
+        final projeto = projetosMap[atividade.projetoId];
+        if (projeto == null) continue;
+
+        // <<< AQUI ESTÁ A LÓGICA DE CONTAGEM CORRIGIDA E DEFINITIVA >>>
+        final arvores = await _parcelaRepository.getArvoresDaParcela(parcela.dbId!);
+        
+        // Cova: Conta as posições únicas de plantio (linha-posição).
+        final covas = <String>{};
+        arvores.forEach((a) => covas.add('${a.linha}-${a.posicaoNaLinha}'));
+        
+        // Fuste: Conta todos os registros de árvores que não são falhas ou caídas.
+        // Isso corretamente conta 2 fustes para uma árvore múltipla registrada com duas entradas.
+        final fustes = arvores.where((a) => a.codigo != Codigo.falha && a.codigo != Codigo.caida).length;
+        
+        // Falha: Conta apenas os registros com o código 'falha'.
+        final falhas = arvores.where((a) => a.codigo == Codigo.falha).length;
+        
+        // Códigos Especiais: Conta todos que não são 'normal', 'falha' ou 'caida'.
+        final codigosEspeciais = arvores.where((a) => 
+            a.codigo != Codigo.normal && a.codigo != Codigo.falha && a.codigo != Codigo.caida
+        ).length;
+
+        allColetasData.add({
+          'projeto_nome': projeto.nome,
+          'atividade_tipo': atividade.tipo,
+          'fazenda_nome': parcela.nomeFazenda,
+          'talhao_nome': parcela.nomeTalhao,
+          'id_coleta': parcela.idParcela,
+          'talhao_area_ha': talhao.areaHa,
+          'situacao': parcela.exportada ? 'Exportada' : parcela.status.name,
+          'data_alteracao': parcela.dataColeta?.toIso8601String(),
+          'responsavel': parcela.nomeLider,
+          'latitude': parcela.latitude,
+          'longitude': parcela.longitude,
+          'parcela_area_m2': parcela.areaMetrosQuadrados,
+          'parcela_largura_m': parcela.largura,
+          'parcela_comprimento_m': parcela.comprimento,
+          'parcela_observacao': parcela.observacao,
+          'total_fustes': fustes,
+          'total_covas': covas.length,
+          'total_falhas': falhas,
+          'total_codigos_especiais': codigosEspeciais,
+        });
+      }
+
+      final todasAsCubagens = await _cubagemRepository.getTodasCubagens();
+      final cubagensFiltradas = todasAsCubagens.where((c) => talhoesMap.containsKey(c.talhaoId));
+
+      for (final cubagem in cubagensFiltradas) {
+        if (cubagem.talhaoId == null) continue;
+        final talhao = talhoesMap[cubagem.talhaoId];
+        if (talhao == null) continue;
+        final atividade = atividadesMap[talhao.fazendaAtividadeId];
+        if (atividade == null) continue;
+        final projeto = projetosMap[atividade.projetoId];
+        if (projeto == null) continue;
+
+        allColetasData.add({
+          'projeto_nome': projeto.nome,
+          'atividade_tipo': atividade.tipo,
+          'fazenda_nome': cubagem.nomeFazenda,
+          'talhao_nome': cubagem.nomeTalhao,
+          'id_coleta': cubagem.identificador,
+          'talhao_area_ha': talhao.areaHa,
+          'situacao': cubagem.exportada ? 'Exportada' : (cubagem.alturaTotal > 0 ? 'Concluida' : 'Pendente'),
+          'data_alteracao': null, 'responsavel': cubagem.nomeLider,
+          'latitude': null, 'longitude': null, 'parcela_area_m2': null, 'parcela_largura_m': null, 'parcela_comprimento_m': null,
+          'parcela_observacao': null, 'total_fustes': 1, 'total_covas': 1, 'total_falhas': 0, 'total_codigos_especiais': 0,
+        });
+      }
+      
+      if(allColetasData.isEmpty && context.mounted) {
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma coleta encontrada para os filtros selecionados.'), backgroundColor: Colors.orange));
+        return;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final payload = _DevEquipePayload(
+        coletasData: allColetasData,
+        nomeZona: prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S',
+        proj4Defs: proj4Definitions,
+      );
+
+      final String csvData = await compute(_generateDevEquipeCsvInIsolate, payload);
+      
+      final dir = await getApplicationDocumentsDirectory();
+      final fName = 'relatorio_desenvolvimento_equipes_${DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now())}.csv';
+      final path = '${dir.path}/$fName';
+      final bom = [0xEF, 0xBB, 0xBF];
+      final bytes = utf8.encode(csvData);
+      await File(path).writeAsBytes([...bom, ...bytes]);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        await Share.shareXFiles([XFile(path)], subject: 'Relatório de Desenvolvimento de Equipes - GeoForest');
+      }
+
+    } catch (e, s) {
+      _handleExportError(context, 'gerar relatório de desenvolvimento', e, s);
+    }
+  }
+
+  // O resto do arquivo permanece igual
   Future<void> exportarDados(BuildContext context) async {
     try {
       if (!await _requestPermission(context)) return;
@@ -192,7 +405,6 @@ class ExportService {
     final nomeArquivoColetor = nomeDoColetor.replaceAll(RegExp(r'[^\w]'), '_');
     final String fName = 'geoforest_export_${nomeArquivoColetor}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.csv';
     
-    // A chamada para _gerarCsvParcela agora é responsável por buscar as árvores
     final path = await _gerarCsvParcela(parcelas, fName);
     
     if (context.mounted) {
@@ -284,14 +496,9 @@ class ExportService {
     }
   }
   
-  // ===================================================================
-  // <<< MUDANÇA 3: A FUNÇÃO "_gerarCsvParcela" AGORA É A COORDENADORA >>>
-  // ===================================================================
   Future<String> _gerarCsvParcela(List<Parcela> parcelas, String nomeArquivo) async {
-    // 1. Prepara o mapa para guardar as árvores
     final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap = {};
     
-    // 2. Antes de chamar o compute, busca TODAS as árvores necessárias na thread principal
     for (final parcela in parcelas) {
       if (parcela.dbId != null) {
         final arvores = await _parcelaRepository.getArvoresDaParcela(parcela.dbId!);
@@ -299,7 +506,6 @@ class ExportService {
       }
     }
 
-    // 3. Prepara o payload com TODOS os dados já coletados
     final prefs = await SharedPreferences.getInstance();
     final payload = _CsvParcelaPayload(
       parcelasMap: parcelas.map((p) => p.toMap()).toList(),
@@ -310,10 +516,8 @@ class ExportService {
       proj4Defs: proj4Definitions,
     );
 
-    // 4. Envia o pacote completo para o isolate, que agora só formata o texto
     final String csvData = await compute(_generateCsvParcelaDataInIsolate, payload);
 
-    // 5. Salva o arquivo e retorna o caminho
     final dir = await getApplicationDocumentsDirectory();
     final path = '${dir.path}/$nomeArquivo';
     final bom = [0xEF, 0xBB, 0xBF];
@@ -322,7 +526,6 @@ class ExportService {
     return path;
   }
   
-  // O restante do arquivo continua aqui...
   Future<void> exportarNovasCubagens(BuildContext context) async {
     try {
       if (!await _requestPermission(context)) return;

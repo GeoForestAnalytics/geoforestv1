@@ -7,10 +7,9 @@ import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import 'package:collection/collection.dart'; // <<< CORREÇÃO 1: ADICIONAR ESTE IMPORT
 
-// <<< CORREÇÃO 3: Classe auxiliar movida para o topo para melhor organização >>>
 class MapLayer {
-  // <<< CORREÇÃO 1: Variáveis da classe declaradas aqui >>>
   final String name;
   final IconData icon;
   final TileLayer tileLayer;
@@ -29,7 +28,6 @@ class GerenteMapPage extends StatefulWidget {
 class _GerenteMapPageState extends State<GerenteMapPage> {
   final MapController _mapController = MapController();
   
-  // A lista agora usa a classe corrigida
   static final List<MapLayer> _mapLayers = [
     MapLayer(
       name: 'Ruas',
@@ -56,7 +54,7 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
   @override
   void initState() {
     super.initState();
-    _currentLayer = _mapLayers[1]; // Inicia com o satélite
+    _currentLayer = _mapLayers[1];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _centerMapOnMarkers();
     });
@@ -91,7 +89,7 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
       case StatusParcela.pendente:
         return Colors.grey.shade600;
       case StatusParcela.exportada:
-        return Colors.blue; // <<< CORREÇÃO 2: Adicionado o retorno para este caso
+        return Colors.blue;
     }
   }
 
@@ -176,12 +174,19 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
               point: LatLng(parcela.latitude!, parcela.longitude!),
               child: GestureDetector(
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(
-                      'Projeto: ${parcela.toMap()['projetoNome'] ?? 'N/A'}\n'
+                  // <<< CORREÇÃO 2: A LÓGICA DE BUSCA FOI SUBSTITUÍDA AQUI >>>
+                  final nomeProjeto = provider.projetosDisponiveis
+                      .firstWhereOrNull((p) => p.id == parcela.projetoId)
+                      ?.nome ?? 'Projeto não encontrado';
+                  
+                  final infoText = 
+                      'Projeto: $nomeProjeto\n'
+                      'Fazenda: ${parcela.nomeFazenda ?? 'N/A'}\n'
                       'Talhão: ${parcela.nomeTalhao ?? 'N/A'} | Parcela: ${parcela.idParcela}\n'
-                      'Status: ${parcela.status.name}',
-                    ),
+                      'Status: ${parcela.status.name}';
+
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(infoText),
                     duration: const Duration(seconds: 4),
                   ));
                 },
@@ -230,7 +235,7 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
   }
 }
 
-// O widget do marcador de localização permanece o mesmo
+// O widget LocationMarker permanece o mesmo
 class LocationMarker extends StatefulWidget {
   const LocationMarker({super.key});
 

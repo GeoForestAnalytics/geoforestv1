@@ -1,4 +1,4 @@
-// lib/providers/map_provider.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/providers/map_provider.dart (VERSÃO COM LÓGICA DE DIÁLOGO CORRIGIDA)
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -17,14 +17,10 @@ import 'package:geoforestv1/services/sampling_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
-
-// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
-// ------------------------------------
 
-// O dbHelper ainda é útil para transações complexas e para o otimizador
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 enum MapLayerType { ruas, satelite, sateliteMapbox }
@@ -36,11 +32,9 @@ class MapProvider with ChangeNotifier {
   late final ActivityOptimizerService _optimizerService;
   final _exportService = ExportService();
   
-  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS ---
   final _parcelaRepository = ParcelaRepository();
   final _fazendaRepository = FazendaRepository();
   final _talhaoRepository = TalhaoRepository();
-  // ---------------------------------------
   
   static final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
@@ -70,7 +64,6 @@ class MapProvider with ChangeNotifier {
   Position? get currentUserPosition => _currentUserPosition;
   bool get isFollowingUser => _isFollowingUser;
 
-  // Lógica de URL do mapa
   final Map<MapLayerType, String> _tileUrls = {
     MapLayerType.ruas: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     MapLayerType.satelite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -92,7 +85,6 @@ class MapProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Funções de controle do desenho
   void startDrawing() {
     if (!_isDrawing) {
       _isDrawing = true;
@@ -272,6 +264,50 @@ class MapProvider with ChangeNotifier {
     );
   }
   
+  // <<< NOVA FUNÇÃO PÚBLICA CHAMADA PELA TELA >>>
+  Future<String?> showDensityDialogAndGenerateSamples(BuildContext context) async {
+    final density = await _showDensityDialog(context);
+    if (density == null) return null; // Usuário cancelou
+    return await gerarAmostrasParaAtividade(hectaresPerSample: density);
+  }
+
+  // <<< FUNÇÃO MOVIDA PARA DENTRO DO PROVIDER >>>
+  Future<double?> _showDensityDialog(BuildContext context) {
+    final densityController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    return showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Densidade da Amostragem'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: densityController,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Hectares por amostra', suffixText: 'ha'),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            validator: (value) {
+              if (value == null || value.isEmpty) return 'Campo obrigatório';
+              if (double.tryParse(value.replaceAll(',', '.')) == null) return 'Número inválido';
+              return null;
+            }
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(context, double.parse(densityController.text.replaceAll(',', '.')));
+              }
+            },
+            child: const Text('Gerar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<String> gerarAmostrasParaAtividade({
     required double hectaresPerSample,
     List<ImportedPolygonFeature>? featuresParaProcessar,
@@ -337,7 +373,7 @@ class MapProvider with ChangeNotifier {
     }
   }
 
-  Future<String> _processarPlanoDeAmostragemImportado(List<ImportedPointFeature> pontosImportados) async {
+  Future<String> _processarPlanoDeAmostragemImportado(List<ImportedPointFeature> pontosImportados, BuildContext context) async {
     _importedPolygons = []; 
     _samplePoints = []; 
     notifyListeners();
@@ -413,7 +449,7 @@ class MapProvider with ChangeNotifier {
     _currentAtividade = atividade;
   }
   
-  Future<String> processarImportacaoDeArquivo({required bool isPlanoDeAmostragem}) async {
+  Future<String> processarImportacaoDeArquivo({required bool isPlanoDeAmostragem, required BuildContext context}) async {
     if (_currentAtividade == null) {
       return "Erro: Nenhuma atividade selecionada para o planejamento.";
     }
@@ -423,12 +459,12 @@ class MapProvider with ChangeNotifier {
       if (isPlanoDeAmostragem) {
         final pontosImportados = await _geoJsonService.importPoints();
         if (pontosImportados.isNotEmpty) {
-          return await _processarPlanoDeAmostragemImportado(pontosImportados);
+          return await _processarPlanoDeAmostragemImportado(pontosImportados, context);
         }
       } else {
         final poligonosImportados = await _geoJsonService.importPolygons();
         if (poligonosImportados.isNotEmpty) {
-          return await _processarCargaDeTalhoesImportada(poligonosImportados);
+          return await _processarCargaDeTalhoesImportada(poligonosImportados, context);
         }
       }
       
@@ -443,9 +479,9 @@ class MapProvider with ChangeNotifier {
     }
   }
   
-  Future<String> _processarCargaDeTalhoesImportada(List<ImportedPolygonFeature> features) async {
-    _importedPolygons = []; 
-    _samplePoints = []; 
+  Future<String> _processarCargaDeTalhoesImportada(List<ImportedPolygonFeature> features, BuildContext context) async {
+    _importedPolygons = [];
+    _samplePoints = [];
     notifyListeners();
 
     int fazendasCriadas = 0;
@@ -484,7 +520,18 @@ class MapProvider with ChangeNotifier {
     
     _importedPolygons = features;
     notifyListeners();
-    return "Carga concluída: ${features.length} polígonos, $fazendasCriadas novas fazendas e $talhoesCriados novos talhões criados.";
+
+    if (context.mounted) {
+      final density = await _showDensityDialog(context);
+      if (density != null && density > 0) {
+        return await gerarAmostrasParaAtividade(
+          hectaresPerSample: density,
+          featuresParaProcessar: features,
+        );
+      }
+    }
+    
+    return "Carga concluída: ${features.length} polígonos, $fazendasCriadas novas fazendas e $talhoesCriados novos talhões criados. Nenhuma amostra foi gerada.";
   }
   
   Future<void> loadSamplesParaAtividade() async {
@@ -552,7 +599,7 @@ class MapProvider with ChangeNotifier {
         return SampleStatus.open;
       case StatusParcela.pendente:
         return SampleStatus.untouched;
-      case StatusParcela.exportada: // Redundante, mas seguro.
+      case StatusParcela.exportada:
         return SampleStatus.exported;
     }
   }
