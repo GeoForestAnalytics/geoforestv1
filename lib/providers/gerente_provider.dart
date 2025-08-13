@@ -1,9 +1,9 @@
-// lib/providers/gerente_provider.dart (VERSÃO COM MAPEAMENTO DE TALHÕES CORRIGIDO)
+// lib/providers/gerente_provider.dart (VERSÃO COM DADOS COMPLETOS NAS PARCELAS DO STREAM)
 
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
-import 'package:geoforestv1/data/repositories/talhao_repository.dart'; // <<< 1. IMPORT NECESSÁRIO
+import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
@@ -47,7 +47,7 @@ class DesempenhoFazenda {
 
 class GerenteProvider with ChangeNotifier {
   final GerenteService _gerenteService = GerenteService();
-  final TalhaoRepository _talhaoRepository = TalhaoRepository(); // <<< 2. INSTÂNCIA DO REPOSITÓRIO
+  final TalhaoRepository _talhaoRepository = TalhaoRepository();
 
   StreamSubscription? _dadosColetaSubscription;
   StreamSubscription? _dadosCubagemSubscription;
@@ -55,8 +55,9 @@ class GerenteProvider with ChangeNotifier {
   List<Parcela> _parcelasSincronizadas = [];
   List<Projeto> _projetos = [];
   
-  // <<< 3. MAPA CONFIÁVEL PARA RELACIONAR TALHÃO E PROJETO >>>
   Map<int, int> _talhaoToProjetoMap = {};
+  Map<int, String> _talhaoIdToNomeMap = {}; // <<< NOVO MAPA PARA NOME DO TALHÃO
+  Map<String, String> _fazendaIdToNomeMap = {}; // <<< NOVO MAPA PARA NOME DA FAZENDA
 
   bool _isLoading = true;
   String? _error;
@@ -69,7 +70,6 @@ class GerenteProvider with ChangeNotifier {
   Set<int> get selectedProjetoIds => _selectedProjetoIds;
 
   List<Parcela> get parcelasFiltradas {
-    // ... (este getter não precisa de alteração)
     final idsProjetosAtivos = projetosDisponiveis.map((p) => p.id).toSet();
 
     List<Parcela> parcelasVisiveis;
@@ -85,9 +85,6 @@ class GerenteProvider with ChangeNotifier {
     return parcelasVisiveis;
   }
   
-  // ===================================================================
-  // <<< 4. GETTER DE CUBAGEM AGORA USA O MAPA CONFIÁVEL >>>
-  // ===================================================================
   List<DesempenhoCubagem> get desempenhoPorCubagem {
     if (_cubagensSincronizadas.isEmpty) return [];
 
@@ -122,7 +119,6 @@ class GerenteProvider with ChangeNotifier {
     }).toList()..sort((a,b) => a.nome.compareTo(b.nome));
   }
   
-  // ... (outros getters e métodos não precisam de alteração)
   Map<String, int> get progressoPorEquipe {
     final parcelasConcluidas = parcelasFiltradas.where((p) => p.status == StatusParcela.concluida).toList();
     if (parcelasConcluidas.isEmpty) return {};
@@ -192,9 +188,6 @@ class GerenteProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // ===================================================================
-  // <<< 5. MÉTODO DE INICIALIZAÇÃO AGORA CONSTRÓI O MAPA PRIMEIRO >>>
-  // ===================================================================
   Future<void> iniciarMonitoramento() async {
     _dadosColetaSubscription?.cancel();
     _dadosCubagemSubscription?.cancel();
@@ -202,20 +195,24 @@ class GerenteProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      // Busca os projetos
       _projetos = await _gerenteService.getTodosOsProjetosStream();
       _projetos.sort((a, b) => a.nome.compareTo(b.nome));
       
-      // Constrói o mapa de referência ANTES de ouvir os streams
       final todosOsTalhoes = await _talhaoRepository.getTodosOsTalhoes();
-      _talhaoToProjetoMap = {
-        for (var talhao in todosOsTalhoes)
-          if (talhao.id != null && talhao.projetoId != null) talhao.id!: talhao.projetoId!
-      };
-      
+      _talhaoToProjetoMap = { for (var talhao in todosOsTalhoes) if (talhao.id != null && talhao.projetoId != null) talhao.id!: talhao.projetoId! };
+      _talhaoIdToNomeMap = { for (var talhao in todosOsTalhoes) if (talhao.id != null) talhao.id!: talhao.nome };
+      _fazendaIdToNomeMap = { for (var talhao in todosOsTalhoes) if (talhao.fazendaId.isNotEmpty && talhao.fazendaNome != null) talhao.fazendaId: talhao.fazendaNome! };
+
       _dadosColetaSubscription = _gerenteService.getDadosColetaStream().listen(
         (listaDeParcelas) {
-          _parcelasSincronizadas = listaDeParcelas;
+          // <<< AQUI ESTÁ A CORREÇÃO PRINCIPAL >>>
+          // Garante que os nomes da fazenda e talhão sejam preenchidos
+          _parcelasSincronizadas = listaDeParcelas.map((p) {
+            final nomeFazenda = _fazendaIdToNomeMap[p.idFazenda] ?? p.nomeFazenda;
+            final nomeTalhao = _talhaoIdToNomeMap[p.talhaoId] ?? p.nomeTalhao;
+            return p.copyWith(nomeFazenda: nomeFazenda, nomeTalhao: nomeTalhao);
+          }).toList();
+
           if (_isLoading) _isLoading = false;
           _error = null;
           notifyListeners();

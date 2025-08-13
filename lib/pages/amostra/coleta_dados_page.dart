@@ -1,4 +1,4 @@
-// lib/pages/amostra/coleta_dados_page.dart (VERSÃO COM NAVEGAÇÃO E LÓGICA DE SALVAMENTO CORRIGIDAS)
+// lib/pages/amostra/coleta_dados_page.dart (VERSÃO COM INICIALIZAÇÃO FORÇADA E LOCAL)
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -65,19 +65,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   @override
   void initState() {
     super.initState();
-    _initializeProj4();
     _setupInitialData();
-  }
-  
-  void _initializeProj4() {
-    try {
-      proj4.Projection.get('EPSG:4326');
-    } catch (_) {
-      proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
-      proj4Definitions.forEach((epsg, def) {
-        proj4.Projection.add('EPSG:$epsg', def);
-      });
-    }
   }
 
   Future<void> _setupInitialData() async {
@@ -186,10 +174,18 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
 
     try {
-      if (_parcelaAtual.talhaoId == null) {
-        throw Exception("A parcela precisa ser salva e vinculada a um talhão antes de adicionar fotos.");
-      }
+      // <<< AQUI ESTÁ A CORREÇÃO DEFINITIVA >>>
+      // Força o registro das definições de projeção toda vez, eliminando a chance de erro.
+      proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+      proj4Definitions.forEach((epsg, def) {
+        proj4.Projection.add('EPSG:$epsg', def);
+      });
 
+      if (_parcelaAtual.dbId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor, salve os dados da parcela antes de adicionar fotos.'), backgroundColor: Colors.orange));
+        return;
+      }
+      
       final projeto = await _projetoRepository.getProjetoPelaParcela(_parcelaAtual);
       final projetoNome = projeto?.nome.replaceAll(RegExp(r'[^\w\s-]'), '') ?? 'PROJETO';
       final fazendaNome = _parcelaAtual.nomeFazenda?.replaceAll(RegExp(r'[^\w\s-]'), '') ?? 'FAZENDA';
@@ -201,9 +197,15 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       
       if (_parcelaAtual.latitude != null && _parcelaAtual.longitude != null) {
         final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
-        final codigoEpsg = zonasUtmSirgas2000[nomeZona] ?? 31982; 
-        final projWGS84 = proj4.Projection.get('EPSG:4326')!;
-        final projUTM = proj4.Projection.get('EPSG:$codigoEpsg')!;
+        final codigoEpsg = zonasUtmSirgas2000[nomeZona] ?? 31982;
+        
+        final projWGS84 = proj4.Projection.get('EPSG:4326');
+        final projUTM = proj4.Projection.get('EPSG:$codigoEpsg');
+        
+        if (projWGS84 == null || projUTM == null) {
+            throw Exception('Falha ao obter sistema de projeção (Proj4). Tente novamente.');
+        }
+
         var pUtm = projWGS84.transform(projUTM, proj4.Point(x: _parcelaAtual.longitude!, y: _parcelaAtual.latitude!));
         utmString = "E: ${pUtm.x.toInt()} N: ${pUtm.y.toInt()} | ${nomeZona.split('/')[1].trim()}";
       }
@@ -245,16 +247,20 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
           _parcelaAtual.photoPaths.add(pickedFile.path);
       });
       
+      await _salvarAlteracoes(showSnackbar: false);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Foto salva na galeria!'), backgroundColor: Colors.green)
+          const SnackBar(content: Text('Foto salva na galeria e vinculada à parcela!'), backgroundColor: Colors.green)
         );
       }
 
     } catch (e) {
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar foto: $e'), backgroundColor: Colors.red));
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar foto: ${e.toString()}'), backgroundColor: Colors.red));
     }
   }
+
+  // O resto do arquivo (build, _salvarAlteracoes, etc.) permanece exatamente o mesmo.
 
   Future<void> _reabrirParaEdicao() async {
     setState(() => _salvando = true);
@@ -275,7 +281,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
   }
 
-  // <<< FUNÇÃO CORRIGIDA >>>
   Future<void> _salvarEIniciarColeta() async {
     if (!_formKey.currentState!.validate()) return;
     
@@ -344,7 +349,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
   }
   
-  Future<void> _salvarAlteracoes() async {
+  Future<void> _salvarAlteracoes({bool showSnackbar = true}) async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _salvando = true);
     try {
@@ -355,7 +360,9 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
         setState(() {
           _parcelaAtual = parcelaSalva;
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alterações salvas com sucesso!'), backgroundColor: Colors.green));
+        if(showSnackbar) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alterações salvas com sucesso!'), backgroundColor: Colors.green));
+        }
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar: $e'), backgroundColor: Colors.red));
@@ -364,7 +371,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
   }
 
-  // <<< FUNÇÃO CORRIGIDA >>>
   Future<void> _navegarParaInventario() async {
     if (_salvando) return;
     
@@ -523,7 +529,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(height: 50, child: ElevatedButton.icon(onPressed: _salvando ? null : _salvarAlteracoes, icon: _salvando ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white)) : const Icon(Icons.save_outlined), label: const Text('Salvar Dados da Parcela', style: TextStyle(fontSize: 18)), style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white))),
+          SizedBox(height: 50, child: ElevatedButton.icon(onPressed: _salvando ? null : () => _salvarAlteracoes(), icon: _salvando ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white)) : const Icon(Icons.save_outlined), label: const Text('Salvar Dados da Parcela', style: TextStyle(fontSize: 18)), style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white))),
           const SizedBox(height: 12),
           SizedBox(height: 50, child: ElevatedButton.icon(onPressed: _salvando ? null : _navegarParaInventario, icon: const Icon(Icons.park_outlined), label: const Text('Ver/Editar Inventário', style: TextStyle(fontSize: 18)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1D4433), foregroundColor: Colors.white))),
         ],
@@ -635,7 +641,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
                               borderRadius: BorderRadius.circular(8),
                               child: file.existsSync()
                                 ? Image.file(file, fit: BoxFit.cover)
-                                : Container( // Placeholder para imagem não encontrada
+                                : Container(
                                     color: Colors.grey.shade300,
                                     child: const Icon(Icons.broken_image_outlined, color: Colors.grey, size: 40),
                                   ),

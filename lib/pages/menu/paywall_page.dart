@@ -51,7 +51,7 @@ class _PaywallPageState extends State<PaywallPage> {
       valorMensal: "R\$ 850",
       icone: Icons.business_center_outlined,
       cor: Colors.green,
-      features: ["7 Smartphones", "1 Desktop ", "Módulo de Análise e Relatórios", "Suporte prioritário"],
+      features: ["7 Smartphones", "Módulo de Análise e Relatórios", "Suporte prioritário"],
     ),
     PlanoAssinatura(
       nome: "Premium",
@@ -60,7 +60,7 @@ class _PaywallPageState extends State<PaywallPage> {
       valorMensal: "R\$ 1.700",
       icone: Icons.star_border_outlined,
       cor: Colors.purple,
-      features: ["Dispositivos ilimitados", "3 Desktops ", "Todos os Módulos", "Acesso à API", "Gerente de conta dedicado"],
+      features: ["Dispositivos ilimitados", "Todos os Módulos", "Delegação de Projetos", "Gerente de conta dedicado"],
     ),
   ];
 

@@ -128,59 +128,20 @@ exports.deletarProjeto = functions
       }
       
       const licenseId = context.auth.token.licenseId;
-      const clienteRef = db.collection("clientes").doc(licenseId);
-      const batchSize = 400; // Limite seguro para operações em lote no Firestore.
-      let batch = db.batch();
-      let operationCount = 0;
-
-      // Função auxiliar para commitar o lote quando ele atingir o tamanho máximo.
-      async function commitBatchIfNeeded() {
-        if (operationCount >= batchSize) {
-          await batch.commit();
-          batch = db.batch();
-          operationCount = 0;
-        }
-      }
+      const projetoRef = db.collection("clientes").doc(licenseId).collection('projetos').doc(projetoId.toString());
 
       try {
-        // A lógica de exclusão em cascata está correta, percorrendo as coleções relacionadas.
-        const atividadesSnap = await clienteRef.collection('atividades').where('projetoId', '==', projetoId).get();
-        const atividadeIds = atividadesSnap.docs.map((doc) => doc.data()['id']);
-
-        if (atividadeIds.length > 0) {
-          const fazendasSnap = await clienteRef.collection('fazendas').where('atividadeId', 'in', atividadeIds).get();
-          const fazendaIdsStr = fazendasSnap.docs.map((doc) => doc.data()['id']);
-
-          if (fazendaIdsStr.length > 0) {
-            const talhoesSnap = await clienteRef.collection('talhoes').where('fazendaId', 'in', fazendaIdsStr).get();
-            const talhaoIds = talhoesSnap.docs.map((doc) => doc.data()['id']);
-
-            if (talhaoIds.length > 0) {
-              const parcelasSnap = await clienteRef.collection('dados_coleta').where('talhaoId', 'in', talhaoIds).get();
-              for (const doc of parcelasSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
-              
-              const cubagensSnap = await clienteRef.collection('dados_cubagem').where('talhaoId', 'in', talhaoIds).get();
-              for (const doc of cubagensSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
-            }
-            for (const doc of talhoesSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
-          }
-          for (const doc of fazendasSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
-        }
-        for (const doc of atividadesSnap.docs) { batch.delete(doc.ref); operationCount++; await commitBatchIfNeeded(); }
-
-        batch.delete(clienteRef.collection('projetos').doc(projetoId.toString()));
-        operationCount++;
-
-        // Garante que o último lote de operações seja commitado.
-        if (operationCount > 0) {
-          await batch.commit();
-        }
+        // <<< AQUI ESTÁ A MUDANÇA PRINCIPAL >>>
+        // Em vez de apagar, atualizamos o status para 'deletado'.
+        await projetoRef.update({ status: 'deletado' });
         
-        return { success: true, message: "Projeto e todos os seus dados foram excluídos com sucesso." };
+        console.log(`Projeto ${projetoId} da licença ${licenseId} marcado como 'deletado' (soft delete).`);
+        
+        return { success: true, message: "Projeto movido para a lixeira com sucesso." };
 
       } catch (error) {
-        console.error("Falha crítica ao excluir projeto e seus sub-dados:", error);
-        throw new functions.https.HttpsError("internal", "Ocorreu um erro interno ao tentar excluir o projeto. Verifique os logs do servidor.");
+        console.error(`Falha ao marcar projeto ${projetoId} como deletado:`, error);
+        throw new functions.https.HttpsError("internal", "Ocorreu um erro interno ao tentar arquivar o projeto.");
       }
     });
 

@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO COM CONTAGEM DE COVAS E FUSTES CORRIGIDA)
+// lib/services/export_service.dart (VERSÃO COM DIÁLOGO DE PROGRESSO)
 
 import 'dart:io';
 import 'dart:convert';
@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
+import 'package:geoforestv1/widgets/progress_dialog.dart'; // <<< 1. IMPORTAR O NOVO WIDGET
 import 'package:provider/provider.dart';
 
 // Imports do projeto
@@ -32,7 +33,7 @@ import 'package:geoforestv1/widgets/manager_export_dialog.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
-// PAYLOADS PARA ISOLATES
+// PAYLOADS PARA ISOLATES (sem alterações)
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
@@ -77,7 +78,7 @@ class _DevEquipePayload {
   });
 }
 
-// FUNÇÕES EXECUTADAS EM ISOLATE (SEGUNDO PLANO)
+// FUNÇÕES DE ISOLATE (sem alterações)
 Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
@@ -208,14 +209,13 @@ class ExportService {
   final _atividadeRepository = AtividadeRepository();
   final _talhaoRepository = TalhaoRepository();
   
+  // <<< 2. FUNÇÃO MODIFICADA PARA USAR O DIÁLOGO DE PROGRESSO >>>
   Future<void> exportarDesenvolvimentoEquipes(BuildContext context, {Set<int>? projetoIdsFiltrados}) async {
     try {
       if (!await _requestPermission(context)) return;
       
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Gerando relatório completo... Isso pode levar um momento.'),
-        duration: Duration(seconds: 20),
-      ));
+      // MOSTRA o diálogo de progresso
+      ProgressDialog.show(context, 'Gerando relatório...');
 
       final todosProjetos = await _projetoRepository.getTodosOsProjetosParaGerente();
       final projetos = (projetoIdsFiltrados == null || projetoIdsFiltrados.isEmpty)
@@ -223,8 +223,8 @@ class ExportService {
           : todosProjetos.where((p) => projetoIdsFiltrados.contains(p.id!)).toList();
       
       if (projetos.isEmpty) {
+        ProgressDialog.hide(context); // Esconde o diálogo antes de mostrar a mensagem
         if(context.mounted) {
-          ScaffoldMessenger.of(context).removeCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum projeto encontrado para o filtro selecionado.'), backgroundColor: Colors.orange));
         }
         return;
@@ -255,21 +255,15 @@ class ExportService {
         final projeto = projetosMap[atividade.projetoId];
         if (projeto == null) continue;
 
-        // <<< AQUI ESTÁ A LÓGICA DE CONTAGEM CORRIGIDA E DEFINITIVA >>>
         final arvores = await _parcelaRepository.getArvoresDaParcela(parcela.dbId!);
         
-        // Cova: Conta as posições únicas de plantio (linha-posição).
         final covas = <String>{};
         arvores.forEach((a) => covas.add('${a.linha}-${a.posicaoNaLinha}'));
         
-        // Fuste: Conta todos os registros de árvores que não são falhas ou caídas.
-        // Isso corretamente conta 2 fustes para uma árvore múltipla registrada com duas entradas.
         final fustes = arvores.where((a) => a.codigo != Codigo.falha && a.codigo != Codigo.caida).length;
         
-        // Falha: Conta apenas os registros com o código 'falha'.
         final falhas = arvores.where((a) => a.codigo == Codigo.falha).length;
         
-        // Códigos Especiais: Conta todos que não são 'normal', 'falha' ou 'caida'.
         final codigosEspeciais = arvores.where((a) => 
             a.codigo != Codigo.normal && a.codigo != Codigo.falha && a.codigo != Codigo.caida
         ).length;
@@ -323,9 +317,11 @@ class ExportService {
         });
       }
       
-      if(allColetasData.isEmpty && context.mounted) {
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma coleta encontrada para os filtros selecionados.'), backgroundColor: Colors.orange));
+      if(allColetasData.isEmpty) {
+        ProgressDialog.hide(context); // Esconde o diálogo antes de mostrar a mensagem
+        if(context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma coleta encontrada para os filtros selecionados.'), backgroundColor: Colors.orange));
+        }
         return;
       }
 
@@ -345,12 +341,13 @@ class ExportService {
       final bytes = utf8.encode(csvData);
       await File(path).writeAsBytes([...bom, ...bytes]);
 
+      ProgressDialog.hide(context); // Esconde o diálogo antes de compartilhar
       if (context.mounted) {
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
         await Share.shareXFiles([XFile(path)], subject: 'Relatório de Desenvolvimento de Equipes - GeoForest');
       }
 
     } catch (e, s) {
+      ProgressDialog.hide(context); // Garante que o diálogo feche em caso de erro
       _handleExportError(context, 'gerar relatório de desenvolvimento', e, s);
     }
   }
