@@ -7,6 +7,7 @@ class Talhao {
   final String fazendaId; 
   final int fazendaAtividadeId;
   final int? projetoId;
+
   // Propriedades do Talhão
   final String nome;
   final double? areaHa;
@@ -14,10 +15,11 @@ class Talhao {
   final String? especie;
   final String? espacamento;
 
-  // Campo para exibição na UI
+  // Campos para exibição na UI
   final String? fazendaNome;
+  final String? municipio; // <-- ADICIONE
+  final String? estado;    // <-- ADICIONE
   
-  // <<< NOVO CAMPO PARA CÁLCULO TEMPORÁRIO >>>
   double? volumeTotalTalhao;
 
   Talhao({
@@ -31,9 +33,12 @@ class Talhao {
     this.especie,
     this.espacamento,
     this.fazendaNome,
-    this.volumeTotalTalhao, // Adicionado ao construtor
+    this.municipio, // <-- ADICIONE
+    this.estado,    // <-- ADICIONE
+    this.volumeTotalTalhao,
   });
 
+  // ADICIONE municipio E estado AO MÉTODO copyWith
   Talhao copyWith({
     int? id,
     String? fazendaId,
@@ -45,6 +50,8 @@ class Talhao {
     String? especie,
     String? espacamento,
     String? fazendaNome,
+    String? municipio, // <-- ADICIONE
+    String? estado,    // <-- ADICIONE
     double? volumeTotalTalhao,
   }) {
     return Talhao(
@@ -57,11 +64,14 @@ class Talhao {
       especie: especie ?? this.especie,
       espacamento: espacamento ?? this.espacamento,
       fazendaNome: fazendaNome ?? this.fazendaNome,
+      municipio: municipio ?? this.municipio, // <-- ADICIONE
+      estado: estado ?? this.estado,          // <-- ADICIONE
       volumeTotalTalhao: volumeTotalTalhao ?? this.volumeTotalTalhao,
     );
   }
 
   Map<String, dynamic> toMap() {
+    // ... (este método não precisa de alterações)
     return {
       'id': id,
       'fazendaId': fazendaId,
@@ -74,6 +84,7 @@ class Talhao {
     };
   }
 
+  // ADICIONE municipio E estado AO MÉTODO fromMap
   factory Talhao.fromMap(Map<String, dynamic> map) {
     return Talhao(
       id: map['id'],
@@ -86,6 +97,8 @@ class Talhao {
       especie: map['especie'],
       espacamento: map['espacamento'],
       fazendaNome: map['fazendaNome'], 
+      municipio: map['municipio'], // <-- ADICIONE
+      estado: map['estado'],       // <-- ADICIONE
     );
   }
 }

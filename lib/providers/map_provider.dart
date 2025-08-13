@@ -1,4 +1,4 @@
-// lib/providers/map_provider.dart (VERSÃO COM LÓGICA DE DIÁLOGO CORRIGIDA)
+// lib/providers/map_provider.dart (VERSÃO FINAL COM TODAS AS CORREÇÕES)
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -168,6 +168,9 @@ class MapProvider with ChangeNotifier {
           'db_fazenda_nome': talhaoSalvo.fazendaNome,
           'fazenda_id': talhaoSalvo.fazendaId,
           'talhao_nome': talhaoSalvo.nome,
+          // Adicionando município e estado para consistência
+          'municipio': 'N/I',
+          'estado': 'N/I',
         },
       );
       _importedPolygons.add(newFeature);
@@ -264,14 +267,12 @@ class MapProvider with ChangeNotifier {
     );
   }
   
-  // <<< NOVA FUNÇÃO PÚBLICA CHAMADA PELA TELA >>>
   Future<String?> showDensityDialogAndGenerateSamples(BuildContext context) async {
     final density = await _showDensityDialog(context);
     if (density == null) return null; // Usuário cancelou
     return await gerarAmostrasParaAtividade(hectaresPerSample: density);
   }
 
-  // <<< FUNÇÃO MOVIDA PARA DENTRO DO PROVIDER >>>
   Future<double?> _showDensityDialog(BuildContext context) {
     final densityController = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -349,6 +350,8 @@ class MapProvider with ChangeNotifier {
           idFazenda: props['fazenda_id']?.toString(),
           nomeTalhao: props['talhao_nome']?.toString(),
           projetoId: idDoProjetoAtual,
+          municipio: props['municipio']?.toString(), // <-- CORREÇÃO AQUI
+          estado: props['estado']?.toString(),       // <-- CORREÇÃO AQUI
         ));
         pointIdCounter++;
       }
@@ -359,6 +362,7 @@ class MapProvider with ChangeNotifier {
       await loadSamplesParaAtividade();
     }
     
+    // Se a geração foi para a atividade toda (e não um polígono desenhado)
     if (featuresParaProcessar == null) {
       final int talhoesRemovidos = await _optimizerService.otimizarAtividade(_currentAtividade!.id!);
       _setLoading(false);
@@ -367,7 +371,7 @@ class MapProvider with ChangeNotifier {
         mensagemFinal += " $talhoesRemovidos talhões vazios foram otimizados.";
       }
       return mensagemFinal;
-    } else {
+    } else { // Se foi para um polígono desenhado, não otimiza
       _setLoading(false);
       return "${parcelasParaSalvar.length} amostras foram geradas e salvas para o novo talhão.";
     }
@@ -388,14 +392,17 @@ class MapProvider with ChangeNotifier {
     await db.transaction((txn) async {
       for (final ponto in pontosImportados) {
         final props = ponto.properties;
-        final fazendaId = (props['fazenda_id'] ?? props['fazenda'])?.toString();
+        final fazendaId = (props['id_fazenda'] ?? props['fazenda_id'] ?? props['fazenda'])?.toString();
         final nomeTalhao = (props['talhao'] ?? props['talhao_nome'])?.toString();
         
         if (fazendaId == null || nomeTalhao == null) continue;
 
         Fazenda? fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [fazendaId, _currentAtividade!.id!])).map((e) => Fazenda.fromMap(e)).firstOrNull;
         if (fazenda == null) {
-          fazenda = Fazenda(id: fazendaId, atividadeId: _currentAtividade!.id!, nome: props['fazenda']?.toString() ?? fazendaId, municipio: 'N/I', estado: 'N/I');
+          final nomeDaFazenda = props['fazenda_nome']?.toString() ?? props['fazenda']?.toString() ?? fazendaId;
+          final municipio = props['municipio']?.toString() ?? 'N/I';
+          final estado = props['estado']?.toString() ?? 'N/I';
+          fazenda = Fazenda(id: fazendaId, atividadeId: _currentAtividade!.id!, nome: nomeDaFazenda, municipio: municipio, estado: estado);
           await txn.insert('fazendas', fazenda.toMap());
           novasFazendas++;
         }
@@ -424,6 +431,8 @@ class MapProvider with ChangeNotifier {
           idFazenda: fazenda.id, 
           nomeTalhao: talhao.nome,
           projetoId: idDoProjetoAtual,
+          municipio: fazenda.municipio, // <-- CORREÇÃO AQUI
+          estado: fazenda.estado,       // <-- CORREÇÃO AQUI
         ));
       }
     });
@@ -490,14 +499,17 @@ class MapProvider with ChangeNotifier {
     await _dbHelper.database.then((db) async => await db.transaction((txn) async {
       for (final feature in features) {
         final props = feature.properties;
-        final fazendaId = (props['fazenda_id'] ?? props['fazenda_nome'] ?? props['fazenda'])?.toString();
+        final fazendaId = (props['id_fazenda'] ?? props['fazenda_id'] ?? props['fazenda_nome'] ?? props['fazenda'])?.toString();
         final nomeTalhao = (props['talhao_nome'] ?? props['talhao_id'] ?? props['talhao'])?.toString();
         
         if (fazendaId == null || nomeTalhao == null) continue;
 
         Fazenda? fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [fazendaId, _currentAtividade!.id!])).map((e) => Fazenda.fromMap(e)).firstOrNull;
         if (fazenda == null) {
-          fazenda = Fazenda(id: fazendaId, atividadeId: _currentAtividade!.id!, nome: props['fazenda_nome']?.toString() ?? fazendaId, municipio: 'N/I', estado: 'N/I');
+          final nomeDaFazenda = props['fazenda_nome']?.toString() ?? props['fazenda']?.toString() ?? fazendaId;
+          final municipio = props['municipio']?.toString() ?? 'N/I';
+          final estado = props['estado']?.toString() ?? 'N/I';
+          fazenda = Fazenda(id: fazendaId, atividadeId: _currentAtividade!.id!, nome: nomeDaFazenda, municipio: municipio, estado: estado);
           await txn.insert('fazendas', fazenda.toMap());
           fazendasCriadas++;
         }
@@ -515,6 +527,10 @@ class MapProvider with ChangeNotifier {
         
         feature.properties['db_talhao_id'] = talhao.id;
         feature.properties['db_fazenda_nome'] = fazenda.nome;
+        feature.properties['talhao_nome'] = talhao.nome;
+        feature.properties['fazenda_id'] = talhao.fazendaId;
+        feature.properties['municipio'] = fazenda.municipio; // <-- CORREÇÃO AQUI
+        feature.properties['estado'] = fazenda.estado;       // <-- CORREÇÃO AQUI
       }
     }));
     

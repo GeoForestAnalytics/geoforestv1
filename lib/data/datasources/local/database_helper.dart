@@ -209,6 +209,10 @@ class DatabaseHelper {
         case 31:
           await db.execute("ALTER TABLE cubagens_arvores ADD COLUMN nomeLider TEXT");
           break;
+        case 32:
+          await db.execute("ALTER TABLE parcelas ADD COLUMN municipio TEXT");
+          await db.execute("ALTER TABLE parcelas ADD COLUMN estado TEXT");
+          break;
       }
     }
   }

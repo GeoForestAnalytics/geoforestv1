@@ -29,6 +29,8 @@ class Parcela {
   final String? nomeTalhao;
   final String? nomeLider;
   final int? projetoId;    // <<< CAMPO ADICIONADO PARA CORRIGIR O FILTRO
+  final String? municipio;
+  final String? estado;
 
   // Campos principais
   final String idParcela;
@@ -67,6 +69,8 @@ class Parcela {
     this.raio,
     this.nomeLider,
     this.projetoId, // <<< ADICIONADO AO CONSTRUTOR
+    this.municipio,
+    this.estado,
     this.photoPaths = const [],
     this.arvores = const [],
   }) : uuid = uuid ?? const Uuid().v4();
@@ -92,6 +96,8 @@ class Parcela {
     double? raio,
     String? nomeLider,
     int? projetoId, // <<< ADICIONADO AO COPYWITH
+    String? municipio,
+    String? estado,
     List<String>? photoPaths,
     List<Arvore>? arvores,
   }) {
@@ -116,6 +122,8 @@ class Parcela {
       raio: raio ?? this.raio,
       nomeLider: nomeLider ?? this.nomeLider,
       projetoId: projetoId ?? this.projetoId, // <<< ADICIONADO AO COPYWITH
+      municipio: municipio ?? this.municipio,
+      estado: estado ?? this.estado,
       photoPaths: photoPaths ?? this.photoPaths,
       arvores: arvores ?? this.arvores,
     );
@@ -143,6 +151,8 @@ class Parcela {
       'raio': raio,
       'nomeLider': nomeLider,
       'projetoId': projetoId, // <<< ADICIONADO AO MAP
+      'municipio': municipio,
+      'estado': estado,
       'photoPaths': jsonEncode(photoPaths),
     };
   }

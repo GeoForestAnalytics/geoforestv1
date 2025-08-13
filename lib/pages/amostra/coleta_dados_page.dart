@@ -1,4 +1,4 @@
-// lib/pages/amostra/coleta_dados_page.dart (VERSÃO COM INICIALIZAÇÃO FORÇADA E LOCAL)
+// lib/pages/amostra/coleta_dados_page.dart (VERSÃO FINAL E CORRIGIDA)
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -44,6 +44,8 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
   final _nomeFazendaController = TextEditingController();
   final _idFazendaController = TextEditingController();
+  final _municipioController = TextEditingController();
+  final _estadoController = TextEditingController();
   final _talhaoParcelaController = TextEditingController();
   final _idParcelaController = TextEditingController();
   final _observacaoController = TextEditingController();
@@ -57,7 +59,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   bool _salvando = false;
   FormaParcela _formaDaParcela = FormaParcela.retangular;
   bool _isModoEdicao = false;
-  bool _isVinculadoATalhao = false;
   final ImagePicker _picker = ImagePicker();
   final PermissionService _permissionService = PermissionService();
   bool _isReadOnly = false;
@@ -77,14 +78,13 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       if(parcelaDoBanco != null) {
         _parcelaAtual.arvores = await _parcelaRepository.getArvoresDaParcela(_parcelaAtual.dbId!);
       }
-      _isVinculadoATalhao = _parcelaAtual.talhaoId != null;
+      
       if (_parcelaAtual.status == StatusParcela.concluida || _parcelaAtual.status == StatusParcela.exportada) {
         _isReadOnly = true;
       }
     } else {
       _isModoEdicao = false;
       _isReadOnly = false;
-      _isVinculadoATalhao = true;
       _parcelaAtual = Parcela(
         talhaoId: widget.talhao!.id,
         idParcela: '',
@@ -94,6 +94,8 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
         nomeTalhao: widget.talhao!.nome,
         idFazenda: widget.talhao!.fazendaId,
         projetoId: widget.talhao!.projetoId,
+        municipio: widget.talhao!.municipio, // <-- CORREÇÃO APLICADA
+        estado: widget.talhao!.estado,       // <-- CORREÇÃO APLICADA
       );
     }
     _preencherControllersComDadosAtuais();
@@ -105,6 +107,8 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     _nomeFazendaController.text = p.nomeFazenda ?? '';
     _talhaoParcelaController.text = p.nomeTalhao ?? '';
     _idFazendaController.text = p.idFazenda ?? '';
+    _municipioController.text = p.municipio ?? '';
+    _estadoController.text = p.estado ?? '';
     _idParcelaController.text = p.idParcela;
     _observacaoController.text = p.observacao ?? '';
     _larguraController.clear();
@@ -127,6 +131,8 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   void dispose() {
     _nomeFazendaController.dispose();
     _idFazendaController.dispose();
+    _municipioController.dispose();
+    _estadoController.dispose();
     _talhaoParcelaController.dispose();
     _idParcelaController.dispose();
     _observacaoController.dispose();
@@ -174,8 +180,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
 
     try {
-      // <<< AQUI ESTÁ A CORREÇÃO DEFINITIVA >>>
-      // Força o registro das definições de projeção toda vez, eliminando a chance de erro.
       proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
       proj4Definitions.forEach((epsg, def) {
         proj4.Projection.add('EPSG:$epsg', def);
@@ -259,8 +263,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar foto: ${e.toString()}'), backgroundColor: Colors.red));
     }
   }
-
-  // O resto do arquivo (build, _salvarAlteracoes, etc.) permanece exatamente o mesmo.
 
   Future<void> _reabrirParaEdicao() async {
     setState(() => _salvando = true);
@@ -489,11 +491,31 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
                         ],
                       ),
                     ),
-                  TextFormField(controller: _nomeFazendaController, enabled: !_isVinculadoATalhao && !_isReadOnly, decoration: const InputDecoration(labelText: 'Nome da Fazenda', border: OutlineInputBorder(), prefixIcon: Icon(Icons.business))),
+                  TextFormField(controller: _nomeFazendaController, enabled: false, decoration: const InputDecoration(labelText: 'Nome da Fazenda', border: OutlineInputBorder(), prefixIcon: Icon(Icons.business))),
                   const SizedBox(height: 16),
-                  TextFormField(controller: _idFazendaController, enabled: !_isVinculadoATalhao && !_isReadOnly, decoration: const InputDecoration(labelText: 'Código da Fazenda', border: OutlineInputBorder(), prefixIcon: Icon(Icons.pin_outlined))),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _municipioController,
+                          enabled: false,
+                          decoration: const InputDecoration(labelText: 'Município', border: OutlineInputBorder()),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _estadoController,
+                          enabled: false,
+                          decoration: const InputDecoration(labelText: 'Estado', border: OutlineInputBorder()),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 16),
-                  TextFormField(controller: _talhaoParcelaController, enabled: !_isVinculadoATalhao && !_isReadOnly, decoration: const InputDecoration(labelText: 'Talhão', border: OutlineInputBorder(), prefixIcon: Icon(Icons.grid_on))),
+                  TextFormField(controller: _idFazendaController, enabled: false, decoration: const InputDecoration(labelText: 'Código da Fazenda', border: OutlineInputBorder(), prefixIcon: Icon(Icons.pin_outlined))),
+                  const SizedBox(height: 16),
+                  TextFormField(controller: _talhaoParcelaController, enabled: false, decoration: const InputDecoration(labelText: 'Talhão', border: OutlineInputBorder(), prefixIcon: Icon(Icons.grid_on))),
                   const SizedBox(height: 16),
                   TextFormField(controller: _idParcelaController, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'ID da parcela', border: OutlineInputBorder(), prefixIcon: Icon(Icons.tag)), validator: (v) => v == null || v.trim().isEmpty ? 'Campo obrigatório' : null),
                   const SizedBox(height: 16),
