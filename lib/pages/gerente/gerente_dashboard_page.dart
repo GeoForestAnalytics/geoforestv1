@@ -1,7 +1,6 @@
-// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO COMPLETA COM TODAS AS TABELAS)
+// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO FINAL COM GRÁFICO DE GAUGE)
 
 import 'package:flutter/material.dart';
-// O import do parcela_model não é mais necessário aqui diretamente
 import 'package:geoforestv1/models/parcela_model.dart'; 
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:provider/provider.dart';
@@ -15,11 +14,12 @@ class GerenteDashboardPage extends StatefulWidget {
 }
 
 class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
-
+  
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Usando context.read para chamar o método do provider uma única vez.
       context.read<GerenteProvider>().iniciarMonitoramento();
     });
   }
@@ -59,8 +59,11 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                 ),
                 const SizedBox(height: 24),
 
+                // ===================================================================
+                // NOVA CHAMADA PARA O GRÁFICO DE GAUGE
+                // ===================================================================
                 if (provider.progressoPorEquipe.isNotEmpty)
-                  _buildRadarChartCard(context, provider.progressoPorEquipe),
+                  _buildRadialGaugesCard(context, provider.progressoPorEquipe),
                 const SizedBox(height: 24),
                 
                 if (provider.coletasPorMes.isNotEmpty)
@@ -70,7 +73,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                 if (provider.desempenhoPorFazenda.isNotEmpty)
                   _buildFazendaDataTableCard(context, provider.desempenhoPorFazenda),
                 
-                // Adiciona a nova tabela de cubagem, se houver dados
                 if (provider.desempenhoPorCubagem.isNotEmpty) ...[
                   const SizedBox(height: 24),
                   _buildCubagemDataTableCard(context, provider.desempenhoPorCubagem),
@@ -124,7 +126,8 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                           title: Text(projeto.nome),
                           value: provider.selectedProjetoIds.contains(projeto.id),
                           onChanged: (bool? value) {
-                            provider.toggleProjetoSelection(projeto.id!);
+                            // Usando context.read dentro do callback para evitar problemas.
+                            context.read<GerenteProvider>().toggleProjetoSelection(projeto.id!);
                             setDialogState(() {});
                           },
                         );
@@ -134,7 +137,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                   actions: [
                     TextButton(
                       onPressed: () {
-                        provider.clearProjetoSelection();
+                        context.read<GerenteProvider>().clearProjetoSelection();
                         Navigator.of(dialogContext).pop();
                       },
                       child: const Text('Limpar (Todos)'),
@@ -188,73 +191,112 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
     );
   }
 
-  Widget _buildRadarChartCard(BuildContext context, Map<String, int> data) {
-    if (data.length < 3) {
+  // ===================================================================
+  // WIDGET DE GRÁFICO DE BARRAS RADIAIS (ALTERNATIVA FINAL)
+  // ===================================================================
+  Widget _buildRadialGaugesCard(BuildContext context, Map<String, int> data) {
+    if (data.isEmpty) {
       return Card(
         elevation: 2,
         child: Container(
           padding: const EdgeInsets.all(16.0),
-          height: 350,
+          height: 200,
           alignment: Alignment.center,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text("Desempenho por Equipe", style: Theme.of(context).textTheme.titleLarge),
-              const Expanded(
-                child: Center(
-                  child: Text(
-                    'Dados insuficientes para gerar o gráfico.\n(São necessárias no mínimo 3 equipes com dados)',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ),
-            ],
+          child: Text(
+            'Não há dados de desempenho por equipe para exibir.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade600),
           ),
         ),
       );
     }
 
+    // Encontra o valor máximo para usar como a meta de 100% nos gauges.
+    final maxValue = data.values.reduce((a, b) => a > b ? a : b).toDouble();
     final entries = data.entries.toList();
-    final dataSets = [
-      RadarDataSet(
-        fillColor: Colors.teal.withOpacity(0.4),
-        borderColor: Colors.teal,
-        borderWidth: 2,
-        entryRadius: 3,
-        dataEntries: entries.map((e) => RadarEntry(value: e.value.toDouble())).toList(),
-      ),
-    ];
 
     return Card(
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Desempenho por Equipe", style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              "Desempenho por Equipe",
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 24),
-            SizedBox(
-              height: 250,
-              child: RadarChart(
-                RadarChartData(
-                  dataSets: dataSets,
-                  radarBackgroundColor: Colors.transparent,
-                  borderData: FlBorderData(show: false),
-                  radarBorderData: const BorderSide(color: Colors.grey, width: 1),
-                  getTitle: (index, angle) {
-                    if (index >= entries.length) return const RadarChartTitle(text: '');
-                    return RadarChartTitle(text: entries[index].key);
-                  },
-                  titleTextStyle: const TextStyle(color: Colors.black, fontSize: 12),
-                  tickCount: 5,
-                  ticksTextStyle: const TextStyle(color: Colors.grey, fontSize: 10),
-                  tickBorderData: const BorderSide(color: Colors.grey, width: 1),
-                  gridBorderData: const BorderSide(color: Colors.grey, width: 1),
-                  radarShape: RadarShape.polygon,
-                ),
-                swapAnimationDuration: const Duration(milliseconds: 400),
+            // Usa um GridView para organizar os medidores.
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(), // Desabilita o scroll do grid.
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3, // 3 medidores por linha, ajuste conforme necessário.
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 0.8, // Proporção para garantir que o texto caiba.
               ),
+              itemCount: entries.length,
+              itemBuilder: (context, index) {
+                final entry = entries[index];
+                final value = entry.value.toDouble();
+                final percentage = (value / maxValue * 100);
+
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // O PieChart que cria o efeito de gauge.
+                          PieChart(
+                            PieChartData(
+                              startDegreeOffset: -90, // Começa o gráfico no topo.
+                              sectionsSpace: 0,
+                              centerSpaceRadius: 25, // Ajuste o tamanho do buraco.
+                              sections: [
+                                // A barra de progresso.
+                                PieChartSectionData(
+                                  value: percentage,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  radius: 8,
+                                  showTitle: false,
+                                ),
+                                // O fundo cinza que representa o restante.
+                                PieChartSectionData(
+                                  value: 100 - percentage,
+                                  color: Colors.grey.shade300,
+                                  radius: 8,
+                                  showTitle: false,
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Texto com o valor no centro do gauge.
+                          Text(
+                            entry.value.toString(),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Nome da equipe abaixo do gauge.
+                    Text(
+                      entry.key,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -371,40 +413,40 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
   }
 
   Widget _buildCubagemDataTableCard(BuildContext context, List<DesempenhoCubagem> data) {
-  return Card(
-    elevation: 2,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-          child: Text("Produção de Cubagem por Talhão", style: Theme.of(context).textTheme.titleLarge),
-        ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            columnSpacing: 20.0,
-            headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
-            columns: const [
-              DataColumn(label: Text('Fazenda / Talhão', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Pendentes'), numeric: true),
-              DataColumn(label: Text('Concluídas'), numeric: true),
-              DataColumn(label: Text('Exportadas'), numeric: true),
-              DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-            ],
-            rows: data.map((d) => DataRow(
-              cells: [
-                DataCell(Text(d.nome, style: const TextStyle(fontWeight: FontWeight.w500))),
-                DataCell(Text(d.pendentes.toString())),
-                DataCell(Text(d.concluidas.toString())),
-                DataCell(Text(d.exportadas.toString())),
-                DataCell(Text(d.total.toString(), style: const TextStyle(fontWeight: FontWeight.w500))),
-              ]
-            )).toList(),
+    return Card(
+      elevation: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
+            child: Text("Produção de Cubagem por Talhão", style: Theme.of(context).textTheme.titleLarge),
           ),
-        ),
-      ],
-    ),
-  );
-}
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columnSpacing: 20.0,
+              headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+              columns: const [
+                DataColumn(label: Text('Fazenda / Talhão', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Pendentes'), numeric: true),
+                DataColumn(label: Text('Concluídas'), numeric: true),
+                DataColumn(label: Text('Exportadas'), numeric: true),
+                DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+              ],
+              rows: data.map((d) => DataRow(
+                cells: [
+                  DataCell(Text(d.nome, style: const TextStyle(fontWeight: FontWeight.w500))),
+                  DataCell(Text(d.pendentes.toString())),
+                  DataCell(Text(d.concluidas.toString())),
+                  DataCell(Text(d.exportadas.toString())),
+                  DataCell(Text(d.total.toString(), style: const TextStyle(fontWeight: FontWeight.w500))),
+                ]
+              )).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

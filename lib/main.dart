@@ -1,4 +1,4 @@
-// lib/main.dart (VERSÃO FINAL COM TODAS AS CORREÇÕES DE INICIALIZAÇÃO)
+// lib/main.dart (VERSÃO FINAL E CORRETA)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -6,15 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart'; 
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 
-// <<< 1. IMPORTS ADICIONAIS PARA INICIALIZAÇÃO GLOBAL DO PROJ4 >>>
+// Imports do projeto
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
-
-// Importações do Projeto
+import 'package:geoforestv1/providers/theme_provider.dart';
 import 'package:geoforestv1/pages/menu/home_page.dart';
 import 'package:geoforestv1/pages/menu/login_page.dart';
 import 'package:geoforestv1/pages/menu/equipe_page.dart';
@@ -29,12 +28,9 @@ import 'package:geoforestv1/pages/gerente/gerente_main_page.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/pages/gerente/gerente_map_page.dart';
 
-// <<< 2. FUNÇÃO GLOBAL PARA INICIALIZAR AS DEFINIÇÕES DE PROJEÇÃO >>>
-// Garante que as definições de coordenadas estejam disponíveis tanto para a
-// thread principal (usada na exportação) quanto para qualquer isolate.
+
 void initializeProj4Definitions() {
   try {
-    // Verifica se já foi inicializado para não fazer de novo.
     proj4.Projection.get('EPSG:4326');
   } catch (_) {
     debugPrint("Inicializando definições Proj4 para o escopo global...");
@@ -45,15 +41,10 @@ void initializeProj4Definitions() {
   }
 }
 
-// PONTO DE ENTRADA PRINCIPAL DO APP
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // <<< 3. INICIALIZAÇÃO DO PROJ4 APLICADA AQUI >>>
-  // Isso resolve o problema de exportação de coordenadas.
   initializeProj4Definitions();
 
-  // A sua correção crítica para o FFI, que já estava correta, permanece aqui.
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -67,7 +58,6 @@ Future<void> main() async {
   runApp(const AppServicesLoader());
 }
 
-// AppServicesLoader (Nenhuma mudança aqui, permanece igual)
 class AppServicesLoader extends StatefulWidget {
   const AppServicesLoader({super.key});
 
@@ -76,15 +66,15 @@ class AppServicesLoader extends StatefulWidget {
 }
 
 class _AppServicesLoaderState extends State<AppServicesLoader> {
-  late Future<void> _servicesInitializationFuture;
+  late Future<ThemeMode> _initializationFuture;
 
   @override
   void initState() {
     super.initState();
-    _servicesInitializationFuture = _initializeRemainingServices();
+    _initializationFuture = _initializeAllServices();
   }
 
-  Future<void> _initializeRemainingServices() async {
+  Future<ThemeMode> _initializeAllServices() async {
     try {
       await Future.delayed(const Duration(seconds: 2));
       const androidProvider = kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity;
@@ -93,6 +83,9 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
       await SystemChrome.setPreferredOrientations(
         [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown],
       );
+      
+      return await loadThemeFromPreferences();
+
     } catch (e) {
       print("!!!!!! ERRO NA INICIALIZAÇÃO DOS SERVIÇOS: $e !!!!!");
       rethrow;
@@ -101,14 +94,14 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
 
   void _retryInitialization() {
     setState(() {
-      _servicesInitializationFuture = _initializeRemainingServices();
+      _initializationFuture = _initializeAllServices();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: _servicesInitializationFuture,
+    return FutureBuilder<ThemeMode>(
+      future: _initializationFuture,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return MaterialApp(
@@ -125,15 +118,16 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
             home: SplashPage(),
           );
         }
-        return const MyApp();
+        return MyApp(initialThemeMode: snapshot.data!);
       },
     );
   }
 }
 
-// MyApp (Nenhuma mudança aqui, permanece igual)
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final ThemeMode initialThemeMode;
+
+  const MyApp({super.key, required this.initialThemeMode});
 
   @override
   Widget build(BuildContext context) {
@@ -144,35 +138,41 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TeamProvider()),
         ChangeNotifierProvider(create: (_) => LicenseProvider()),
         ChangeNotifierProvider(create: (_) => GerenteProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider(initialThemeMode)),
       ],
-      child: MaterialApp(
-        title: 'Geo Forest Analytics',
-        debugShowCheckedModeBanner: false,
-        theme: _buildThemeData(Brightness.light),
-        darkTheme: _buildThemeData(Brightness.dark),
-        initialRoute: '/auth_check',
-        routes: {
-          '/auth_check': (context) => const AuthCheck(),
-          '/equipe': (context) => const EquipePage(),
-          '/home': (context) => const HomePage(title: 'Geo Forest Analytics'),
-          '/lista_projetos': (context) => const ListaProjetosPage(title: 'Meus Projetos'),
-          '/login': (context) => const LoginPage(),
-          '/paywall': (context) => const PaywallPage(),
-          '/gerente_home': (context) => const GerenteMainPage(),
-          '/gerente_map': (context) => const GerenteMapPage(),
-        },
-        navigatorObservers: [MapProvider.routeObserver],
-        builder: (context, child) {
-          ErrorWidget.builder = (FlutterErrorDetails details) {
-            debugPrint('Caught a Flutter error: ${details.exception}');
-            return ErrorScreen(
-              message: 'Ocorreu um erro inesperado.\nPor favor, reinicie o aplicativo.',
-              onRetry: null,
-            );
-          };
-          return MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
-            child: child!,
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'Geo Forest Analytics',
+            debugShowCheckedModeBanner: false,
+            theme: _buildThemeData(Brightness.light),
+            darkTheme: _buildThemeData(Brightness.dark),
+            themeMode: themeProvider.themeMode,
+            initialRoute: '/auth_check',
+            routes: {
+              '/auth_check': (context) => const AuthCheck(),
+              '/equipe': (context) => const EquipePage(),
+              '/home': (context) => const HomePage(title: 'Geo Forest Analytics'),
+              '/lista_projetos': (context) => const ListaProjetosPage(title: 'Meus Projetos'),
+              '/login': (context) => const LoginPage(),
+              '/paywall': (context) => const PaywallPage(),
+              '/gerente_home': (context) => const GerenteMainPage(),
+              '/gerente_map': (context) => const GerenteMapPage(),
+            },
+            navigatorObservers: [MapProvider.routeObserver],
+            builder: (context, child) {
+              ErrorWidget.builder = (FlutterErrorDetails details) {
+                debugPrint('Caught a Flutter error: ${details.exception}');
+                return ErrorScreen(
+                  message: 'Ocorreu um erro inesperado.\nPor favor, reinicie o aplicativo.',
+                  onRetry: null,
+                );
+              };
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
+                child: child!,
+              );
+            },
           );
         },
       ),
@@ -181,11 +181,18 @@ class MyApp extends StatelessWidget {
 
   ThemeData _buildThemeData(Brightness brightness) {
     final baseColor = const Color(0xFF617359);
+    final isLight = brightness == Brightness.light;
+
     return ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: baseColor, brightness: brightness),
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: baseColor,
+        brightness: brightness,
+        surface: isLight ? const Color(0xFFF3F3F4) : Colors.grey[900],
+        background: isLight ? Colors.white : Colors.black,
+      ),
       appBarTheme: AppBarTheme(
-        backgroundColor: brightness == Brightness.light ? baseColor : Colors.grey[900],
+        backgroundColor: isLight ? baseColor : Colors.grey[850],
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -196,20 +203,26 @@ class MyApp extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
-      cardTheme: CardThemeData(
+      cardTheme: CardThemeData( // <<< CORREÇÃO: Usar CardThemeData
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        color: isLight ? Colors.white : Colors.grey.shade800,
       ),
-      textTheme: const TextTheme(
-        headlineMedium: TextStyle(color: Color(0xFF1D4433), fontWeight: FontWeight.bold),
-        bodyLarge: TextStyle(color: Color(0xFF1D4433)),
-        bodyMedium: TextStyle(color: Color(0xFF1D4433)),
+      textTheme: TextTheme(
+        headlineMedium: TextStyle(color: isLight ? const Color(0xFF1D4433) : Colors.white, fontWeight: FontWeight.bold),
+        bodyLarge: TextStyle(color: isLight ? const Color(0xFF1D4433) : Colors.grey.shade300),
+        bodyMedium: TextStyle(color: isLight ? const Color(0xFF1D4433) : Colors.grey.shade300),
+        titleLarge: TextStyle(color: isLight ? const Color(0xFF1D4433) : Colors.white, fontWeight: FontWeight.bold),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+        ),
       ),
     );
   }
 }
 
-// AuthCheck (Nenhuma mudança aqui, permanece igual)
 class AuthCheck extends StatelessWidget {
   const AuthCheck({super.key});
 
@@ -252,7 +265,6 @@ class AuthCheck extends StatelessWidget {
   }
 }
 
-// ErrorScreen (Nenhuma mudança aqui, permanece igual)
 class ErrorScreen extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
@@ -262,16 +274,16 @@ class ErrorScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F3F4),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, color: Colors.red[700], size: 60),
+              Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 60),
               const SizedBox(height: 20),
-              Text('Erro na Aplicação', style: TextStyle(color: Colors.red[700], fontSize: 24, fontWeight: FontWeight.bold)),
+              Text('Erro na Aplicação', style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 15),
               Text(message, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
               const SizedBox(height: 30),

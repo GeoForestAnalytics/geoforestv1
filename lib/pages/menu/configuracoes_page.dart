@@ -1,4 +1,4 @@
-// lib/pages/menu/configuracoes_page.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/pages/menu/configuracoes_page.dart (VERSÃO CORRETA E LIMPA)
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -9,11 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geoforestv1/services/licensing_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geoforestv1/pages/projetos/gerenciar_delegacoes_page.dart';
-
-// --- IMPORT COM O CAMINHO CORRETO PARA A PÁGINA DE EQUIPE ---
-import 'package:geoforestv1/pages/gerente/gerenciar_equipe_page.dart'; 
-// -----------------------------------------------------------
-
+import 'package:geoforestv1/providers/theme_provider.dart';
+import 'package:geoforestv1/pages/gerente/gerenciar_equipe_page.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/utils/constants.dart';
@@ -111,36 +108,30 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
   }
 
   Future<void> _handleLogout() async {
-  await _mostrarDialogoLimpeza(
-    titulo: 'Confirmar Saída',
-    conteudo: 'Tem certeza de que deseja sair da sua conta?',
-    isDestructive: false,
-    onConfirmar: () async {
-      // Apenas chame o signOut. O AuthCheck, que está ouvindo
-      // as mudanças no LoginController, vai automaticamente
-      // redirecionar para a LoginPage.
-      await context.read<LoginController>().signOut();
-    },
-  );
-}
+    await _mostrarDialogoLimpeza(
+      titulo: 'Confirmar Saída',
+      conteudo: 'Tem certeza de que deseja sair da sua conta?',
+      isDestructive: false,
+      onConfirmar: () async {
+        await context.read<LoginController>().signOut();
+      },
+    );
+  }
 
   Future<void> _diagnosticarPermissoes() async {
     final statusStorage = await Permission.storage.status;
     debugPrint("DEBUG: Status da permissão [storage]: $statusStorage");
-
     final statusManage = await Permission.manageExternalStorage.status;
     debugPrint("DEBUG: Status da permissão [manageExternalStorage]: $statusManage");
-    
     final statusMedia = await Permission.accessMediaLocation.status;
     debugPrint("DEBUG: Status da permissão [accessMediaLocation]: $statusMedia");
-    
     await openAppSettings(); 
   }
   
-
   @override
   Widget build(BuildContext context) {
     final licenseProvider = context.watch<LicenseProvider>();
+    final themeProvider = context.watch<ThemeProvider>(); 
     final isGerente = licenseProvider.licenseData?.cargo == 'gerente';
 
     return Scaffold(
@@ -185,9 +176,21 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                       ],
                     ),
                   ),
-
                   const Divider(thickness: 1, height: 48),
-
+                  const Text('Aparência', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  SegmentedButton<ThemeMode>(
+                    segments: const <ButtonSegment<ThemeMode>>[
+                      ButtonSegment<ThemeMode>(value: ThemeMode.light, label: Text('Claro'), icon: Icon(Icons.light_mode_outlined)),
+                      ButtonSegment<ThemeMode>(value: ThemeMode.system, label: Text('Sistema'), icon: Icon(Icons.brightness_auto_outlined)),
+                      ButtonSegment<ThemeMode>(value: ThemeMode.dark, label: Text('Escuro'), icon: Icon(Icons.dark_mode_outlined)),
+                    ],
+                    selected: <ThemeMode>{themeProvider.themeMode},
+                    onSelectionChanged: (Set<ThemeMode> newSelection) {
+                      context.read<ThemeProvider>().setThemeMode(newSelection.first);
+                    },
+                  ),
+                  const Divider(thickness: 1, height: 48),
                   const Text('Zona UTM de Exportação', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const Text('Define o sistema de coordenadas para os arquivos CSV.', style: TextStyle(color: Colors.grey)),
                   const SizedBox(height: 20),
@@ -208,12 +211,9 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                       style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                     ),
                   ),
-                  
                   const Divider(thickness: 1, height: 48),
-
                   const Text('Gerenciamento de Dados', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                   const SizedBox(height: 12),
-                  
                   if (isGerente)
                     ListTile(
                       leading: const Icon(Icons.handshake_outlined, color: Colors.teal),
@@ -226,8 +226,6 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                         );
                       },
                     ),
-
-                  // <<< VERSÃO ÚNICA E CORRIGIDA DO BOTÃO >>>
                   if (isGerente)
                     ListTile(
                       leading: const Icon(Icons.groups_outlined, color: Colors.blueAccent),
@@ -240,7 +238,6 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                         );
                       },
                     ),
-
                   ListTile(
                     leading: const Icon(Icons.archive_outlined),
                     title: const Text('Arquivar Coletas Exportadas'),
@@ -254,9 +251,7 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                       },
                     ),
                   ),
-
                   const Divider(thickness: 1, height: 24),
-
                   const Text('Ações Perigosas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
                   const SizedBox(height: 12),
                   ListTile(
@@ -268,11 +263,11 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                       conteudo: 'Tem certeza? TODOS os dados de parcelas e árvores serão apagados permanentemente.',
                       onConfirmar: () async {
                         await _parcelaRepository.limparTodasAsParcelas();
-                        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Todas as parcelas foram apagadas!', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Todas as parcelas foram apagadas!', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
                       },
                     ),
                   ),
-                   ListTile(
+                  ListTile(
                     leading: const Icon(Icons.delete_forever_outlined, color: Colors.red),
                     title: const Text('Limpar TODOS os Dados de Cubagem'),
                     subtitle: const Text('Apaga TODOS os dados de cubagem salvos.'),
@@ -281,13 +276,11 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                       conteudo: 'Tem certeza? TODOS os dados de cubagem serão apagados permanentemente.',
                       onConfirmar: () async {
                         await _cubagemRepository.limparTodasAsCubagens();
-                        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Todos os dados de cubagem foram apagados!', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Todos os dados de cubagem foram apagados!', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
                       },
                     ),
                   ),
-
                   const Divider(thickness: 1, height: 48),
-                  
                   Center(
                     child: ElevatedButton(
                       onPressed: _diagnosticarPermissoes,
@@ -295,7 +288,7 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                       child: const Text('Debug de Permissões', style: TextStyle(color: Colors.black)),
                     ),
                   ),
-                  const SizedBox(height: 20), 
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
