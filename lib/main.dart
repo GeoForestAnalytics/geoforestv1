@@ -135,40 +135,47 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // Providers Independentes
         ChangeNotifierProvider(create: (_) => LoginController()),
         ChangeNotifierProvider(create: (_) => MapProvider()),
         ChangeNotifierProvider(create: (_) => TeamProvider()),
         ChangeNotifierProvider(create: (_) => LicenseProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider(initialThemeMode)),
         
-        ChangeNotifierProvider(create: (_) => GerenteProvider()),
-        
-        // --- INÍCIO DA CORREÇÃO ---
-        
-        // O provider de filtros é criado de forma independente.
-        ChangeNotifierProvider(create: (_) => DashboardFilterProvider()),
+        // --- INÍCIO DA ARQUITETURA CORRETA ---
 
-        // O proxy provider agora só tem a responsabilidade de passar os
-        // outros providers para o método `update` do DashboardMetricsProvider.
-        // Ele não modifica mais o estado do filterProvider.
+        // 1. O GerenteProvider fornece os dados brutos. Ele é independente.
+        ChangeNotifierProvider(create: (_) => GerenteProvider()),
+
+        // 2. O FilterProvider agora DEPENDE do GerenteProvider.
+        //    Ele usa um Proxy para receber a lista de projetos e se auto-atualizar.
+        ChangeNotifierProxyProvider<GerenteProvider, DashboardFilterProvider>(
+          create: (_) => DashboardFilterProvider(),
+          update: (_, gerenteProvider, previousFilterProvider) {
+            // A função 'update' é o local SEGURO para passar dados entre providers.
+            final filterProvider = previousFilterProvider ?? DashboardFilterProvider();
+            filterProvider.updateProjetosDisponiveis(gerenteProvider.projetos);
+            return filterProvider;
+          },
+        ),
+
+        // 3. O MetricsProvider DEPENDE de AMBOS, Gerente e Filter.
+        //    Ele recebe os dados brutos e os filtros já atualizados.
         ChangeNotifierProxyProvider2<GerenteProvider, DashboardFilterProvider, DashboardMetricsProvider>(
           create: (_) => DashboardMetricsProvider(),
-          update: (_, gerenteProvider, filterProvider, metricsProvider) {
-            if (metricsProvider == null) return DashboardMetricsProvider();
-            
-            // A LINHA PROBLEMÁTICA FOI REMOVIDA DAQUI
-            
+          update: (_, gerenteProvider, filterProvider, previousMetricsProvider) {
+            final metricsProvider = previousMetricsProvider ?? DashboardMetricsProvider();
             metricsProvider.update(gerenteProvider, filterProvider);
-            
             return metricsProvider;
           },
         ),
         
-        // --- FIM DA CORREÇÃO ---
+        // --- FIM DA ARQUITETURA CORRETA ---
       ],
       child: Consumer<ThemeProvider>(
+        // O restante do seu arquivo main.dart continua exatamente igual...
         builder: (context, themeProvider, child) {
-          return MaterialApp(
+              return MaterialApp(
             title: 'Geo Forest Analytics',
             debugShowCheckedModeBanner: false,
             theme: _buildThemeData(Brightness.light),

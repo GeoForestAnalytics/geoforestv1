@@ -70,20 +70,21 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
 
   // --- MÉTODO ATUALIZADO ---
   Future<void> _navegarParaNovaParcela() async {
-  // Busca diretamente o talhão que precisamos, já com o projetoId
-  final talhaoCompleto = await _talhaoRepository.getTalhaoById(widget.talhao.id!);
+    // Busca diretamente o talhão que precisamos, já com o projetoId.
+    final talhaoCompleto = await _talhaoRepository.getTalhaoById(widget.talhao.id!);
 
-  if (!mounted || talhaoCompleto == null) return;
+    if (!mounted || talhaoCompleto == null) return;
 
-  final bool? recarregar = await Navigator.push(
-    context,
-    MaterialPageRoute(
-        builder: (context) => ColetaDadosPage(talhao: talhaoCompleto)),
-  );
+    final bool? recarregar = await Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (context) => ColetaDadosPage(talhao: talhaoCompleto)),
+    );
 
-  if (recarregar == true && mounted) {
-    _carregarDados();
-  }
+    if (recarregar == true && mounted) {
+      _carregarDados();
+    }
+  
 }
 
   // --- MÉTODO ATUALIZADO ---

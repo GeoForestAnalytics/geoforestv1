@@ -1,16 +1,21 @@
-// lib/services/sync_service.dart (VERSÃO FINAL E COMPLETA COM TUDO INTEGRADO)
+// lib/services/sync_service.dart (VERSÃO FINAL COM UPLOAD CORRIGIDO)
 
 import 'dart:async';
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
+import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
+import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
+import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/sync_conflict_model.dart';
 import 'package:geoforestv1/models/sync_progress_model.dart';
+import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/services/licensing_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -86,9 +91,9 @@ class SyncService {
         concluido: true
       ));
 
-    } catch(e) {
+    } catch(e, s) {
       final erroMsg = "Ocorreu um erro geral na sincronização: $e";
-      debugPrint(erroMsg);
+      debugPrint("$erroMsg\n$s");
       _progressStreamController.add(SyncProgress(erro: erroMsg, concluido: true));
       rethrow;
     }
@@ -102,7 +107,7 @@ class SyncService {
         _progressStreamController.add(SyncProgress(
           totalAProcessar: totalGeral,
           processados: processados,
-          mensagem: "Verificando item ${processados + 1} de $totalGeral...",
+          mensagem: "Enviando item ${processados + 1} de $totalGeral...",
         ));
       }
       
@@ -233,30 +238,26 @@ class SyncService {
       await firestoreBatch.commit();
   }
   
+  // <<< INÍCIO DA CORREÇÃO >>>
   Future<void> _uploadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
     final batch = _firestore.batch();
     
+    // 1. Upload de PROJETOS
     final projetosProprios = await db.query('projetos', where: 'delegado_por_license_id IS NULL AND licenseId = ?', whereArgs: [licenseId]);
     if (projetosProprios.isEmpty) return;
-    
-    final projetosIds = projetosProprios.map((p) => p['id']).toList();
-
-    for (var registro in projetosProprios) {
-      final docRef = _firestore.collection('clientes').doc(licenseId).collection('projetos').doc(registro['id'].toString());
-      final map = Map<String, dynamic>.from(registro);
+    for (var p in projetosProprios) {
+      final docRef = _firestore.collection('clientes').doc(licenseId).collection('projetos').doc(p['id'].toString());
+      final map = Map<String, dynamic>.from(p);
       map['lastModified'] = firestore.FieldValue.serverTimestamp();
       batch.set(docRef, map, firestore.SetOptions(merge: true));
     }
 
-    if(projetosIds.isEmpty) {
-        await batch.commit();
-        debugPrint("Hierarquia de projetos próprios (sem atividades) enviada para a nuvem.");
-        return;
-    }
-
+    // 2. Upload de ATIVIDADES
+    final projetosIds = projetosProprios.map((p) => p['id'] as int).toList();
+    if(projetosIds.isEmpty) return;
+    
     final atividades = await db.query('atividades', where: 'projetoId IN (${projetosIds.join(',')})');
-    final atividadeIds = atividades.map((a) => a['id']).toList();
     for (var a in atividades) {
         final docRef = _firestore.collection('clientes').doc(licenseId).collection('atividades').doc(a['id'].toString());
         final map = Map<String, dynamic>.from(a);
@@ -264,81 +265,65 @@ class SyncService {
         batch.set(docRef, map, firestore.SetOptions(merge: true));
     }
 
-    if (atividadeIds.isNotEmpty) {
-        final fazendas = await db.query('fazendas', where: 'atividadeId IN (${atividadeIds.join(',')})');
-        final fazendaIds = fazendas.map((f) => f['id'] as String).toList();
-        for (var f in fazendas) {
-            final docId = "${f['id']}_${f['atividadeId']}";
-            final docRef = _firestore.collection('clientes').doc(licenseId).collection('fazendas').doc(docId);
-            final map = Map<String, dynamic>.from(f);
+    // 3. Upload de FAZENDAS
+    final atividadeIds = atividades.map((a) => a['id'] as int).toList();
+    if (atividadeIds.isEmpty) return;
+    
+    final fazendas = await db.query('fazendas', where: 'atividadeId IN (${atividadeIds.join(',')})');
+    for (var f in fazendas) {
+        final docId = "${f['id']}_${f['atividadeId']}";
+        final docRef = _firestore.collection('clientes').doc(licenseId).collection('fazendas').doc(docId);
+        final map = Map<String, dynamic>.from(f);
+        map['lastModified'] = firestore.FieldValue.serverTimestamp();
+        batch.set(docRef, map, firestore.SetOptions(merge: true));
+    }
+
+    // 4. Upload de TALHÕES (COM CONSULTA CORRIGIDA)
+    final fazendaIds = fazendas.map((f) => f['id'] as String).toList();
+    if (fazendaIds.isNotEmpty) {
+        // A consulta 'IN' no sqflite requer que a lista seja formatada como uma string entre parênteses
+        final idsFormatados = fazendaIds.map((id) => "'$id'").join(',');
+        final talhoes = await db.query('talhoes', where: 'fazendaId IN ($idsFormatados)');
+        
+        for (var t in talhoes) {
+            final docRef = _firestore.collection('clientes').doc(licenseId).collection('talhoes').doc(t['id'].toString());
+            final map = Map<String, dynamic>.from(t);
             map['lastModified'] = firestore.FieldValue.serverTimestamp();
             batch.set(docRef, map, firestore.SetOptions(merge: true));
-        }
-
-        if (fazendaIds.isNotEmpty) {
-            final placeholders = List.filled(fazendaIds.length, '?').join(',');
-            final talhoes = await db.query('talhoes', where: 'fazendaId IN ($placeholders)', whereArgs: fazendaIds);
-            for (var t in talhoes) {
-                final docRef = _firestore.collection('clientes').doc(licenseId).collection('talhoes').doc(t['id'].toString());
-                final map = Map<String, dynamic>.from(t);
-                map['lastModified'] = firestore.FieldValue.serverTimestamp();
-                batch.set(docRef, map, firestore.SetOptions(merge: true));
-            }
         }
     }
     
     await batch.commit();
-    debugPrint("Hierarquia de projetos próprios enviada para a nuvem.");
+    debugPrint("Hierarquia de projetos próprios enviada para a nuvem com sucesso.");
   }
+  // <<< FIM DA CORREÇÃO >>>
+
 
   Future<void> _downloadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
     
     final projetosSnap = await _firestore.collection('clientes').doc(licenseId).collection('projetos').get();
-    final idsNaWeb = projetosSnap.docs.map((doc) => doc.data()['id'] as int).toSet();
-    final projetosLocais = await db.query('projetos', columns: ['id'], where: 'licenseId = ? AND delegado_por_license_id IS NULL', whereArgs: [licenseId]);
-    final idsLocais = projetosLocais.map((map) => map['id'] as int).toSet();
-    final idsParaDeletar = idsLocais.difference(idsNaWeb);
-
-    if (idsParaDeletar.isNotEmpty) {
-      await db.delete('projetos', where: 'id IN (${List.filled(idsParaDeletar.length, '?').join(',')})', whereArgs: idsParaDeletar.toList());
-      debugPrint("${idsParaDeletar.length} projetos obsoletos da licença $licenseId foram removidos.");
-    }
-    
     for (var doc in projetosSnap.docs) {
-      final data = doc.data();
-      data['licenseId'] = licenseId; 
-      if (data['status'] != 'arquivado') {
-        await db.insert('projetos', data, conflictAlgorithm: ConflictAlgorithm.replace);
-      } else {
-        await db.delete('projetos', where: 'id = ?', whereArgs: [data['id']]);
-      }
+      final projeto = Projeto.fromMap(doc.data());
+      await db.insert('projetos', projeto.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
     }
     
     final atividadesSnap = await _firestore.collection('clientes').doc(licenseId).collection('atividades').get();
-    final idsAtividadesNaWeb = atividadesSnap.docs.map((doc) => doc.data()['id'] as int).toSet();
-    
-    final atividadesLocais = await db.query('atividades', columns: ['id'], where: 'projetoId IN (SELECT id FROM projetos WHERE licenseId = ? AND delegado_por_license_id IS NULL)', whereArgs: [licenseId]);
-    final idsAtividadesLocais = atividadesLocais.map((map) => map['id'] as int).toSet();
-    final idsAtividadesParaDeletar = idsAtividadesLocais.difference(idsAtividadesNaWeb);
-    
-    if (idsAtividadesParaDeletar.isNotEmpty) {
-      await db.delete('atividades', where: 'id IN (${List.filled(idsAtividadesParaDeletar.length, '?').join(',')})', whereArgs: idsAtividadesParaDeletar.toList());
-      debugPrint("${idsAtividadesParaDeletar.length} atividades obsoletas da licença $licenseId foram removidas.");
-    }
-
     for (var doc in atividadesSnap.docs) {
-      await db.insert('atividades', doc.data(), conflictAlgorithm: ConflictAlgorithm.replace);
+      final atividade = Atividade.fromMap(doc.data());
+      await db.insert('atividades', atividade.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
     }
     
     final fazendasSnap = await _firestore.collection('clientes').doc(licenseId).collection('fazendas').get();
     for (var doc in fazendasSnap.docs) {
-      await db.insert('fazendas', doc.data(), conflictAlgorithm: ConflictAlgorithm.replace);
+      final fazenda = Fazenda.fromMap(doc.data());
+      await db.insert('fazendas', fazenda.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     final talhoesSnap = await _firestore.collection('clientes').doc(licenseId).collection('talhoes').get();
     for (var doc in talhoesSnap.docs) {
-      await db.insert('talhoes', doc.data(), conflictAlgorithm: ConflictAlgorithm.replace);
+      final talhao = Talhao.fromMap(doc.data());
+      await db.insert('talhoes', talhao.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     debugPrint("Hierarquia da licença $licenseId foi baixada e sincronizada.");
@@ -368,10 +353,10 @@ class SyncService {
             .collection('projetos').doc(projetoId.toString()).get();
         
         if (projDoc.exists) {
-          final projetoData = projDoc.data()!;
-          projetoData['delegado_por_license_id'] = licenseIdDoCliente;
+          final projeto = Projeto.fromMap(projDoc.data()!)
+              .copyWith(delegadoPorLicenseId: licenseIdDoCliente);
           
-          await db.insert('projetos', projetoData, conflictAlgorithm: ConflictAlgorithm.replace);
+          await db.insert('projetos', projeto.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
           await _downloadFilhosDeProjeto(licenseIdDoCliente, projetoId);
         }
       }
@@ -387,7 +372,8 @@ class SyncService {
     
     final atividadeIds = <int>[];
     for (var doc in atividadesSnap.docs) {
-      await db.insert('atividades', doc.data(), conflictAlgorithm: ConflictAlgorithm.replace);
+      final atividade = Atividade.fromMap(doc.data());
+      await db.insert('atividades', atividade.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
       atividadeIds.add(doc.data()['id'] as int);
     }
     if (atividadeIds.isEmpty) return;
@@ -397,19 +383,28 @@ class SyncService {
     
     final fazendaIds = <String>[];
     for (var doc in fazendasSnap.docs) {
-      await db.insert('fazendas', doc.data(), conflictAlgorithm: ConflictAlgorithm.replace);
+      final fazenda = Fazenda.fromMap(doc.data());
+      await db.insert('fazendas', fazenda.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
       fazendaIds.add(doc.data()['id'] as String);
     }
     if (fazendaIds.isEmpty) return;
 
-    final talhoesSnap = await _firestore.collection('clientes').doc(licenseIdDoCliente)
-        .collection('talhoes').where('fazendaId', whereIn: fazendaIds).get();
+    final List<firestore.QueryDocumentSnapshot<Map<String, dynamic>>> todosOsTalhoesDocs = [];
+    for (var i = 0; i < fazendaIds.length; i += 10) {
+      final chunk = fazendaIds.sublist(i, min(i + 10, fazendaIds.length));
+      if (chunk.isNotEmpty) {
+        final talhoesSnap = await _firestore.collection('clientes').doc(licenseIdDoCliente)
+            .collection('talhoes').where('fazendaId', whereIn: chunk).get();
+        todosOsTalhoesDocs.addAll(talhoesSnap.docs);
+      }
+    }
 
-    for (var doc in talhoesSnap.docs) {
-      await db.insert('talhoes', doc.data(), conflictAlgorithm: ConflictAlgorithm.replace);
+    for (var doc in todosOsTalhoesDocs) {
+      final talhao = Talhao.fromMap(doc.data());
+      await db.insert('talhoes', talhao.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
     }
   }
-
+  
   Future<void> _downloadColetas(String licenseId) async {
     await _downloadParcelasDaNuvem(licenseId);
     await _downloadCubagensDaNuvem(licenseId);

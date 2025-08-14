@@ -1,4 +1,4 @@
-// lib/providers/gerente_provider.dart (VERSÃO REATORADA E SIMPLIFICADA)
+// lib/providers/gerente_provider.dart (VERSÃO COM CORREÇÃO DA CONDIÇÃO DE CORRIDA)
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -9,21 +9,16 @@ import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/services/gerente_service.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
-// As classes DesempenhoCubagem e DesempenhoFazenda foram movidas para o DashboardMetricsProvider.
-
 class GerenteProvider with ChangeNotifier {
-  // --- SERVIÇOS E REPOSITÓRIOS ---
   final GerenteService _gerenteService = GerenteService();
   final TalhaoRepository _talhaoRepository = TalhaoRepository();
 
-  // --- ESTADO INTERNO (DADOS BRUTOS) ---
   StreamSubscription? _dadosColetaSubscription;
   StreamSubscription? _dadosCubagemSubscription;
   List<CubagemArvore> _cubagensSincronizadas = [];
   List<Parcela> _parcelasSincronizadas = [];
   List<Projeto> _projetos = [];
   
-  // Mapas auxiliares para relacionar os dados
   Map<int, int> _talhaoToProjetoMap = {};
   Map<int, String> _talhaoIdToNomeMap = {};
   Map<String, String> _fazendaIdToNomeMap = {};
@@ -31,32 +26,26 @@ class GerenteProvider with ChangeNotifier {
   bool _isLoading = true;
   String? _error;
   
-  // --- GETTERS PÚBLICOS (APENAS PARA OS DADOS BRUTOS) ---
   bool get isLoading => _isLoading;
   String? get error => _error;
   
-  // Estes getters agora são a principal forma de outros providers acessarem os dados
   List<Projeto> get projetos => _projetos;
   List<Parcela> get parcelasSincronizadas => _parcelasSincronizadas;
   List<CubagemArvore> get cubagensSincronizadas => _cubagensSincronizadas;
   Map<int, int> get talhaoToProjetoMap => _talhaoToProjetoMap;
 
-  // <<< GETTERS DE MÉTRICAS REMOVIDOS (agora no DashboardMetricsProvider) >>>
-  // List<Parcela> get parcelasFiltradas ...
-  // List<DesempenhoCubagem> get desempenhoPorCubagem ...
-  // Map<String, int> get progressoPorEquipe ...
-  // Map<String, int> get coletasPorMes ...
-  // List<DesempenhoFazenda> get desempenhoPorFazenda ...
-
-  // <<< MÉTODOS DE FILTRO REMOVIDOS (agora no DashboardFilterProvider) >>>
-  // void toggleProjetoSelection(int projetoId) ...
-  // void clearProjetoSelection() ...
-
   GerenteProvider() {
     initializeDateFormatting('pt_BR', null);
   }
 
-  /// Responsabilidade ÚNICA: Iniciar os streams e carregar os dados brutos.
+  /// Constrói os mapas de ligação a partir do banco de dados local.
+  Future<void> _buildAuxiliaryMaps() async {
+    final todosOsTalhoes = await _talhaoRepository.getTodosOsTalhoes();
+    _talhaoToProjetoMap = { for (var talhao in todosOsTalhoes) if (talhao.id != null && talhao.projetoId != null) talhao.id!: talhao.projetoId! };
+    _talhaoIdToNomeMap = { for (var talhao in todosOsTalhoes) if (talhao.id != null) talhao.id!: talhao.nome };
+    _fazendaIdToNomeMap = { for (var talhao in todosOsTalhoes) if (talhao.fazendaId.isNotEmpty && talhao.fazendaNome != null) talhao.fazendaId: talhao.fazendaNome! };
+  }
+
   Future<void> iniciarMonitoramento() async {
     _dadosColetaSubscription?.cancel();
     _dadosCubagemSubscription?.cancel();
@@ -68,18 +57,28 @@ class GerenteProvider with ChangeNotifier {
       _projetos = await _gerenteService.getTodosOsProjetosStream();
       _projetos.sort((a, b) => a.nome.compareTo(b.nome));
       
-      final todosOsTalhoes = await _talhaoRepository.getTodosOsTalhoes();
-      _talhaoToProjetoMap = { for (var talhao in todosOsTalhoes) if (talhao.id != null && talhao.projetoId != null) talhao.id!: talhao.projetoId! };
-      _talhaoIdToNomeMap = { for (var talhao in todosOsTalhoes) if (talhao.id != null) talhao.id!: talhao.nome };
-      _fazendaIdToNomeMap = { for (var talhao in todosOsTalhoes) if (talhao.fazendaId.isNotEmpty && talhao.fazendaNome != null) talhao.fazendaId: talhao.fazendaNome! };
+      // Constrói os mapas uma vez no início.
+      await _buildAuxiliaryMaps();
 
       _dadosColetaSubscription = _gerenteService.getDadosColetaStream().listen(
-        (listaDeParcelas) {
+        (listaDeParcelas) async { // <<< MUDANÇA: O listener agora é async
           debugPrint("GERENTE PROVIDER RECEBEU: ${listaDeParcelas.length} parcelas do stream.");
+
+          // <<< CORREÇÃO PRINCIPAL: Recarrega os mapas ANTES de processar as parcelas >>>
+          await _buildAuxiliaryMaps();
+
           _parcelasSincronizadas = listaDeParcelas.map((p) {
             final nomeFazenda = _fazendaIdToNomeMap[p.idFazenda] ?? p.nomeFazenda;
             final nomeTalhao = _talhaoIdToNomeMap[p.talhaoId] ?? p.nomeTalhao;
-            return p.copyWith(nomeFazenda: nomeFazenda, nomeTalhao: nomeTalhao);
+            
+            // Adiciona o projetoId à parcela se ele não veio da nuvem (legado)
+            final projetoId = p.projetoId ?? _talhaoToProjetoMap[p.talhaoId];
+
+            return p.copyWith(
+              nomeFazenda: nomeFazenda, 
+              nomeTalhao: nomeTalhao,
+              projetoId: projetoId, // Garante que o projetoId está presente
+            );
           }).toList();
 
           if (_isLoading) _isLoading = false;
