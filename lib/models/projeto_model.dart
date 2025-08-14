@@ -1,4 +1,7 @@
-// lib/models/projeto_model.dart (VERSÃO COM CAMPO DE DELEGAÇÃO)
+// lib/models/projeto_model.dart (VERSÃO FINAL E CORRIGIDA)
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 
 class Projeto {
   final String? licenseId;
@@ -8,7 +11,6 @@ class Projeto {
   final String responsavel;
   final DateTime dataCriacao;
   final String status;
-  // <<< MUDANÇA 1: Adicionado o novo campo para rastrear a delegação >>>
   final String? delegadoPorLicenseId;
   final DateTime? lastModified;
 
@@ -20,7 +22,6 @@ class Projeto {
     required this.responsavel,
     required this.dataCriacao,
     this.status = 'ativo',
-    // <<< MUDANÇA 2: Adicionado ao construtor >>>
     this.delegadoPorLicenseId,
     this.lastModified,
   });
@@ -33,7 +34,6 @@ class Projeto {
     String? responsavel,
     DateTime? dataCriacao,
     String? status,
-    // <<< MUDANÇA 3: Adicionado ao método copyWith >>>
     String? delegadoPorLicenseId,
     DateTime? lastModified,
   }) {
@@ -45,10 +45,8 @@ class Projeto {
       responsavel: responsavel ?? this.responsavel,
       dataCriacao: dataCriacao ?? this.dataCriacao,
       status: status ?? this.status,
-      // <<< MUDANÇA 4: Adicionado aqui >>>
       delegadoPorLicenseId: delegadoPorLicenseId ?? this.delegadoPorLicenseId,
       lastModified: lastModified ?? this.lastModified,
-      
     );
   }
 
@@ -61,24 +59,37 @@ class Projeto {
       'responsavel': responsavel,
       'dataCriacao': dataCriacao.toIso8601String(),
       'status': status,
-      // <<< MUDANÇA 5: Adicionado ao mapa para salvar no banco de dados >>>
       'delegado_por_license_id': delegadoPorLicenseId,
       'lastModified': lastModified?.toIso8601String(),
     };
   }
 
   factory Projeto.fromMap(Map<String, dynamic> map) {
+    // Função auxiliar para converter datas de forma segura
+    DateTime? parseDate(dynamic value) {
+      if (value is Timestamp) {
+        return value.toDate();
+      } else if (value is String) {
+        return DateTime.tryParse(value);
+      }
+      return null;
+    }
+
+    final dataCriacao = parseDate(map['dataCriacao']);
+    if (dataCriacao == null) {
+      throw FormatException("Formato de data inválido para 'dataCriacao' no Projeto ${map['id']}");
+    }
+
     return Projeto(
       id: map['id'],
       licenseId: map['licenseId'],
       nome: map['nome'],
       empresa: map['empresa'],
       responsavel: map['responsavel'],
-      dataCriacao: DateTime.parse(map['dataCriacao']),
+      dataCriacao: dataCriacao,
       status: map['status'] ?? 'ativo',
-      // <<< MUDANÇA 6: Lendo o novo campo do banco de dados >>>
       delegadoPorLicenseId: map['delegado_por_license_id'],
-      lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null,
+      lastModified: parseDate(map['lastModified']),
     );
   }
 }

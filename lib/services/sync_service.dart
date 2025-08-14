@@ -9,7 +9,7 @@ import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
-import 'package:geoforestv1/models/sync_conflict_model.dart'; // <<< Importa o modelo de conflito
+import 'package:geoforestv1/models/sync_conflict_model.dart';
 import 'package:geoforestv1/models/sync_progress_model.dart';
 import 'package:geoforestv1/services/licensing_service.dart';
 import 'package:sqflite/sqflite.dart';
@@ -32,11 +32,10 @@ class SyncService {
   final StreamController<SyncProgress> _progressStreamController = StreamController.broadcast();
   Stream<SyncProgress> get progressStream => _progressStreamController.stream;
 
-  // Lista para guardar os conflitos encontrados durante a sincronização
   final List<SyncConflict> conflicts = [];
 
   Future<void> sincronizarDados() async {
-    conflicts.clear(); // Limpa conflitos de sincronizações anteriores
+    conflicts.clear();
     final user = _auth.currentUser;
     if (user == null) {
       _progressStreamController.add(SyncProgress(erro: "Usuário não está logado.", concluido: true));
@@ -107,7 +106,6 @@ class SyncService {
         ));
       }
       
-      // --- LÓGICA DE VERIFICAÇÃO PARA PARCELAS ---
       final parcelaLocal = await _parcelaRepository.getOneUnsyncedParcel();
       if (parcelaLocal != null) {
         try {
@@ -116,18 +114,15 @@ class SyncService {
           final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('dados_coleta').doc(parcelaLocal.uuid);
           
           final docServer = await docRef.get();
-
-          bool deveEnviar = true; // Assumimos que podemos enviar por padrão
+          bool deveEnviar = true;
 
           if (docServer.exists) {
             final serverData = docServer.data()!;
-            // Firestore retorna um Timestamp, precisamos convertê-lo para DateTime para comparar
             final serverLastModified = (serverData['lastModified'] as firestore.Timestamp?)?.toDate();
             
             if (serverLastModified != null && parcelaLocal.lastModified != null) {
-              // Compara as datas. Se a do servidor for mais nova, temos um conflito.
               if (serverLastModified.isAfter(parcelaLocal.lastModified!)) {
-                deveEnviar = false; // Bloqueia o envio
+                deveEnviar = false;
                 debugPrint("!!! CONFLITO DETECTADO para a parcela ${parcelaLocal.idParcela} !!!");
                 conflicts.add(SyncConflict(
                   type: ConflictType.parcela,
@@ -155,7 +150,6 @@ class SyncService {
         }
       }
 
-      // --- LÓGICA DE VERIFICAÇÃO PARA CUBAGENS (análoga à de parcelas) ---
       final cubagemLocal = await _cubagemRepository.getOneUnsyncedCubagem();
       if(cubagemLocal != null){
          try {
@@ -213,8 +207,10 @@ class SyncService {
       
       final arvores = await _parcelaRepository.getArvoresDaParcela(parcela.dbId!);
       for (final arvore in arvores) {
+        final arvoreMap = arvore.toMap();
+        arvoreMap['lastModified'] = firestore.FieldValue.serverTimestamp();
         final arvoreRef = docRef.collection('arvores').doc(arvore.id.toString());
-        firestoreBatch.set(arvoreRef, arvore.toMap());
+        firestoreBatch.set(arvoreRef, arvoreMap);
       }
       await firestoreBatch.commit();
   }
@@ -229,14 +225,14 @@ class SyncService {
       
       final secoes = await _cubagemRepository.getSecoesPorArvoreId(cubagem.id!);
       for (final secao in secoes) {
+        final secaoMap = secao.toMap();
+        secaoMap['lastModified'] = firestore.FieldValue.serverTimestamp();
         final secaoRef = docRef.collection('secoes').doc(secao.id.toString());
-        firestoreBatch.set(secaoRef, secao.toMap());
+        firestoreBatch.set(secaoRef, secaoMap);
       }
       await firestoreBatch.commit();
   }
-
-  // --- FUNÇÕES DA VERSÃO ANTERIOR QUE ESTAVAM CORRETAS ---
-
+  
   Future<void> _uploadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
     final batch = _firestore.batch();
@@ -248,7 +244,9 @@ class SyncService {
 
     for (var registro in projetosProprios) {
       final docRef = _firestore.collection('clientes').doc(licenseId).collection('projetos').doc(registro['id'].toString());
-      batch.set(docRef, registro, firestore.SetOptions(merge: true));
+      final map = Map<String, dynamic>.from(registro);
+      map['lastModified'] = firestore.FieldValue.serverTimestamp();
+      batch.set(docRef, map, firestore.SetOptions(merge: true));
     }
 
     if(projetosIds.isEmpty) {
@@ -261,7 +259,9 @@ class SyncService {
     final atividadeIds = atividades.map((a) => a['id']).toList();
     for (var a in atividades) {
         final docRef = _firestore.collection('clientes').doc(licenseId).collection('atividades').doc(a['id'].toString());
-        batch.set(docRef, a, firestore.SetOptions(merge: true));
+        final map = Map<String, dynamic>.from(a);
+        map['lastModified'] = firestore.FieldValue.serverTimestamp();
+        batch.set(docRef, map, firestore.SetOptions(merge: true));
     }
 
     if (atividadeIds.isNotEmpty) {
@@ -270,7 +270,9 @@ class SyncService {
         for (var f in fazendas) {
             final docId = "${f['id']}_${f['atividadeId']}";
             final docRef = _firestore.collection('clientes').doc(licenseId).collection('fazendas').doc(docId);
-            batch.set(docRef, f, firestore.SetOptions(merge: true));
+            final map = Map<String, dynamic>.from(f);
+            map['lastModified'] = firestore.FieldValue.serverTimestamp();
+            batch.set(docRef, map, firestore.SetOptions(merge: true));
         }
 
         if (fazendaIds.isNotEmpty) {
@@ -278,7 +280,9 @@ class SyncService {
             final talhoes = await db.query('talhoes', where: 'fazendaId IN ($placeholders)', whereArgs: fazendaIds);
             for (var t in talhoes) {
                 final docRef = _firestore.collection('clientes').doc(licenseId).collection('talhoes').doc(t['id'].toString());
-                batch.set(docRef, t, firestore.SetOptions(merge: true));
+                final map = Map<String, dynamic>.from(t);
+                map['lastModified'] = firestore.FieldValue.serverTimestamp();
+                batch.set(docRef, map, firestore.SetOptions(merge: true));
             }
         }
     }
@@ -292,15 +296,13 @@ class SyncService {
     
     final projetosSnap = await _firestore.collection('clientes').doc(licenseId).collection('projetos').get();
     final idsNaWeb = projetosSnap.docs.map((doc) => doc.data()['id'] as int).toSet();
-
     final projetosLocais = await db.query('projetos', columns: ['id'], where: 'licenseId = ? AND delegado_por_license_id IS NULL', whereArgs: [licenseId]);
     final idsLocais = projetosLocais.map((map) => map['id'] as int).toSet();
-
     final idsParaDeletar = idsLocais.difference(idsNaWeb);
 
     if (idsParaDeletar.isNotEmpty) {
       await db.delete('projetos', where: 'id IN (${List.filled(idsParaDeletar.length, '?').join(',')})', whereArgs: idsParaDeletar.toList());
-      debugPrint("${idsParaDeletar.length} projetos obsoletos foram removidos do banco de dados local.");
+      debugPrint("${idsParaDeletar.length} projetos obsoletos da licença $licenseId foram removidos.");
     }
     
     for (var doc in projetosSnap.docs) {
@@ -316,11 +318,13 @@ class SyncService {
     final atividadesSnap = await _firestore.collection('clientes').doc(licenseId).collection('atividades').get();
     final idsAtividadesNaWeb = atividadesSnap.docs.map((doc) => doc.data()['id'] as int).toSet();
     
-    final atividadesLocais = await db.query('atividades', columns: ['id'], where: 'projetoId IN (SELECT id FROM projetos WHERE delegado_por_license_id IS NULL AND licenseId = ?)', whereArgs: [licenseId]);
+    final atividadesLocais = await db.query('atividades', columns: ['id'], where: 'projetoId IN (SELECT id FROM projetos WHERE licenseId = ? AND delegado_por_license_id IS NULL)', whereArgs: [licenseId]);
     final idsAtividadesLocais = atividadesLocais.map((map) => map['id'] as int).toSet();
     final idsAtividadesParaDeletar = idsAtividadesLocais.difference(idsAtividadesNaWeb);
+    
     if (idsAtividadesParaDeletar.isNotEmpty) {
       await db.delete('atividades', where: 'id IN (${List.filled(idsAtividadesParaDeletar.length, '?').join(',')})', whereArgs: idsAtividadesParaDeletar.toList());
+      debugPrint("${idsAtividadesParaDeletar.length} atividades obsoletas da licença $licenseId foram removidas.");
     }
 
     for (var doc in atividadesSnap.docs) {
@@ -337,7 +341,7 @@ class SyncService {
       await db.insert('talhoes', doc.data(), conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
-    debugPrint("Hierarquia completa da própria licença (Projetos, Atividades, Fazendas, Talhões) foi baixada e sincronizada localmente.");
+    debugPrint("Hierarquia da licença $licenseId foi baixada e sincronizada.");
   }
   
   Future<void> _downloadProjetosDelegados(String licenseIdDoUsuarioLogado) async {

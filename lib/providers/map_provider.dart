@@ -1,8 +1,9 @@
-// lib/providers/map_provider.dart (VERSÃO FINAL COM TODAS AS CORREÇÕES)
+// lib/providers/map_provider.dart (VERSÃO FINAL E COMPLETA COM TUDO CORRIGIDO)
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
@@ -16,6 +17,7 @@ import 'package:geoforestv1/services/geojson_service.dart';
 import 'package:geoforestv1/services/sampling_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+
 
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
@@ -135,6 +137,7 @@ class MapProvider with ChangeNotifier {
       final codigoFazenda = dadosDoFormulario['codigoFazenda']!;
       final nomeTalhao = dadosDoFormulario['nomeTalhao']!;
       final hectaresPorAmostra = double.parse(dadosDoFormulario['hectares']!);
+      final now = DateTime.now().toIso8601String();
   
       final talhaoSalvo = await _dbHelper.database.then((db) async {
         return await db.transaction((txn) async {
@@ -143,7 +146,9 @@ class MapProvider with ChangeNotifier {
           Fazenda? fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [idFazenda, _currentAtividade!.id!])).map((e) => Fazenda.fromMap(e)).firstOrNull;
           if (fazenda == null) {
             fazenda = Fazenda(id: idFazenda, atividadeId: _currentAtividade!.id!, nome: nomeFazenda, municipio: 'N/I', estado: 'N/I');
-            await txn.insert('fazendas', fazenda.toMap());
+            final map = fazenda.toMap();
+            map['lastModified'] = now;
+            await txn.insert('fazendas', map);
           }
   
           final novoTalhao = Talhao(
@@ -151,7 +156,9 @@ class MapProvider with ChangeNotifier {
             fazendaAtividadeId: fazenda.atividadeId,
             nome: nomeTalhao,
           );
-          final talhaoId = await txn.insert('talhoes', novoTalhao.toMap());
+          final map = novoTalhao.toMap();
+          map['lastModified'] = now;
+          final talhaoId = await txn.insert('talhoes', map);
           return novoTalhao.copyWith(id: talhaoId, fazendaNome: fazenda.nome);
         });
       });
@@ -168,7 +175,6 @@ class MapProvider with ChangeNotifier {
           'db_fazenda_nome': talhaoSalvo.fazendaNome,
           'fazenda_id': talhaoSalvo.fazendaId,
           'talhao_nome': talhaoSalvo.nome,
-          // Adicionando município e estado para consistência
           'municipio': 'N/I',
           'estado': 'N/I',
         },
@@ -269,7 +275,7 @@ class MapProvider with ChangeNotifier {
   
   Future<String?> showDensityDialogAndGenerateSamples(BuildContext context) async {
     final density = await _showDensityDialog(context);
-    if (density == null) return null; // Usuário cancelou
+    if (density == null) return null;
     return await gerarAmostrasParaAtividade(hectaresPerSample: density);
   }
 
@@ -350,8 +356,8 @@ class MapProvider with ChangeNotifier {
           idFazenda: props['fazenda_id']?.toString(),
           nomeTalhao: props['talhao_nome']?.toString(),
           projetoId: idDoProjetoAtual,
-          municipio: props['municipio']?.toString(), // <-- CORREÇÃO AQUI
-          estado: props['estado']?.toString(),       // <-- CORREÇÃO AQUI
+          municipio: props['municipio']?.toString(),
+          estado: props['estado']?.toString(),
         ));
         pointIdCounter++;
       }
@@ -362,7 +368,6 @@ class MapProvider with ChangeNotifier {
       await loadSamplesParaAtividade();
     }
     
-    // Se a geração foi para a atividade toda (e não um polígono desenhado)
     if (featuresParaProcessar == null) {
       final int talhoesRemovidos = await _optimizerService.otimizarAtividade(_currentAtividade!.id!);
       _setLoading(false);
@@ -371,7 +376,7 @@ class MapProvider with ChangeNotifier {
         mensagemFinal += " $talhoesRemovidos talhões vazios foram otimizados.";
       }
       return mensagemFinal;
-    } else { // Se foi para um polígono desenhado, não otimiza
+    } else {
       _setLoading(false);
       return "${parcelasParaSalvar.length} amostras foram geradas e salvas para o novo talhão.";
     }
@@ -388,6 +393,7 @@ class MapProvider with ChangeNotifier {
     int novosTalhoes = 0;
     
     final int? idDoProjetoAtual = _currentAtividade?.projetoId;
+    final now = DateTime.now().toIso8601String();
     
     await db.transaction((txn) async {
       for (final ponto in pontosImportados) {
@@ -403,7 +409,9 @@ class MapProvider with ChangeNotifier {
           final municipio = props['municipio']?.toString() ?? 'N/I';
           final estado = props['estado']?.toString() ?? 'N/I';
           fazenda = Fazenda(id: fazendaId, atividadeId: _currentAtividade!.id!, nome: nomeDaFazenda, municipio: municipio, estado: estado);
-          await txn.insert('fazendas', fazenda.toMap());
+          final map = fazenda.toMap();
+          map['lastModified'] = now;
+          await txn.insert('fazendas', map);
           novasFazendas++;
         }
 
@@ -414,7 +422,9 @@ class MapProvider with ChangeNotifier {
             especie: props['especie']?.toString(), areaHa: (props['area_ha'] as num?)?.toDouble(),
             espacamento: props['espacam']?.toString(),
           );
-          final talhaoId = await txn.insert('talhoes', talhao.toMap());
+          final map = talhao.toMap();
+          map['lastModified'] = now;
+          final talhaoId = await txn.insert('talhoes', map);
           talhao = talhao.copyWith(id: talhaoId);
           novosTalhoes++;
         }
@@ -431,8 +441,8 @@ class MapProvider with ChangeNotifier {
           idFazenda: fazenda.id, 
           nomeTalhao: talhao.nome,
           projetoId: idDoProjetoAtual,
-          municipio: fazenda.municipio, // <-- CORREÇÃO AQUI
-          estado: fazenda.estado,       // <-- CORREÇÃO AQUI
+          municipio: fazenda.municipio,
+          estado: fazenda.estado,
         ));
       }
     });
@@ -495,6 +505,7 @@ class MapProvider with ChangeNotifier {
 
     int fazendasCriadas = 0;
     int talhoesCriados = 0;
+    final now = DateTime.now().toIso8601String();
     
     await _dbHelper.database.then((db) async => await db.transaction((txn) async {
       for (final feature in features) {
@@ -510,7 +521,9 @@ class MapProvider with ChangeNotifier {
           final municipio = props['municipio']?.toString() ?? 'N/I';
           final estado = props['estado']?.toString() ?? 'N/I';
           fazenda = Fazenda(id: fazendaId, atividadeId: _currentAtividade!.id!, nome: nomeDaFazenda, municipio: municipio, estado: estado);
-          await txn.insert('fazendas', fazenda.toMap());
+          final map = fazenda.toMap();
+          map['lastModified'] = now;
+          await txn.insert('fazendas', map);
           fazendasCriadas++;
         }
         
@@ -520,7 +533,9 @@ class MapProvider with ChangeNotifier {
             fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao,
             especie: props['especie']?.toString(), areaHa: (props['area_ha'] as num?)?.toDouble(),
           );
-          final talhaoId = await txn.insert('talhoes', talhao.toMap());
+          final map = talhao.toMap();
+          map['lastModified'] = now;
+          final talhaoId = await txn.insert('talhoes', map);
           talhao = talhao.copyWith(id: talhaoId);
           talhoesCriados++;
         }
@@ -529,8 +544,8 @@ class MapProvider with ChangeNotifier {
         feature.properties['db_fazenda_nome'] = fazenda.nome;
         feature.properties['talhao_nome'] = talhao.nome;
         feature.properties['fazenda_id'] = talhao.fazendaId;
-        feature.properties['municipio'] = fazenda.municipio; // <-- CORREÇÃO AQUI
-        feature.properties['estado'] = fazenda.estado;       // <-- CORREÇÃO AQUI
+        feature.properties['municipio'] = fazenda.municipio;
+        feature.properties['estado'] = fazenda.estado;
       }
     }));
     
@@ -634,6 +649,57 @@ class MapProvider with ChangeNotifier {
     await _exportService.exportarPlanoDeAmostragem(
       context: context,
       parcelaIds: parcelaIds,
+    );
+  }
+}
+
+// O Widget LocationMarker não precisa de alterações, pode mantê-lo como está.
+class LocationMarker extends StatefulWidget {
+  const LocationMarker({super.key});
+  @override
+  State<LocationMarker> createState() => _LocationMarkerState();
+}
+class _LocationMarkerState extends State<LocationMarker> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _animation;
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(duration: const Duration(seconds: 2), vsync: this)..repeat(reverse: false);
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+  }
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        FadeTransition(
+          opacity: Tween<double>(begin: 1.0, end: 0.0).animate(_animation),
+          child: ScaleTransition(
+            scale: _animation,
+            child: Container(
+              width: 50.0,
+              height: 50.0,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.blue.withOpacity(0.4)),
+            ),
+          ),
+        ),
+        Container(
+          width: 20.0,
+          height: 20.0,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.blue.shade700,
+            border: Border.all(color: Colors.white, width: 2.5),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 5, offset: const Offset(0, 3))],
+          ),
+        ),
+      ],
     );
   }
 }

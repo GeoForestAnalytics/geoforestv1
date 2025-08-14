@@ -1,11 +1,13 @@
-// lib/pages/menu/map_import_page.dart (VERSÃO COM CHAMADA CORRIGIDA)
+// lib/pages/menu/map_import_page.dart (VERSÃO FINAL E CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/sample_point.dart';
 import 'package:geoforestv1/pages/amostra/coleta_dados_page.dart';
 import 'package:geoforestv1/providers/map_provider.dart';
+import 'package:geoforestv1/services/activity_optimizer_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
@@ -38,6 +40,14 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
   void dispose() {
     MapProvider.routeObserver.unsubscribe(this);
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
+
+    // Otimiza a atividade ao sair da tela para limpar talhões vazios
+    final atividadeId = mapProvider.currentAtividade?.id;
+    if (atividadeId != null) {
+      ActivityOptimizerService(dbHelper: DatabaseHelper.instance).otimizarAtividade(atividadeId);
+      debugPrint("Otimização da atividade $atividadeId agendada ao sair do mapa.");
+    }
+
     if (mapProvider.isFollowingUser) {
       mapProvider.toggleFollowingUser();
     }
@@ -83,7 +93,6 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
 
     if (isPlano == null || !mounted) return;
 
-    // <<< AQUI ESTÁ A CORREÇÃO PRINCIPAL DESTE ARQUIVO >>>
     final resultMessage = await provider.processarImportacaoDeArquivo(isPlanoDeAmostragem: isPlano, context: context);
     
     if (!mounted) return;
@@ -107,7 +116,6 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
       return;
     }
 
-    // A função que mostra o diálogo agora está dentro do provider
     final resultMessage = await provider.showDensityDialogAndGenerateSamples(context);
     
     if(mounted && resultMessage != null) {

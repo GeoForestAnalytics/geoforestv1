@@ -1,4 +1,4 @@
-// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO FINAL REATORADA)
+// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO FINAL E COMPLETA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -7,7 +7,6 @@ import 'package:geoforestv1/services/export_service.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 
-// <<< 1. IMPORTAR OS NOVOS PROVIDERS >>>
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 
@@ -24,8 +23,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
   @override
   void initState() {
     super.initState();
-    // A inicialização continua aqui, pois o GerenteProvider ainda é
-    // o responsável por iniciar a busca de dados.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<GerenteProvider>().iniciarMonitoramento();
     });
@@ -33,9 +30,9 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    // <<< 2. O CONSUMER PRINCIPAL AGORA SÓ OBSERVA O GerenteProvider PARA O ESTADO DE CARREGAMENTO >>>
-    return Consumer<GerenteProvider>(
-      builder: (context, gerenteProvider, child) {
+    return Consumer3<GerenteProvider, DashboardFilterProvider, DashboardMetricsProvider>(
+      builder: (context, gerenteProvider, filterProvider, metricsProvider, child) {
+        
         if (gerenteProvider.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -46,12 +43,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.red)));
         }
-
-        // <<< 3. UMA VEZ CARREGADO, PEGAMOS OS OUTROS PROVIDERS PARA USAR NA UI >>>
-        // Usamos 'watch' para que a UI reconstrua quando os filtros ou as métricas mudarem.
-        final filterProvider = context.watch<DashboardFilterProvider>();
-        final metricsProvider = context.watch<DashboardMetricsProvider>();
-
+        
         final totalPlanejado = metricsProvider.parcelasFiltradas.length;
         final concluidas = metricsProvider.parcelasFiltradas
             .where((p) => p.status == StatusParcela.concluida)
@@ -65,11 +57,9 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
             children: [
-              // <<< 4. O WIDGET DE FILTRO AGORA USA O DashboardFilterProvider >>>
               _buildMultiSelectProjectFilter(context, filterProvider),
               const SizedBox(height: 16),
 
-              // <<< 5. TODOS OS CARDS E GRÁFICOS AGORA USAM O DashboardMetricsProvider >>>
               _buildSummaryCard(
                 context: context,
                 title: 'Progresso Inventário',
@@ -104,7 +94,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: () {
-                  // <<< 6. A EXPORTAÇÃO TAMBÉM PEGA OS FILTROS DO PROVIDER CORRETO >>>
                   final Set<int> projetosFiltrados = filterProvider.selectedProjetoIds;
                   _exportService.exportarDesenvolvimentoEquipes(context,
                       projetoIdsFiltrados: projetosFiltrados);
@@ -133,7 +122,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
     );
   }
 
-  // <<< ATUALIZADO PARA RECEBER O DashboardFilterProvider >>>
   Widget _buildMultiSelectProjectFilter(BuildContext context, DashboardFilterProvider provider) {
     String displayText;
     if (provider.selectedProjetoIds.isEmpty) {
@@ -153,7 +141,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
         showDialog(
           context: context,
           builder: (dialogContext) {
-            // Usamos um Consumer aqui para garantir que o diálogo reconstrua ao selecionar
             return Consumer<DashboardFilterProvider>(
               builder: (context, filterProvider, _) {
                 return AlertDialog(
@@ -167,7 +154,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                           title: Text(projeto.nome),
                           value: filterProvider.selectedProjetoIds.contains(projeto.id),
                           onChanged: (bool? value) {
-                            // Usamos context.read para chamar a AÇÃO de mudar o filtro
                             context.read<DashboardFilterProvider>().toggleProjetoSelection(projeto.id!);
                           },
                         );

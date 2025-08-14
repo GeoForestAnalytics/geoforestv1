@@ -1,4 +1,4 @@
-// lib/data/repositories/import_repository.dart (VERSÃO COM CORREÇÃO DO ERRO 'Codigo2')
+// lib/data/repositories/import_repository.dart (VERSÃO FINAL E COMPLETA COM lastModified)
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
@@ -75,6 +75,8 @@ class ImportRepository {
       }
 
       await db.transaction((txn) async {
+        final now = DateTime.now().toIso8601String();
+
         for (final row in dataRows) {
           linhasProcessadas++;
           
@@ -84,7 +86,9 @@ class ImportRepository {
           Atividade? atividade = (await txn.query('atividades', where: 'projetoId = ? AND tipo = ?', whereArgs: [projeto.id!, tipoAtividadeStr])).map(Atividade.fromMap).firstOrNull;
           if (atividade == null) {
               atividade = Atividade(projetoId: projeto.id!, tipo: tipoAtividadeStr, descricao: 'Importado via CSV', dataCriacao: DateTime.now());
-              final aId = await txn.insert('atividades', atividade.toMap());
+              final map = atividade.toMap();
+              map['lastModified'] = now;
+              final aId = await txn.insert('atividades', map);
               atividade = atividade.copyWith(id: aId);
               atividadesCriadas++;
           }
@@ -95,7 +99,9 @@ class ImportRepository {
           Fazenda? fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [idFazenda, atividade.id!])).map(Fazenda.fromMap).firstOrNull;
           if (fazenda == null) {
               fazenda = Fazenda(id: idFazenda, atividadeId: atividade.id!, nome: nomeFazenda, municipio: getValue(row, ['municipio']) ?? 'N/I', estado: getValue(row, ['estado']) ?? 'N/I');
-              await txn.insert('fazendas', fazenda.toMap());
+              final map = fazenda.toMap();
+              map['lastModified'] = now;
+              await txn.insert('fazendas', map);
               fazendasCriadas++;
           }
 
@@ -104,7 +110,9 @@ class ImportRepository {
           Talhao? talhao = (await txn.query('talhoes', where: 'nome = ? AND fazendaId = ? AND fazendaAtividadeId = ?', whereArgs: [nomeTalhao, fazenda.id, fazenda.atividadeId])).map(Talhao.fromMap).firstOrNull;
           if(talhao == null) {
               talhao = Talhao(fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao);
-              final tId = await txn.insert('talhoes', talhao.toMap());
+              final map = talhao.toMap();
+              map['lastModified'] = now;
+              final tId = await txn.insert('talhoes', map);
               talhao = talhao.copyWith(id: tId);
               talhoesCriados++;
           }
@@ -162,9 +170,14 @@ class ImportRepository {
                       observacao: getValue(row, ['observacao_parcela']),
                       nomeLider: getValue(row, ['lider_equipe']) ?? nomeDoResponsavel
                   );
-                  parcelaDbId = await txn.insert('parcelas', novaParcela.toMap());
+                  final map = novaParcela.toMap();
+                  map['lastModified'] = now;
+                  parcelaDbId = await txn.insert('parcelas', map);
                   parcelasCriadas++;
               } else {
+                  final map = parcela.toMap();
+                  map['lastModified'] = now;
+                  await txn.update('parcelas', map, where: 'id = ?', whereArgs: [parcela.dbId!]);
                   parcelaDbId = parcela.dbId!;
                   parcelasAtualizadas++;
               }
@@ -174,16 +187,13 @@ class ImportRepository {
                   final dominante = getValue(row, ['dominante'])?.toLowerCase() == 'sim' || getValue(row, ['dominante'])?.toLowerCase() == 'true';
                   final codigo2Str = getValue(row, ['codigo_arvore_2']);
                   
-                  // <<< INÍCIO DA CORREÇÃO >>>
                   Codigo2? finalCodigo2;
                   if (codigo2Str != null) {
-                      // Usamos .where() para evitar erro se o código não for encontrado
                       final matchingCodes = Codigo2.values.where((e) => e.name.toLowerCase() == codigo2Str.toLowerCase());
                       if (matchingCodes.isNotEmpty) {
                           finalCodigo2 = matchingCodes.first;
                       }
                   }
-                  // <<< FIM DA CORREÇÃO >>>
 
                   final novaArvore = Arvore(
                     cap: double.tryParse(getValue(row, ['cap_cm'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0, 
@@ -192,11 +202,12 @@ class ImportRepository {
                     posicaoNaLinha: int.tryParse(getValue(row, ['posicao_na_linha']) ?? '0') ?? 0, 
                     dominante: dominante, 
                     codigo: Codigo.values.firstWhere((e) => e.name.toLowerCase() == codigoStr.toLowerCase(), orElse: () => Codigo.normal),
-                    codigo2: finalCodigo2, // Usando a variável corrigida
+                    codigo2: finalCodigo2,
                     fimDeLinha: false
                   );
                   final arvoreMap = novaArvore.toMap();
                   arvoreMap['parcelaId'] = parcelaDbId;
+                  arvoreMap['lastModified'] = now;
                   await txn.insert('arvores', arvoreMap);
                   arvoresCriadas++;
               }
@@ -221,13 +232,17 @@ class ImportRepository {
                   isSynced: false,
                   nomeLider: getValue(row, ['lider_equipe']) ?? nomeDoResponsavel
               );
+              
+              final map = dadosArvore.toMap();
+              map['lastModified'] = now;
 
               if (arvoreCubagem == null) {
-                final cubagemId = await txn.insert('cubagens_arvores', dadosArvore.toMap());
+                final cubagemId = await txn.insert('cubagens_arvores', map);
                 arvoreCubagem = dadosArvore.copyWith(id: cubagemId);
                 cubagensCriadas++;
               } else {
-                await txn.update('cubagens_arvores', dadosArvore.copyWith(id: arvoreCubagem.id).toMap(), where: 'id = ?', whereArgs: [arvoreCubagem.id]);
+                map['id'] = arvoreCubagem.id;
+                await txn.update('cubagens_arvores', map, where: 'id = ?', whereArgs: [arvoreCubagem.id]);
                 cubagensAtualizadas++;
               }
 
@@ -242,7 +257,9 @@ class ImportRepository {
                           casca1_mm: double.tryParse(getValue(row, ['casca1_mm'])?.replaceAll(',', '.') ?? '0') ?? 0, 
                           casca2_mm: double.tryParse(getValue(row, ['casca2_mm'])?.replaceAll(',', '.') ?? '0') ?? 0
                       );
-                      await txn.insert('cubagens_secoes', novaSecao.toMap());
+                      final secaoMap = novaSecao.toMap();
+                      secaoMap['lastModified'] = now;
+                      await txn.insert('cubagens_secoes', secaoMap);
                       secoesCriadas++;
                   }
               }
