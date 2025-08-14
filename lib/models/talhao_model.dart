@@ -1,25 +1,19 @@
-// lib/models/talhao_model.dart
+// lib/models/talhao_model.dart (VERSÃO FINAL E CORRIGIDA)
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Talhao {
   final int? id;
-  
-  // Chaves estrangeiras
   final String fazendaId; 
   final int fazendaAtividadeId;
   final int? projetoId;
-
-  // Propriedades do Talhão
   final String nome;
   final double? areaHa;
   final double? idadeAnos;
   final String? especie;
   final String? espacamento;
-
-  // Campos para exibição na UI
   final String? fazendaNome;
-  final String? municipio; // <-- ADICIONE
-  final String? estado;    // <-- ADICIONE
-  
+  final String? municipio;
+  final String? estado;
   double? volumeTotalTalhao;
   final DateTime? lastModified;
 
@@ -34,13 +28,12 @@ class Talhao {
     this.especie,
     this.espacamento,
     this.fazendaNome,
-    this.municipio, // <-- ADICIONE
-    this.estado,    // <-- ADICIONE
+    this.municipio,
+    this.estado,
     this.volumeTotalTalhao,
     this.lastModified,
   });
 
-  // ADICIONE municipio E estado AO MÉTODO copyWith
   Talhao copyWith({
     int? id,
     String? fazendaId,
@@ -52,8 +45,8 @@ class Talhao {
     String? especie,
     String? espacamento,
     String? fazendaNome,
-    String? municipio, // <-- ADICIONE
-    String? estado,    // <-- ADICIONE
+    String? municipio,
+    String? estado,
     double? volumeTotalTalhao,
     DateTime? lastModified,
   }) {
@@ -61,21 +54,21 @@ class Talhao {
       id: id ?? this.id,
       fazendaId: fazendaId ?? this.fazendaId,
       fazendaAtividadeId: fazendaAtividadeId ?? this.fazendaAtividadeId,
+      projetoId: projetoId ?? this.projetoId,
       nome: nome ?? this.nome,
       areaHa: areaHa ?? this.areaHa,
       idadeAnos: idadeAnos ?? this.idadeAnos,
       especie: especie ?? this.especie,
       espacamento: espacamento ?? this.espacamento,
       fazendaNome: fazendaNome ?? this.fazendaNome,
-      municipio: municipio ?? this.municipio, // <-- ADICIONE
-      estado: estado ?? this.estado,          // <-- ADICIONE
+      municipio: municipio ?? this.municipio,
+      estado: estado ?? this.estado,
       volumeTotalTalhao: volumeTotalTalhao ?? this.volumeTotalTalhao,
       lastModified: lastModified ?? this.lastModified,
     );
   }
 
   Map<String, dynamic> toMap() {
-    // ... (este método não precisa de alterações)
     return {
       'id': id,
       'fazendaId': fazendaId,
@@ -89,8 +82,13 @@ class Talhao {
     };
   }
 
-  // ADICIONE municipio E estado AO MÉTODO fromMap
   factory Talhao.fromMap(Map<String, dynamic> map) {
+    DateTime? parseDate(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.tryParse(value);
+      return null;
+    }
+
     return Talhao(
       id: map['id'],
       fazendaId: map['fazendaId'],
@@ -102,9 +100,9 @@ class Talhao {
       especie: map['especie'],
       espacamento: map['espacamento'],
       fazendaNome: map['fazendaNome'], 
-      municipio: map['municipio'], // <-- ADICIONE
-      estado: map['estado'],       // <-- ADICIONE
-      lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null,
+      municipio: map['municipio'],
+      estado: map['estado'],
+      lastModified: parseDate(map['lastModified']),
     );
   }
 }

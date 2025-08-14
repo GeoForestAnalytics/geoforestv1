@@ -75,6 +75,7 @@ class GerenteProvider with ChangeNotifier {
 
       _dadosColetaSubscription = _gerenteService.getDadosColetaStream().listen(
         (listaDeParcelas) {
+          debugPrint("GERENTE PROVIDER RECEBEU: ${listaDeParcelas.length} parcelas do stream.");
           _parcelasSincronizadas = listaDeParcelas.map((p) {
             final nomeFazenda = _fazendaIdToNomeMap[p.idFazenda] ?? p.nomeFazenda;
             final nomeTalhao = _talhaoIdToNomeMap[p.talhaoId] ?? p.nomeTalhao;

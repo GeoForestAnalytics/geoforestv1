@@ -1,7 +1,7 @@
-// lib/models/fazenda_model.dart
+// lib/models/fazenda_model.dart (VERSÃO FINAL E CORRIGIDA)
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Fazenda {
-  // O id agora é a string fornecida pelo cliente e é obrigatória
   final String id; 
   final int atividadeId;
   final String nome;
@@ -30,15 +30,19 @@ class Fazenda {
   }
 
   factory Fazenda.fromMap(Map<String, dynamic> map) {
+    DateTime? parseDate(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.tryParse(value);
+      return null;
+    }
+
     return Fazenda(
       id: map['id'],
       atividadeId: map['atividadeId'],
       nome: map['nome'],
       municipio: map['municipio'],
       estado: map['estado'],
-      lastModified: map['lastModified'] != null
-          ? DateTime.parse(map['lastModified'])
-          : null,
+      lastModified: parseDate(map['lastModified']),
     );
   }
 }

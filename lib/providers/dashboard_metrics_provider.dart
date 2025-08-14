@@ -1,4 +1,4 @@
-// lib/providers/dashboard_metrics_provider.dart (NOVO ARQUIVO)
+// lib/providers/dashboard_metrics_provider.dart (VERSÃO FINAL E CORRIGIDA)
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
@@ -8,10 +8,6 @@ import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:intl/intl.dart';
-
-// As classes de modelo de dados (DesempenhoCubagem, DesempenhoFazenda)
-// foram movidas do GerenteProvider para cá, pois são diretamente relacionadas
-// ao resultado dos cálculos deste provider.
 
 class DesempenhoCubagem {
   final String nome;
@@ -35,64 +31,65 @@ class DesempenhoFazenda {
 
 class DashboardMetricsProvider with ChangeNotifier {
   
-  // --- RESULTADOS DOS CÁLCULOS (ESTADO INTERNO) ---
   List<Parcela> _parcelasFiltradas = [];
   List<DesempenhoCubagem> _desempenhoPorCubagem = [];
   Map<String, int> _progressoPorEquipe = {};
   Map<String, int> _coletasPorMes = {};
   List<DesempenhoFazenda> _desempenhoPorFazenda = [];
   
-  // --- GETTERS PÚBLICOS ---
   List<Parcela> get parcelasFiltradas => _parcelasFiltradas;
   List<DesempenhoCubagem> get desempenhoPorCubagem => _desempenhoPorCubagem;
   Map<String, int> get progressoPorEquipe => _progressoPorEquipe;
   Map<String, int> get coletasPorMes => _coletasPorMes;
   List<DesempenhoFazenda> get desempenhoPorFazenda => _desempenhoPorFazenda;
 
-  /// Este é o método principal que será chamado sempre que os dados brutos
-  /// ou os filtros mudarem. Ele recalcula tudo.
   void update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) {
-    // 1. Filtra as parcelas com base nos projetos selecionados
+    // <<< CORREÇÃO PRINCIPAL AQUI >>>
+    // Pega a lista de projetos diretamente do GerenteProvider
+    debugPrint("METRICS PROVIDER UPDATE: Recebeu ${gerenteProvider.parcelasSincronizadas.length} parcelas para calcular.");
+    final projetosAtivos = gerenteProvider.projetos.where((p) => p.status == 'ativo').toList();
+
     _recalcularParcelasFiltradas(
       gerenteProvider.parcelasSincronizadas,
-      filterProvider.projetosDisponiveis,
+      projetosAtivos, // Usa a lista correta
       filterProvider.selectedProjetoIds,
     );
 
-    // 2. Recalcula todas as métricas usando os dados já filtrados
     _recalcularDesempenhoPorCubagem(
       gerenteProvider.cubagensSincronizadas,
       gerenteProvider.talhaoToProjetoMap,
-      filterProvider.projetosDisponiveis,
+      projetosAtivos, // Usa a lista correta
       filterProvider.selectedProjetoIds,
     );
     _recalcularProgressoPorEquipe();
     _recalcularColetasPorMes();
     _recalcularDesempenhoPorFazenda();
     
-    // 3. Notifica a UI uma única vez após todos os cálculos.
     notifyListeners();
   }
 
-  // --- MÉTODOS DE CÁLCULO PRIVADOS (LÓGICA MOVIDA DO GerenteProvider) ---
-
-  void _recalcularParcelasFiltradas(List<Parcela> todasAsParcelas, List<Projeto> projetosDisponiveis, Set<int> selectedProjetoIds) {
-    final idsProjetosAtivos = projetosDisponiveis.map((p) => p.id).toSet();
+  // A função _recalcularParcelasFiltradas também precisa de um pequeno ajuste
+  void _recalcularParcelasFiltradas(List<Parcela> todasAsParcelas, List<Projeto> projetosAtivos, Set<int> selectedProjetoIds) {
+    final idsProjetosAtivos = projetosAtivos.map((p) => p.id!).toSet(); // Adicionado '!' para garantir que o id não seja nulo
+     debugPrint("FILTRANDO... IDs de projetos ativos na nuvem: $idsProjetosAtivos");
+    if (todasAsParcelas.isNotEmpty) {
+      debugPrint("FILTRANDO... ID do projeto da primeira parcela: ${todasAsParcelas.first.projetoId}");
+    }
     List<Parcela> parcelasVisiveis;
 
     if (selectedProjetoIds.isEmpty) {
       parcelasVisiveis = todasAsParcelas
-          .where((p) => idsProjetosAtivos.contains(p.projetoId))
+          .where((p) => p.projetoId != null && idsProjetosAtivos.contains(p.projetoId)) // Adicionada verificação de nulo
           .toList();
     } else {
       parcelasVisiveis = todasAsParcelas
-          .where((p) => selectedProjetoIds.contains(p.projetoId))
+          .where((p) => p.projetoId != null && selectedProjetoIds.contains(p.projetoId)) // Adicionada verificação de nulo
           .toList();
     }
     _parcelasFiltradas = parcelasVisiveis;
   }
 
-  void _recalcularDesempenhoPorCubagem(List<CubagemArvore> todasAsCubagens, Map<int, int> talhaoToProjetoMap, List<Projeto> projetosDisponiveis, Set<int> selectedProjetoIds) {
+  void _recalcularDesempenhoPorCubagem(List<CubagemArvore> todasAsCubagens, Map<int, int> talhaoToProjetoMap, List<Projeto> projetosAtivos, Set<int> selectedProjetoIds) {
     if (todasAsCubagens.isEmpty) {
       _desempenhoPorCubagem = [];
       return;
@@ -100,7 +97,7 @@ class DashboardMetricsProvider with ChangeNotifier {
     
     List<CubagemArvore> cubagensFiltradas;
     if (selectedProjetoIds.isEmpty) {
-       final idsProjetosAtivos = projetosDisponiveis.map((p) => p.id).toSet();
+       final idsProjetosAtivos = projetosAtivos.map((p) => p.id).toSet();
        cubagensFiltradas = todasAsCubagens.where((c) {
          final projetoId = talhaoToProjetoMap[c.talhaoId];
          return projetoId != null && idsProjetosAtivos.contains(projetoId);

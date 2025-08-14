@@ -1,7 +1,8 @@
-// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO FINAL E COMPLETA)
+// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO REALMENTE FINAL E COMPLETA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
+import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/services/export_service.dart';
 import 'package:provider/provider.dart';
@@ -51,13 +52,15 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
         final progressoGeral =
             totalPlanejado > 0 ? concluidas / totalPlanejado : 0.0;
 
+        final projetosDisponiveis = gerenteProvider.projetos.where((p) => p.status == 'ativo').toList();
+
         return RefreshIndicator(
           onRefresh: () async =>
               context.read<GerenteProvider>().iniciarMonitoramento(),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
             children: [
-              _buildMultiSelectProjectFilter(context, filterProvider),
+              _buildMultiSelectProjectFilter(context, filterProvider, projetosDisponiveis),
               const SizedBox(height: 16),
 
               _buildSummaryCard(
@@ -122,13 +125,15 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
     );
   }
 
-  Widget _buildMultiSelectProjectFilter(BuildContext context, DashboardFilterProvider provider) {
+  // <<< TODOS OS MÉTODOS DE BUILD AGORA ESTÃO DENTRO DA CLASSE >>>
+  
+  Widget _buildMultiSelectProjectFilter(BuildContext context, DashboardFilterProvider provider, List<Projeto> projetosDisponiveis) {
     String displayText;
     if (provider.selectedProjetoIds.isEmpty) {
       displayText = 'Todos os Projetos';
     } else if (provider.selectedProjetoIds.length == 1) {
       try {
-        displayText = provider.projetosDisponiveis.firstWhere((p) => p.id == provider.selectedProjetoIds.first).nome;
+        displayText = projetosDisponiveis.firstWhere((p) => p.id == provider.selectedProjetoIds.first).nome;
       } catch (e) {
         displayText = '1 projeto selecionado';
       }
@@ -149,7 +154,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                     width: double.maxFinite,
                     child: ListView(
                       shrinkWrap: true,
-                      children: filterProvider.projetosDisponiveis.map((projeto) {
+                      children: projetosDisponiveis.map((projeto) {
                         return CheckboxListTile(
                           title: Text(projeto.nome),
                           value: filterProvider.selectedProjetoIds.contains(projeto.id),

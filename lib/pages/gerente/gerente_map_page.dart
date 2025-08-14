@@ -1,4 +1,4 @@
-// lib/pages/gerente/gerente_map_page.dart (VERSÃO CORRIGIDA PÓS-REFATORAÇÃO)
+// lib/pages/gerente/gerente_map_page.dart (VERSÃO FINAL E 100% CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -9,8 +9,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:collection/collection.dart';
 
-// <<< CORREÇÃO 1: Importar os novos providers >>>
-import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
+
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 
 class MapLayer {
@@ -56,7 +55,10 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
   }
 
   void _centerMapOnBounds(LatLngBounds bounds) {
-    if (bounds != LatLngBounds(LatLng(0, 0), LatLng(0, 0))) {
+    // <<< CORREÇÃO 3: Substituindo .isValid por uma verificação manual >>>
+    // Verificamos se os cantos do bounds não são o ponto de origem (0,0),
+    // o que indica um bounds inválido ou vazio.
+    if (bounds.southWest != const LatLng(0,0) || bounds.northEast != const LatLng(0,0)) {
       try {
          _mapController.fitCamera(CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50.0)));
       } catch(e) {
@@ -115,27 +117,23 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
             )
           : null,
       ),
-      // <<< CORREÇÃO 2: Continuamos ouvindo o GerenteProvider para o status de 'isLoading' >>>
       body: Consumer<GerenteProvider>(
         builder: (context, gerenteProvider, child) {
           if (gerenteProvider.isLoading) return const Center(child: CircularProgressIndicator());
 
-          // <<< CORREÇÃO 3: Agora, pegamos os outros providers para acessar os dados corretos >>>
           final metricsProvider = context.watch<DashboardMetricsProvider>();
-          final filterProvider = context.watch<DashboardFilterProvider>();
           
-          // <<< CORREÇÃO 4: Usamos 'metricsProvider' para acessar 'parcelasFiltradas' >>>
+          
           if (metricsProvider.parcelasFiltradas.isEmpty) return const Center(child: Text('Nenhuma parcela sincronizada para exibir no mapa.'));
 
           List<Marker> markersToShow = [];
           
           if (_fazendaSelecionada == null) {
-            // <<< CORREÇÃO 5: Usamos 'metricsProvider' aqui também >>>
             final parcelasPorFazenda = groupBy(metricsProvider.parcelasFiltradas, (Parcela p) => p.nomeFazenda ?? 'Fazenda Desconhecida');
             final List<FazendaCluster> fazendaClusters = [];
 
             parcelasPorFazenda.forEach((nomeFazenda, parcelas) {
-              final points = parcelas.where((p) => p.latitude != null).map((p) => LatLng(p.latitude!, p.longitude!)).toList();
+              final points = parcelas.where((p) => p.latitude != null && p.longitude != null).map((p) => LatLng(p.latitude!, p.longitude!)).toList();
               if (points.isNotEmpty) {
                 final bounds = LatLngBounds.fromPoints(points);
                 fazendaClusters.add(FazendaCluster(
@@ -176,16 +174,19 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
             }).toList();
 
           } else {
-            // <<< CORREÇÃO 6: E aqui também >>>
             final parcelasVisiveis = metricsProvider.parcelasFiltradas.where((p) => p.nomeFazenda == _fazendaSelecionada).toList();
-            markersToShow = parcelasVisiveis.map<Marker>((parcela) {
+            
+            // <<< CORREÇÃO 2: .map() agora filtra os nulos antes de converter para lista >>>
+            markersToShow = parcelasVisiveis.map<Marker?>((parcela) {
+              if(parcela.latitude == null || parcela.longitude == null) return null;
+              
               return Marker(
                 width: 35.0, height: 35.0,
                 point: LatLng(parcela.latitude!, parcela.longitude!),
                 child: GestureDetector(
                   onTap: () {
-                    // <<< CORREÇÃO 7: Usamos 'filterProvider' para buscar os nomes dos projetos >>>
-                    final nomeProjeto = filterProvider.projetosDisponiveis.firstWhereOrNull((p) => p.id == parcela.projetoId)?.nome ?? 'N/A';
+                    // <<< CORREÇÃO 1: Busca a lista de projetos no GerenteProvider >>>
+                    final nomeProjeto = gerenteProvider.projetos.firstWhereOrNull((p) => p.id == parcela.projetoId)?.nome ?? 'N/A';
                     final infoText = 
                         'Projeto: $nomeProjeto\n'
                         'Fazenda: ${parcela.nomeFazenda ?? 'N/A'}\n'
@@ -196,7 +197,7 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
                   child: Icon(Icons.location_pin, color: _getMarkerColor(parcela.status), size: 35.0, shadows: const [Shadow(color: Colors.black, blurRadius: 5)]),
                 ),
               );
-            }).toList();
+            }).whereType<Marker>().toList(); // .whereType<Marker>() remove todos os nulos
           }
 
           if (_currentUserPosition != null) {
@@ -229,7 +230,6 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
   }
 }
 
-// A classe LocationMarker não precisa de alterações.
 class LocationMarker extends StatefulWidget {
   const LocationMarker({super.key});
   @override

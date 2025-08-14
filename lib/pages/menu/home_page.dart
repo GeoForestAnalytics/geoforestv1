@@ -262,7 +262,6 @@ class _HomePageState extends State<HomePage> {
     
     final syncService = SyncService();
 
-    // Mostra o diálogo de progresso
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -272,37 +271,36 @@ class _HomePageState extends State<HomePage> {
           builder: (context, snapshot) {
             final progress = snapshot.data;
             
-            // Quando a sincronização termina, esta parte é executada
             if (progress?.concluido == true) {
-              // Fecha o diálogo de "loading"
-              Navigator.of(dialogContext).pop(); 
               
-              // VERIFICA SE HÁ CONFLITOS
-              if (syncService.conflicts.isNotEmpty && mounted) {
-                // Se houver, navega para a nova tela
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ConflictResolutionPage(conflicts: syncService.conflicts),
-                  ),
-                );
-              } else if (progress?.erro == null && mounted) {
-                // Se não houver conflitos nem erros, mostra um SnackBar de sucesso
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Dados sincronizados com sucesso!'), backgroundColor: Colors.green),
-                );
-              }
+              // <<< INÍCIO DA CORREÇÃO >>>
+              // Adia a lógica de UI para depois que o build terminar
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                Navigator.of(dialogContext).pop(); 
+                
+                if (syncService.conflicts.isNotEmpty && mounted) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ConflictResolutionPage(conflicts: syncService.conflicts),
+                    ),
+                  );
+                } else if (progress?.erro == null && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Dados sincronizados com sucesso!'), backgroundColor: Colors.green),
+                  );
+                }
 
-              // Reseta o estado de 'isSyncing'
-              if (mounted) {
-                setState(() => _isSyncing = false);
-              }
+                if (mounted) {
+                  setState(() => _isSyncing = false);
+                }
+              });
+              // <<< FIM DA CORREÇÃO >>>
               
-              // Retorna um widget vazio, pois o diálogo já foi fechado
               return const SizedBox.shrink(); 
             }
 
-            // Exibe o diálogo de progresso enquanto a sincronização está em andamento
+            // ... (o resto do AlertDialog continua igual)
             return AlertDialog(
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -326,12 +324,8 @@ class _HomePageState extends State<HomePage> {
       await syncService.sincronizarDados();
     } catch (e) {
       debugPrint("Erro grave na sincronização capturado na UI: $e");
-      // O erro já será tratado pelo Stream e exibido no diálogo.
     } finally {
-      // Garante que o estado de 'isSyncing' seja resetado mesmo se o diálogo for fechado inesperadamente
-      if (mounted && _isSyncing) {
-        setState(() => _isSyncing = false);
-      }
+      // O setState foi movido para o PostFrameCallback
     }
   }
 }

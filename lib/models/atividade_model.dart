@@ -1,4 +1,5 @@
-// lib/models/atividade_model.dart
+// lib/models/atividade_model.dart (VERSÃO FINAL E CORRIGIDA)
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum TipoAtividade {
   ipc("Inventário Pré-Corte"),
@@ -16,14 +17,12 @@ enum TipoAtividade {
 
 class Atividade {
   final int? id;
-  final int projetoId; // Chave estrangeira para o Projeto
+  final int projetoId;
   final String tipo;
-  final String descricao; // Campo para notas ou detalhes específicos
+  final String descricao;
   final DateTime dataCriacao;
-  // <<< NOVO CAMPO AQUI >>>
-  // Guarda o método de cubagem ('Fixas' ou 'Relativas') se a atividade for de cubagem.
   final String? metodoCubagem;
-  final DateTime? lastModified; 
+  final DateTime? lastModified;
 
   Atividade({
     this.id,
@@ -31,7 +30,7 @@ class Atividade {
     required this.tipo,
     required this.descricao,
     required this.dataCriacao,
-    this.metodoCubagem, // <<< ADICIONADO AO CONSTRUTOR
+    this.metodoCubagem,
     this.lastModified,
   });
 
@@ -41,7 +40,7 @@ class Atividade {
     String? tipo,
     String? descricao,
     DateTime? dataCriacao,
-    String? metodoCubagem, // <<< ADICIONADO AO COPYWITH
+    String? metodoCubagem,
     DateTime? lastModified,
   }) {
     return Atividade(
@@ -50,11 +49,10 @@ class Atividade {
       tipo: tipo ?? this.tipo,
       descricao: descricao ?? this.descricao,
       dataCriacao: dataCriacao ?? this.dataCriacao,
-      metodoCubagem: metodoCubagem ?? this.metodoCubagem, // <<< ADICIONADO AQUI
+      metodoCubagem: metodoCubagem ?? this.metodoCubagem,
       lastModified: lastModified ?? this.lastModified,
     );
   }
-
 
   Map<String, dynamic> toMap() {
     return {
@@ -63,22 +61,31 @@ class Atividade {
       'tipo': tipo,
       'descricao': descricao,
       'dataCriacao': dataCriacao.toIso8601String(),
-      'metodoCubagem': metodoCubagem, // <<< ADICIONADO AO MAP
+      'metodoCubagem': metodoCubagem,
       'lastModified': lastModified?.toIso8601String(),
     };
   }
 
   factory Atividade.fromMap(Map<String, dynamic> map) {
+    DateTime? parseDate(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.tryParse(value);
+      return null;
+    }
+    
+    final dataCriacao = parseDate(map['dataCriacao']);
+    if (dataCriacao == null) {
+      throw FormatException("Formato de data inválido para 'dataCriacao' na Atividade ${map['id']}");
+    }
+
     return Atividade(
       id: map['id'],
       projetoId: map['projetoId'],
       tipo: map['tipo'],
       descricao: map['descricao'],
-      dataCriacao: DateTime.parse(map['dataCriacao']),
-      metodoCubagem: map['metodoCubagem'], // <<< ADICIONADO AO FACTORY
-      lastModified: map['lastModified'] != null
-          ? DateTime.parse(map['lastModified'])
-          : null,
+      dataCriacao: dataCriacao,
+      metodoCubagem: map['metodoCubagem'],
+      lastModified: parseDate(map['lastModified']),
     );
   }
 }
