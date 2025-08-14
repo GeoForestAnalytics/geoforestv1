@@ -21,6 +21,7 @@ class Talhao {
   final String? estado;    // <-- ADICIONE
   
   double? volumeTotalTalhao;
+  final DateTime? lastModified;
 
   Talhao({
     this.id,
@@ -36,6 +37,7 @@ class Talhao {
     this.municipio, // <-- ADICIONE
     this.estado,    // <-- ADICIONE
     this.volumeTotalTalhao,
+    this.lastModified,
   });
 
   // ADICIONE municipio E estado AO MÉTODO copyWith
@@ -53,6 +55,7 @@ class Talhao {
     String? municipio, // <-- ADICIONE
     String? estado,    // <-- ADICIONE
     double? volumeTotalTalhao,
+    DateTime? lastModified,
   }) {
     return Talhao(
       id: id ?? this.id,
@@ -67,6 +70,7 @@ class Talhao {
       municipio: municipio ?? this.municipio, // <-- ADICIONE
       estado: estado ?? this.estado,          // <-- ADICIONE
       volumeTotalTalhao: volumeTotalTalhao ?? this.volumeTotalTalhao,
+      lastModified: lastModified ?? this.lastModified,
     );
   }
 
@@ -81,6 +85,7 @@ class Talhao {
       'idadeAnos': idadeAnos,
       'especie': especie,
       'espacamento': espacamento,
+      'lastModified': lastModified?.toIso8601String(), 
     };
   }
 
@@ -99,6 +104,7 @@ class Talhao {
       fazendaNome: map['fazendaNome'], 
       municipio: map['municipio'], // <-- ADICIONE
       estado: map['estado'],       // <-- ADICIONE
+      lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null,
     );
   }
 }

@@ -1,4 +1,5 @@
-// lib/data/repositories/parcela_repository.dart (VERSÃO COM getTodasAsParcelas)
+// lib/data/repositories/parcela_repository.dart (VERSÃO ATUALIZADA COM lastModified)
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -10,25 +11,25 @@ import 'package:sqflite/sqflite.dart';
 class ParcelaRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  // --- MÉTODOS DE SALVAMENTO E ATUALIZAÇÃO ---
-
   Future<Parcela> saveFullColeta(Parcela p, List<Arvore> arvores) async {
     final db = await _dbHelper.database;
+    final now = DateTime.now().toIso8601String(); // <<< 1. PEGA A HORA ATUAL
+
     await db.transaction((txn) async {
       int pId;
       p.isSynced = false;
       final pMap = p.toMap();
       final d = p.dataColeta ?? DateTime.now();
       pMap['dataColeta'] = d.toIso8601String();
+      pMap['lastModified'] = now; // <<< 2. CARIMBA A PARCELA
 
+      // ... (o resto da sua lógica para buscar projetoId e nome do líder continua igual)
       if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
         final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
-          SELECT A.projetoId
-          FROM talhoes T
+          SELECT A.projetoId FROM talhoes T
           INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
           INNER JOIN atividades A ON F.atividadeId = A.id
-          WHERE T.id = ?
-          LIMIT 1
+          WHERE T.id = ? LIMIT 1
         ''', [pMap['talhaoId']]);
 
         if (talhaoInfo.isNotEmpty) {
@@ -48,6 +49,7 @@ class ParcelaRepository {
       if (nomeDoResponsavel != null) {
         pMap['nomeLider'] = nomeDoResponsavel;
       }
+      // ... (fim da lógica existente)
 
       if (p.dbId == null) {
         pMap.remove('id');
@@ -62,6 +64,7 @@ class ParcelaRepository {
       for (final a in arvores) {
         final aMap = a.toMap();
         aMap['parcelaId'] = pId;
+        aMap['lastModified'] = now; // <<< 3. CARIMBA CADA ÁRVORE
         await txn.insert('arvores', aMap);
       }
     });
@@ -71,8 +74,11 @@ class ParcelaRepository {
   Future<void> saveBatchParcelas(List<Parcela> parcelas) async {
     final db = await _dbHelper.database;
     final batch = db.batch();
+    final now = DateTime.now().toIso8601String();
     for (final p in parcelas) {
-      batch.insert('parcelas', p.toMap(),
+      final map = p.toMap();
+      map['lastModified'] = now;
+      batch.insert('parcelas', map,
           conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
@@ -80,13 +86,18 @@ class ParcelaRepository {
 
   Future<int> updateParcela(Parcela p) async {
     final db = await _dbHelper.database;
+    final map = p.toMap();
+    map['lastModified'] = DateTime.now().toIso8601String();
     return await db
-        .update('parcelas', p.toMap(), where: 'id = ?', whereArgs: [p.dbId]);
+        .update('parcelas', map, where: 'id = ?', whereArgs: [p.dbId]);
   }
 
   Future<void> updateParcelaStatus(int parcelaId, StatusParcela novoStatus) async {
     final db = await _dbHelper.database;
-    await db.update('parcelas', {'status': novoStatus.name},
+    await db.update('parcelas', {
+      'status': novoStatus.name,
+      'lastModified': DateTime.now().toIso8601String(), // <<< ADICIONADO
+    },
         where: 'id = ?', whereArgs: [parcelaId]);
   }
 
@@ -268,5 +279,21 @@ class ParcelaRepository {
     final db = await _dbHelper.database;
     await db.delete('parcelas');
     debugPrint('Tabela de parcelas e árvores limpa.');
+  }
+
+  Future<Parcela?> getOneUnsyncedParcel() async {
+    final db = await _dbHelper.database;
+    // A mágica está no 'LIMIT 1', que garante que o banco de dados
+    // nos retorne no máximo um registro.
+    final maps = await db.query(
+      'parcelas',
+      where: 'isSynced = ?',
+      whereArgs: [0],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return Parcela.fromMap(maps.first);
+    }
+    return null;
   }
 }

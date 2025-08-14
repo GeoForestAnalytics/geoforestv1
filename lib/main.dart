@@ -27,6 +27,8 @@ import 'package:geoforestv1/pages/menu/paywall_page.dart';
 import 'package:geoforestv1/pages/gerente/gerente_main_page.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/pages/gerente/gerente_map_page.dart';
+import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
+import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 
 
 void initializeProj4Definitions() {
@@ -133,15 +135,48 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // Providers existentes
         ChangeNotifierProvider(create: (_) => LoginController()),
         ChangeNotifierProvider(create: (_) => MapProvider()),
         ChangeNotifierProvider(create: (_) => TeamProvider()),
         ChangeNotifierProvider(create: (_) => LicenseProvider()),
-        ChangeNotifierProvider(create: (_) => GerenteProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider(initialThemeMode)),
+        
+        // Provider de dados brutos (agora mais simples)
+        ChangeNotifierProvider(create: (_) => GerenteProvider()),
+        
+        // --- INÍCIO DA MUDANÇA ---
+
+        // 1. Adicionamos o novo provider de filtros. Ele é independente.
+        ChangeNotifierProvider(create: (_) => DashboardFilterProvider()),
+
+        // 2. Adicionamos o provider de métricas usando um "Proxy".
+        // Ele "ouve" as mudanças no GerenteProvider e no DashboardFilterProvider.
+        ChangeNotifierProxyProvider2<GerenteProvider, DashboardFilterProvider, DashboardMetricsProvider>(
+          // Cria a instância do provider de métricas uma única vez.
+          create: (_) => DashboardMetricsProvider(),
+          
+          // Esta função é a MÁGICA: ela é chamada AUTOMATICAMENTE sempre que
+          // o GerenteProvider ou o DashboardFilterProvider notificam uma mudança.
+          update: (_, gerenteProvider, filterProvider, metricsProvider) {
+            if (metricsProvider == null) return DashboardMetricsProvider();
+            
+            // Alimenta o filterProvider com a lista de projetos do gerenteProvider
+            filterProvider.updateProjetosDisponiveis(gerenteProvider.projetos);
+
+            // Chama o método .update() do nosso provider de métricas, passando
+            // os dados e filtros mais recentes para que ele recalcule tudo.
+            metricsProvider.update(gerenteProvider, filterProvider);
+            
+            return metricsProvider;
+          },
+        ),
+        
+        // --- FIM DA MUDANÇA ---
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
+          // O resto do seu código aqui permanece o mesmo...
           return MaterialApp(
             title: 'Geo Forest Analytics',
             debugShowCheckedModeBanner: false,

@@ -1,4 +1,4 @@
-// lib/data/repositories/atividade_repository.dart (VERSÃO CORRIGIDA)
+// lib/data/repositories/atividade_repository.dart
 
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -11,16 +11,20 @@ import 'package:sqflite/sqflite.dart';
 class AtividadeRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  // AJUSTE 1: Insert agora apenas insere, usando .fail para segurança.
   Future<int> insertAtividade(Atividade a) async {
     final db = await _dbHelper.database;
-    return await db.insert('atividades', a.toMap(), conflictAlgorithm: ConflictAlgorithm.fail);
+    final map = a.toMap();
+    // <<< ADICIONA O CARIMBO DE TEMPO ANTES DE INSERIR >>>
+    map['lastModified'] = DateTime.now().toIso8601String();
+    return await db.insert('atividades', map, conflictAlgorithm: ConflictAlgorithm.fail);
   }
 
-  // AJUSTE 2: Adiciona um método de update explícito e seguro.
   Future<int> updateAtividade(Atividade a) async {
     final db = await _dbHelper.database;
-    return await db.update('atividades', a.toMap(), where: 'id = ?', whereArgs: [a.id]);
+    final map = a.toMap();
+    // <<< ADICIONA O CARIMBO DE TEMPO ANTES DE ATUALIZAR >>>
+    map['lastModified'] = DateTime.now().toIso8601String();
+    return await db.update('atividades', map, where: 'id = ?', whereArgs: [a.id]);
   }
 
   Future<List<Atividade>> getAtividadesDoProjeto(int projetoId) async {

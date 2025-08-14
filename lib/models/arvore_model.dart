@@ -1,4 +1,4 @@
-// lib/models/arvore_model.dart (VERSÃO COM CAMPO 'volume')
+// lib/models/arvore_model.dart (VERSÃO ATUALIZADA COM lastModified)
 
 enum Codigo {
   normal, falha, bifurcada, multipla, quebrada, morta, caida,
@@ -22,11 +22,8 @@ class Arvore {
   final Codigo2? codigo2;
   final double? capAuditoria;
   final double? alturaAuditoria;
-  
-  // <<< CAMPO DE VOLUME REINTRODUZIDO >>>
-  // Este campo não será salvo no banco, mas pode ser calculado e usado
-  // durante as análises em tempo de execução.
   double? volume;
+  final DateTime? lastModified; // <<< ADICIONADO
 
   Arvore({
     this.id,
@@ -40,7 +37,8 @@ class Arvore {
     this.codigo2,
     this.capAuditoria,
     this.alturaAuditoria,
-    this.volume, // Parâmetro opcional no construtor
+    this.volume,
+    this.lastModified, // <<< ADICIONADO
   });
 
   Arvore copyWith({
@@ -56,6 +54,7 @@ class Arvore {
     double? capAuditoria,
     double? alturaAuditoria,
     double? volume,
+    DateTime? lastModified, // <<< ADICIONADO
   }) {
     return Arvore(
       id: id ?? this.id,
@@ -70,6 +69,7 @@ class Arvore {
       capAuditoria: capAuditoria ?? this.capAuditoria,
       alturaAuditoria: alturaAuditoria ?? this.alturaAuditoria,
       volume: volume ?? this.volume,
+      lastModified: lastModified ?? this.lastModified, // <<< ADICIONADO
     );
   }
 
@@ -86,6 +86,7 @@ class Arvore {
       'codigo2': codigo2?.name,
       'capAuditoria': capAuditoria,
       'alturaAuditoria': alturaAuditoria,
+      'lastModified': lastModified?.toIso8601String(), // <<< ADICIONADO
     };
   }
 
@@ -102,6 +103,7 @@ class Arvore {
       codigo2: map['codigo2'] != null ? Codigo2.values.firstWhere((e) => e.name == map['codigo2']) : null,
       capAuditoria: map['capAuditoria']?.toDouble(),
       alturaAuditoria: map['alturaAuditoria']?.toDouble(),
+      lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null, // <<< ADICIONADO
     );
   }
 }

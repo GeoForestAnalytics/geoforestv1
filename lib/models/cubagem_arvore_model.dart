@@ -1,4 +1,4 @@
-// lib/models/cubagem_arvore_model.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/models/cubagem_arvore_model.dart (VERSÃO ATUALIZADA COM lastModified)
 
 class CubagemArvore {
   int? id;
@@ -9,13 +9,13 @@ class CubagemArvore {
   String identificador;
   String? classe;
   bool exportada;
-  bool isSynced; // <<< CAMPO ADICIONADO
+  bool isSynced;
   String? nomeLider;
-
   double alturaTotal;
   String tipoMedidaCAP;
   double valorCAP;
   double alturaBase;
+  final DateTime? lastModified; // <<< ADICIONADO
 
   CubagemArvore({
     this.id,
@@ -26,15 +26,15 @@ class CubagemArvore {
     required this.identificador,
     this.classe,
     this.exportada = false,
-    this.isSynced = false, // <<< CAMPO ADICIONADO AO CONSTRUTOR
-    this.nomeLider, // <<< ADICIONAR AO CONSTRUTOR
+    this.isSynced = false,
+    this.nomeLider,
     this.alturaTotal = 0,
     this.tipoMedidaCAP = 'fita',
     this.valorCAP = 0,
     this.alturaBase = 0,
+    this.lastModified, // <<< ADICIONADO
   });
 
-  // <<< MÉTODO copyWith ADICIONADO >>>
   CubagemArvore copyWith({
     int? id,
     int? talhaoId,
@@ -45,11 +45,12 @@ class CubagemArvore {
     String? classe,
     bool? exportada,
     bool? isSynced,
-    String? nomeLider, // <<< ADICIONAR AO COPYWITH
+    String? nomeLider,
     double? alturaTotal,
     String? tipoMedidaCAP,
     double? valorCAP,
     double? alturaBase,
+    DateTime? lastModified, // <<< ADICIONADO
   }) {
     return CubagemArvore(
       id: id ?? this.id,
@@ -61,11 +62,12 @@ class CubagemArvore {
       classe: classe ?? this.classe,
       exportada: exportada ?? this.exportada,
       isSynced: isSynced ?? this.isSynced,
-      nomeLider: nomeLider ?? this.nomeLider, // <<< ADICIONAR AO COPYWITH
+      nomeLider: nomeLider ?? this.nomeLider,
       alturaTotal: alturaTotal ?? this.alturaTotal,
       tipoMedidaCAP: tipoMedidaCAP ?? this.tipoMedidaCAP,
       valorCAP: valorCAP ?? this.valorCAP,
       alturaBase: alturaBase ?? this.alturaBase,
+      lastModified: lastModified ?? this.lastModified, // <<< ADICIONADO
     );
   }
 
@@ -83,8 +85,9 @@ class CubagemArvore {
       'valorCAP': valorCAP,
       'alturaBase': alturaBase,
       'exportada': exportada ? 1 : 0,
-      'isSynced': isSynced ? 1 : 0, // <<< CAMPO ADICIONADO AO MAPA
-      'nomeLider': nomeLider, // <<< ADICIONAR AO MAPA
+      'isSynced': isSynced ? 1 : 0,
+      'nomeLider': nomeLider,
+      'lastModified': lastModified?.toIso8601String(), // <<< ADICIONADO
     };
   }
 
@@ -98,12 +101,13 @@ class CubagemArvore {
       identificador: map['identificador'],
       classe: map['classe'],
       exportada: map['exportada'] == 1,
-      isSynced: map['isSynced'] == 1, // <<< CAMPO ADICIONADO AO FACTORY
-      nomeLider: map['nomeLider'], // <<< LER DO MAPA
+      isSynced: map['isSynced'] == 1,
+      nomeLider: map['nomeLider'],
       alturaTotal: map['alturaTotal']?.toDouble() ?? 0,
       tipoMedidaCAP: map['tipoMedidaCAP'] ?? 'fita',
       valorCAP: map['valorCAP']?.toDouble() ?? 0,
       alturaBase: map['alturaBase']?.toDouble() ?? 0,
+      lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null, // <<< ADICIONADO
     );
   }
 }

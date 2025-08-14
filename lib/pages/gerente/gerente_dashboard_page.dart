@@ -1,11 +1,15 @@
-// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO FINAL COM TODAS AS CORREÇÕES)
+// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO FINAL REATORADA)
 
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/models/parcela_model.dart'; 
+import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/services/export_service.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+
+// <<< 1. IMPORTAR OS NOVOS PROVIDERS >>>
+import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
+import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 
 class GerenteDashboardPage extends StatefulWidget {
   const GerenteDashboardPage({super.key});
@@ -15,12 +19,13 @@ class GerenteDashboardPage extends StatefulWidget {
 }
 
 class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
-  
   final _exportService = ExportService();
 
   @override
   void initState() {
     super.initState();
+    // A inicialização continua aqui, pois o GerenteProvider ainda é
+    // o responsável por iniciar a busca de dados.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<GerenteProvider>().iniciarMonitoramento();
     });
@@ -28,67 +33,85 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    // <<< 2. O CONSUMER PRINCIPAL AGORA SÓ OBSERVA O GerenteProvider PARA O ESTADO DE CARREGAMENTO >>>
     return Consumer<GerenteProvider>(
-      builder: (context, provider, child) {
-        if (provider.isLoading) {
+      builder: (context, gerenteProvider, child) {
+        if (gerenteProvider.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (provider.error != null) {
-          return Center(child: Text('Ocorreu um erro:\n${provider.error}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)));
+        if (gerenteProvider.error != null) {
+          return Center(
+              child: Text('Ocorreu um erro:\n${gerenteProvider.error}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.red)));
         }
-        
-        final totalPlanejado = provider.parcelasFiltradas.length;
-        final concluidas = provider.parcelasFiltradas.where((p) => p.status == StatusParcela.concluida).length;
-        final progressoGeral = totalPlanejado > 0 ? concluidas / totalPlanejado : 0.0;
-        
-        // <<< MUDANÇA 1: REMOVIDO O SCAFFOLD DAQUI >>>
-        // O Scaffold agora está no GerenteMainPage
+
+        // <<< 3. UMA VEZ CARREGADO, PEGAMOS OS OUTROS PROVIDERS PARA USAR NA UI >>>
+        // Usamos 'watch' para que a UI reconstrua quando os filtros ou as métricas mudarem.
+        final filterProvider = context.watch<DashboardFilterProvider>();
+        final metricsProvider = context.watch<DashboardMetricsProvider>();
+
+        final totalPlanejado = metricsProvider.parcelasFiltradas.length;
+        final concluidas = metricsProvider.parcelasFiltradas
+            .where((p) => p.status == StatusParcela.concluida)
+            .length;
+        final progressoGeral =
+            totalPlanejado > 0 ? concluidas / totalPlanejado : 0.0;
+
         return RefreshIndicator(
-          onRefresh: () async => context.read<GerenteProvider>().iniciarMonitoramento(),
+          onRefresh: () async =>
+              context.read<GerenteProvider>().iniciarMonitoramento(),
           child: ListView(
-            // Padding ajustado para dar espaço no final para os botões
             padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
             children: [
-              _buildMultiSelectProjectFilter(context, provider),
+              // <<< 4. O WIDGET DE FILTRO AGORA USA O DashboardFilterProvider >>>
+              _buildMultiSelectProjectFilter(context, filterProvider),
               const SizedBox(height: 16),
-              
+
+              // <<< 5. TODOS OS CARDS E GRÁFICOS AGORA USAM O DashboardMetricsProvider >>>
               _buildSummaryCard(
                 context: context,
                 title: 'Progresso Inventário',
                 value: '${(progressoGeral * 100).toStringAsFixed(0)}%',
-                subtitle: '$concluidas de $totalPlanejado parcelas concluídas',
+                subtitle:
+                    '$concluidas de $totalPlanejado parcelas concluídas',
                 progress: progressoGeral,
                 color: Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(height: 24),
 
-              if (provider.progressoPorEquipe.isNotEmpty)
-                _buildRadialGaugesCard(context, provider.progressoPorEquipe),
+              if (metricsProvider.progressoPorEquipe.isNotEmpty)
+                _buildRadialGaugesCard(
+                    context, metricsProvider.progressoPorEquipe),
               const SizedBox(height: 24),
-              
-              if (provider.coletasPorMes.isNotEmpty)
-                _buildBarChartWithTrendLineCard(context, provider.coletasPorMes),
+
+              if (metricsProvider.coletasPorMes.isNotEmpty)
+                _buildBarChartWithTrendLineCard(
+                    context, metricsProvider.coletasPorMes),
               const SizedBox(height: 24),
-              
-              if (provider.desempenhoPorFazenda.isNotEmpty)
-                _buildFazendaDataTableCard(context, provider.desempenhoPorFazenda),
-              
-              if (provider.desempenhoPorCubagem.isNotEmpty) ...[
+
+              if (metricsProvider.desempenhoPorFazenda.isNotEmpty)
+                _buildFazendaDataTableCard(
+                    context, metricsProvider.desempenhoPorFazenda),
+
+              if (metricsProvider.desempenhoPorCubagem.isNotEmpty) ...[
                 const SizedBox(height: 24),
-                _buildCubagemDataTableCard(context, provider.desempenhoPorCubagem),
+                _buildCubagemDataTableCard(
+                    context, metricsProvider.desempenhoPorCubagem),
               ],
-              
-              // <<< MUDANÇA 2: BOTÕES MOVIDOS PARA O FINAL DA LISTVIEW >>>
+
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: () {
-                  // Passa os IDs dos projetos selecionados para a função de exportação
-                  final Set<int> projetosFiltrados = provider.selectedProjetoIds;
-                  _exportService.exportarDesenvolvimentoEquipes(context, projetoIdsFiltrados: projetosFiltrados);
+                  // <<< 6. A EXPORTAÇÃO TAMBÉM PEGA OS FILTROS DO PROVIDER CORRETO >>>
+                  final Set<int> projetosFiltrados = filterProvider.selectedProjetoIds;
+                  _exportService.exportarDesenvolvimentoEquipes(context,
+                      projetoIdsFiltrados: projetosFiltrados);
                 },
                 icon: const Icon(Icons.download_outlined),
-                label: const Text('Exportar Desenvolvimento das Equipes'),
+                label:
+                    const Text('Exportar Desenvolvimento das Equipes'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   backgroundColor: Theme.of(context).colorScheme.secondary,
@@ -101,8 +124,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                 icon: const Icon(Icons.map_outlined),
                 label: const Text('Mapa Geral'),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12)
-                ),
+                    padding: const EdgeInsets.symmetric(vertical: 12)),
               ),
             ],
           ),
@@ -111,8 +133,8 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
     );
   }
 
-  // O resto dos métodos de build (gráficos, tabelas, etc.) permanecem exatamente iguais.
-  Widget _buildMultiSelectProjectFilter(BuildContext context, GerenteProvider provider) {
+  // <<< ATUALIZADO PARA RECEBER O DashboardFilterProvider >>>
+  Widget _buildMultiSelectProjectFilter(BuildContext context, DashboardFilterProvider provider) {
     String displayText;
     if (provider.selectedProjetoIds.isEmpty) {
       displayText = 'Todos os Projetos';
@@ -131,21 +153,22 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
         showDialog(
           context: context,
           builder: (dialogContext) {
-            return StatefulBuilder(
-              builder: (context, setDialogState) {
+            // Usamos um Consumer aqui para garantir que o diálogo reconstrua ao selecionar
+            return Consumer<DashboardFilterProvider>(
+              builder: (context, filterProvider, _) {
                 return AlertDialog(
                   title: const Text('Filtrar por Projeto'),
                   content: SizedBox(
                     width: double.maxFinite,
                     child: ListView(
                       shrinkWrap: true,
-                      children: provider.projetosDisponiveis.map((projeto) {
+                      children: filterProvider.projetosDisponiveis.map((projeto) {
                         return CheckboxListTile(
                           title: Text(projeto.nome),
-                          value: provider.selectedProjetoIds.contains(projeto.id),
+                          value: filterProvider.selectedProjetoIds.contains(projeto.id),
                           onChanged: (bool? value) {
-                            context.read<GerenteProvider>().toggleProjetoSelection(projeto.id!);
-                            setDialogState(() {});
+                            // Usamos context.read para chamar a AÇÃO de mudar o filtro
+                            context.read<DashboardFilterProvider>().toggleProjetoSelection(projeto.id!);
                           },
                         );
                       }).toList(),
@@ -154,7 +177,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                   actions: [
                     TextButton(
                       onPressed: () {
-                        context.read<GerenteProvider>().clearProjetoSelection();
+                        context.read<DashboardFilterProvider>().clearProjetoSelection();
                         Navigator.of(dialogContext).pop();
                       },
                       child: const Text('Limpar (Todos)'),

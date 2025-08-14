@@ -14,6 +14,8 @@ import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/services/export_service.dart';
 import 'package:geoforestv1/widgets/menu_card.dart';
 import 'package:geoforestv1/services/sync_service.dart';
+import 'package:geoforestv1/models/sync_progress_model.dart';
+import 'package:geoforestv1/pages/menu/conflict_resolution_page.dart';
 
 class HomePage extends StatefulWidget {
   final String title;
@@ -32,35 +34,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   bool _isSyncing = false;
 
-  Future<void> _executarSincronizacao() async {
-    if (_isSyncing) return;
-    setState(() => _isSyncing = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Iniciando sincronização...'), duration: Duration(seconds: 15)),
-    );
-    try {
-      final syncService = SyncService();
-      await syncService.sincronizarDados();
-      if (mounted) {
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Dados sincronizados com sucesso!'), backgroundColor: Colors.green),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro na sincronização: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSyncing = false);
-      }
-    }
-  }
-  
+   
   void _mostrarDialogoImportacao(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -280,5 +254,84 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+  }
+
+  Future<void> _executarSincronizacao() async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+    
+    final syncService = SyncService();
+
+    // Mostra o diálogo de progresso
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StreamBuilder<SyncProgress>(
+          stream: syncService.progressStream,
+          builder: (context, snapshot) {
+            final progress = snapshot.data;
+            
+            // Quando a sincronização termina, esta parte é executada
+            if (progress?.concluido == true) {
+              // Fecha o diálogo de "loading"
+              Navigator.of(dialogContext).pop(); 
+              
+              // VERIFICA SE HÁ CONFLITOS
+              if (syncService.conflicts.isNotEmpty && mounted) {
+                // Se houver, navega para a nova tela
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ConflictResolutionPage(conflicts: syncService.conflicts),
+                  ),
+                );
+              } else if (progress?.erro == null && mounted) {
+                // Se não houver conflitos nem erros, mostra um SnackBar de sucesso
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Dados sincronizados com sucesso!'), backgroundColor: Colors.green),
+                );
+              }
+
+              // Reseta o estado de 'isSyncing'
+              if (mounted) {
+                setState(() => _isSyncing = false);
+              }
+              
+              // Retorna um widget vazio, pois o diálogo já foi fechado
+              return const SizedBox.shrink(); 
+            }
+
+            // Exibe o diálogo de progresso enquanto a sincronização está em andamento
+            return AlertDialog(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 20),
+                  Text(progress?.mensagem ?? 'Iniciando...'),
+                  if ((progress?.totalAProcessar ?? 0) > 0) ...[
+                    const SizedBox(height: 10),
+                    LinearProgressIndicator(value: (progress!.processados / progress.totalAProcessar)),
+                  ]
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    try {
+      await syncService.sincronizarDados();
+    } catch (e) {
+      debugPrint("Erro grave na sincronização capturado na UI: $e");
+      // O erro já será tratado pelo Stream e exibido no diálogo.
+    } finally {
+      // Garante que o estado de 'isSyncing' seja resetado mesmo se o diálogo for fechado inesperadamente
+      if (mounted && _isSyncing) {
+        setState(() => _isSyncing = false);
+      }
+    }
   }
 }

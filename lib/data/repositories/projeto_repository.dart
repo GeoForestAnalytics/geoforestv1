@@ -1,4 +1,4 @@
-// lib/data/repositories/projeto_repository.dart (VERSÃO FINAL E LIMPA)
+// lib/data/repositories/projeto_repository.dart
 
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
@@ -9,13 +9,28 @@ import 'package:sqflite/sqflite.dart';
 class ProjetoRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  // AJUSTE 1: Insert agora apenas insere.
   Future<int> insertProjeto(Projeto p) async {
     final db = await _dbHelper.database;
-    return await db.insert('projetos', p.toMap(), conflictAlgorithm: ConflictAlgorithm.fail);
+    final map = p.toMap();
+    // <<< ADICIONA O CARIMBO DE TEMPO ANTES DE INSERIR >>>
+    map['lastModified'] = DateTime.now().toIso8601String();
+    return await db.insert('projetos', map, conflictAlgorithm: ConflictAlgorithm.fail);
+  }
+  
+  Future<int> updateProjeto(Projeto p) async {
+    final db = await _dbHelper.database;
+    final map = p.toMap();
+    // <<< ADICIONA O CARIMBO DE TEMPO ANTES DE ATUALIZAR >>>
+    map['lastModified'] = DateTime.now().toIso8601String();
+    return await db.update(
+      'projetos',
+      map,
+      where: 'id = ?',
+      whereArgs: [p.id],
+    );
   }
 
-  
+  // --- O RESTANTE DOS MÉTODOS DE LEITURA PERMANECE O MESMO ---
 
   Future<List<Projeto>> getTodosProjetos(String licenseId) async {
     final db = await _dbHelper.database;
@@ -83,15 +98,5 @@ class ProjetoRepository {
     ''', [parcela.talhaoId]);
     if (maps.isNotEmpty) return Projeto.fromMap(maps.first);
     return null;
-  }
-
-   Future<int> updateProjeto(Projeto p) async {
-    final db = await _dbHelper.database;
-    return await db.update(
-      'projetos',
-      p.toMap(),
-      where: 'id = ?',
-      whereArgs: [p.id],
-    );
   }
 }

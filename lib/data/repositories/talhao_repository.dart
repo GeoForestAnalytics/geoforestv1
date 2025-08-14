@@ -1,4 +1,4 @@
-// lib/data/repositories/talhao_repository.dart (VERSÃO CORRIGIDA)
+// lib/data/repositories/talhao_repository.dart
 
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -8,16 +8,20 @@ import 'package:sqflite/sqflite.dart';
 class TalhaoRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  // AJUSTE 1: Insert agora apenas insere, usando .fail para segurança.
   Future<int> insertTalhao(Talhao t) async {
     final db = await _dbHelper.database;
-    return await db.insert('talhoes', t.toMap(), conflictAlgorithm: ConflictAlgorithm.fail);
+    final map = t.toMap();
+    // <<< ADICIONA O CARIMBO DE TEMPO ANTES DE INSERIR >>>
+    map['lastModified'] = DateTime.now().toIso8601String();
+    return await db.insert('talhoes', map, conflictAlgorithm: ConflictAlgorithm.fail);
   }
 
-  // AJUSTE 2: Adiciona um método de update explícito e seguro.
   Future<int> updateTalhao(Talhao t) async {
     final db = await _dbHelper.database;
-    return await db.update('talhoes', t.toMap(), where: 'id = ?', whereArgs: [t.id]);
+    final map = t.toMap();
+    // <<< ADICIONA O CARIMBO DE TEMPO ANTES DE ATUALIZAR >>>
+    map['lastModified'] = DateTime.now().toIso8601String();
+    return await db.update('talhoes', map, where: 'id = ?', whereArgs: [t.id]);
   }
   
   // AJUSTE 3: Adiciona um método para buscar um talhão específico (necessário para a UI)

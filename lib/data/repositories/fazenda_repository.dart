@@ -1,4 +1,4 @@
-// lib/data/repositories/fazenda_repository.dart (VERSÃO CORRIGIDA)
+// lib/data/repositories/fazenda_repository.dart
 
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
@@ -9,17 +9,20 @@ class FazendaRepository {
 
   Future<void> insertFazenda(Fazenda f) async {
     final db = await _dbHelper.database;
-    await db.insert('fazendas', f.toMap(), conflictAlgorithm: ConflictAlgorithm.fail);
+    final map = f.toMap();
+    // <<< ADICIONA O CARIMBO DE TEMPO ANTES DE INSERIR >>>
+    map['lastModified'] = DateTime.now().toIso8601String();
+    await db.insert('fazendas', map, conflictAlgorithm: ConflictAlgorithm.fail);
   }
 
-  // <<< NOVO MÉTODO DE UPDATE >>>
   Future<int> updateFazenda(Fazenda f) async {
     final db = await _dbHelper.database;
-    // A chave primária da tabela 'fazendas' é composta (id, atividadeId).
-    // Por isso, a cláusula WHERE precisa usar ambos os campos para identificar a linha correta.
+    final map = f.toMap();
+    // <<< ADICIONA O CARIMBO DE TEMPO ANTES DE ATUALIZAR >>>
+    map['lastModified'] = DateTime.now().toIso8601String();
     return await db.update(
       'fazendas', 
-      f.toMap(), 
+      map, 
       where: 'id = ? AND atividadeId = ?', 
       whereArgs: [f.id, f.atividadeId]
     );

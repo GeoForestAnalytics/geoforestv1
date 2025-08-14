@@ -1,16 +1,14 @@
-// lib/models/cubagem_secao_model.dart
+// lib/models/cubagem_secao_model.dart (VERSÃO ATUALIZADA COM lastModified)
 
 class CubagemSecao {
   int? id;
-  int? cubagemArvoreId; // Chave estrangeira
-  double alturaMedicao;  // A altura no fuste onde a medição foi feita
-  
-  // Dados de entrada do usuário
-  double circunferencia; // cm
-  double casca1_mm;      // mm
+  int? cubagemArvoreId;
+  double alturaMedicao;
+  double circunferencia;
+  double casca1_mm;
   double casca2_mm;
+  final DateTime? lastModified; // <<< ADICIONADO
 
-  // Dados calculados (para conveniência, não salvos no DB)
   double get diametroComCasca => circunferencia / 3.14159;
   double get espessuraMediaCasca_cm => ((casca1_mm + casca2_mm) / 2) / 10;
   double get diametroSemCasca => diametroComCasca - (2 * espessuraMediaCasca_cm);
@@ -22,6 +20,7 @@ class CubagemSecao {
     this.circunferencia = 0,
     this.casca1_mm = 0,
     this.casca2_mm = 0,
+    this.lastModified, // <<< ADICIONADO
   });
 
   Map<String, dynamic> toMap() {
@@ -32,6 +31,7 @@ class CubagemSecao {
       'circunferencia': circunferencia,
       'casca1_mm': casca1_mm,
       'casca2_mm': casca2_mm,
+      'lastModified': lastModified?.toIso8601String(), // <<< ADICIONADO
     };
   }
 
@@ -43,6 +43,7 @@ class CubagemSecao {
       circunferencia: map['circunferencia'] ?? 0,
       casca1_mm: map['casca1_mm'] ?? 0,
       casca2_mm: map['casca2_mm'] ?? 0,
+      lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null, // <<< ADICIONADO
     );
   }
 }

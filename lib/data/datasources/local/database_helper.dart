@@ -1,11 +1,10 @@
-// lib/data/datasources/local/database_helper.dart (VERSÃO FINAL E SIMPLIFICADA)
+// lib/data/datasources/local/database_helper.dart (VERSÃO FINAL E COMPLETA)
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
-// O mapa de definições permanece, pois é usado em outros lugares (main.dart e export_service.dart)
 final Map<int, String> proj4Definitions = {
   31978: '+proj=utm +zone=18 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
   31979: '+proj=utm +zone=19 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
@@ -27,13 +26,10 @@ class DatabaseHelper {
 
   Future<Database> get database async => _database ??= await _initDatabase();
 
-  // <<< ESTA É A MUDANÇA CRÍTICA >>>
-  // A inicialização agora é direta, sem 'compute'. Ela confia na inicialização
-  // global que já foi feita no seu main.dart.
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 32, 
+      version: 33, 
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -42,8 +38,6 @@ class DatabaseHelper {
 
   Future<void> _onConfigure(Database db) async => await db.execute('PRAGMA foreign_keys = ON');
 
-  // O resto do seu arquivo (onCreate, onUpgrade, etc.) permanece exatamente o mesmo.
-  // ... cole o resto do seu código de _onCreate, _onUpgrade, e deleteDatabaseFile aqui ...
   Future<void> _onCreate(Database db, int version) async {
      await db.execute('''
       CREATE TABLE projetos (
@@ -54,7 +48,8 @@ class DatabaseHelper {
         responsavel TEXT NOT NULL,
         dataCriacao TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'ativo',
-        delegado_por_license_id TEXT
+        delegado_por_license_id TEXT,
+        lastModified TEXT NOT NULL 
       )
     ''');
     await db.execute('''
@@ -64,7 +59,8 @@ class DatabaseHelper {
         tipo TEXT NOT NULL,
         descricao TEXT NOT NULL,
         dataCriacao TEXT NOT NULL,
-        metodoCubagem TEXT, 
+        metodoCubagem TEXT,
+        lastModified TEXT NOT NULL, 
         FOREIGN KEY (projetoId) REFERENCES projetos (id) ON DELETE CASCADE
       )
     ''');
@@ -75,6 +71,7 @@ class DatabaseHelper {
         nome TEXT NOT NULL,
         municipio TEXT NOT NULL,
         estado TEXT NOT NULL,
+        lastModified TEXT NOT NULL,
         PRIMARY KEY (id, atividadeId),
         FOREIGN KEY (atividadeId) REFERENCES atividades (id) ON DELETE CASCADE
       )
@@ -88,7 +85,8 @@ class DatabaseHelper {
         areaHa REAL,
         idadeAnos REAL,
         especie TEXT,
-        espacamento TEXT, 
+        espacamento TEXT,
+        lastModified TEXT NOT NULL, 
         FOREIGN KEY (fazendaId, fazendaAtividadeId) REFERENCES fazendas (id, atividadeId) ON DELETE CASCADE
       )
     ''');
@@ -117,6 +115,7 @@ class DatabaseHelper {
         projetoId INTEGER,
         municipio TEXT, 
         estado TEXT,
+        lastModified TEXT NOT NULL,
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
     ''');
@@ -135,6 +134,7 @@ class DatabaseHelper {
         observacao TEXT,
         capAuditoria REAL,
         alturaAuditoria REAL,
+        lastModified TEXT NOT NULL,
         FOREIGN KEY (parcelaId) REFERENCES parcelas (id) ON DELETE CASCADE
       )
     ''');
@@ -154,6 +154,7 @@ class DatabaseHelper {
         exportada INTEGER DEFAULT 0 NOT NULL,
         isSynced INTEGER DEFAULT 0 NOT NULL,
         nomeLider TEXT,
+        lastModified TEXT NOT NULL,
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
     ''');
@@ -165,6 +166,7 @@ class DatabaseHelper {
         circunferencia REAL,
         casca1_mm REAL,
         casca2_mm REAL,
+        lastModified TEXT NOT NULL,
         FOREIGN KEY (cubagemArvoreId) REFERENCES cubagens_arvores (id) ON DELETE CASCADE
       )
     ''');
@@ -215,7 +217,27 @@ class DatabaseHelper {
           await db.execute("ALTER TABLE parcelas ADD COLUMN municipio TEXT");
           await db.execute("ALTER TABLE parcelas ADD COLUMN estado TEXT");
           break;
-      }
+        case 33:
+          await db.execute("ALTER TABLE projetos ADD COLUMN lastModified TEXT");
+          await db.execute("ALTER TABLE atividades ADD COLUMN lastModified TEXT");
+          await db.execute("ALTER TABLE fazendas ADD COLUMN lastModified TEXT");
+          await db.execute("ALTER TABLE talhoes ADD COLUMN lastModified TEXT");
+          await db.execute("ALTER TABLE parcelas ADD COLUMN lastModified TEXT");
+          await db.execute("ALTER TABLE arvores ADD COLUMN lastModified TEXT");
+          await db.execute("ALTER TABLE cubagens_arvores ADD COLUMN lastModified TEXT");
+          await db.execute("ALTER TABLE cubagens_secoes ADD COLUMN lastModified TEXT");
+    
+          final now = DateTime.now().toIso8601String();
+          await db.update('projetos', {'lastModified': now}, where: 'lastModified IS NULL');
+          await db.update('atividades', {'lastModified': now}, where: 'lastModified IS NULL');
+          await db.update('fazendas', {'lastModified': now}, where: 'lastModified IS NULL');
+          await db.update('talhoes', {'lastModified': now}, where: 'lastModified IS NULL');
+          await db.update('parcelas', {'lastModified': now}, where: 'lastModified IS NULL');
+          await db.update('arvores', {'lastModified': now}, where: 'lastModified IS NULL');
+          await db.update('cubagens_arvores', {'lastModified': now}, where: 'lastModified IS NULL');
+          await db.update('cubagens_secoes', {'lastModified': now}, where: 'lastModified IS NULL');
+          break;
+        }
     }
   }
 

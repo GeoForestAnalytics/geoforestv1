@@ -7,6 +7,7 @@ class Fazenda {
   final String nome;
   final String municipio;
   final String estado;
+  final DateTime? lastModified;
 
   Fazenda({
     required this.id,
@@ -14,6 +15,7 @@ class Fazenda {
     required this.nome,
     required this.municipio,
     required this.estado,
+    this.lastModified,
   });
 
   Map<String, dynamic> toMap() {
@@ -23,6 +25,7 @@ class Fazenda {
       'nome': nome,
       'municipio': municipio,
       'estado': estado,
+      'lastModified': lastModified?.toIso8601String(),
     };
   }
 
@@ -33,6 +36,9 @@ class Fazenda {
       nome: map['nome'],
       municipio: map['municipio'],
       estado: map['estado'],
+      lastModified: map['lastModified'] != null
+          ? DateTime.parse(map['lastModified'])
+          : null,
     );
   }
 }

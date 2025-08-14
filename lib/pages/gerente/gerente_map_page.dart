@@ -1,4 +1,4 @@
-// lib/pages/gerente/gerente_map_page.dart (VERSÃO FINAL COM CLUSTER MANUAL POR FAZENDA)
+// lib/pages/gerente/gerente_map_page.dart (VERSÃO CORRIGIDA PÓS-REFATORAÇÃO)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -9,6 +9,10 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:collection/collection.dart';
 
+// <<< CORREÇÃO 1: Importar os novos providers >>>
+import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
+import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
+
 class MapLayer {
   final String name;
   final IconData icon;
@@ -16,7 +20,6 @@ class MapLayer {
   MapLayer({required this.name, required this.icon, required this.tileLayer});
 }
 
-// Classe auxiliar para agrupar os dados da fazenda
 class FazendaCluster {
   final String nome;
   final int parcelaCount;
@@ -35,8 +38,7 @@ class GerenteMapPage extends StatefulWidget {
 class _GerenteMapPageState extends State<GerenteMapPage> {
   final MapController _mapController = MapController();
   
-  // Estado para controlar a visão do mapa
-  String? _fazendaSelecionada; // Se for nulo, mostra a visão geral. Se tiver um nome, mostra as parcelas.
+  String? _fazendaSelecionada;
 
   static final List<MapLayer> _mapLayers = [
     MapLayer(name: 'Ruas', icon: Icons.map_outlined, tileLayer: TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.example.geoforestv1')),
@@ -54,7 +56,7 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
   }
 
   void _centerMapOnBounds(LatLngBounds bounds) {
-if (bounds != LatLngBounds(LatLng(0, 0), LatLng(0, 0))) { // Placeholder check
+    if (bounds != LatLngBounds(LatLng(0, 0), LatLng(0, 0))) {
       try {
          _mapController.fitCamera(CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50.0)));
       } catch(e) {
@@ -105,7 +107,6 @@ if (bounds != LatLngBounds(LatLng(0, 0), LatLng(0, 0))) { // Placeholder check
         actions: [
           IconButton(icon: Icon(_currentLayer.icon), onPressed: _switchMapLayer, tooltip: 'Mudar Camada do Mapa'),
         ],
-        // Adiciona um botão de "voltar" se estiver na visão de parcelas
         leading: _fazendaSelecionada != null
           ? IconButton(
               icon: const Icon(Icons.arrow_back),
@@ -114,16 +115,23 @@ if (bounds != LatLngBounds(LatLng(0, 0), LatLng(0, 0))) { // Placeholder check
             )
           : null,
       ),
+      // <<< CORREÇÃO 2: Continuamos ouvindo o GerenteProvider para o status de 'isLoading' >>>
       body: Consumer<GerenteProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading) return const Center(child: CircularProgressIndicator());
-          if (provider.parcelasFiltradas.isEmpty) return const Center(child: Text('Nenhuma parcela sincronizada para exibir no mapa.'));
+        builder: (context, gerenteProvider, child) {
+          if (gerenteProvider.isLoading) return const Center(child: CircularProgressIndicator());
+
+          // <<< CORREÇÃO 3: Agora, pegamos os outros providers para acessar os dados corretos >>>
+          final metricsProvider = context.watch<DashboardMetricsProvider>();
+          final filterProvider = context.watch<DashboardFilterProvider>();
+          
+          // <<< CORREÇÃO 4: Usamos 'metricsProvider' para acessar 'parcelasFiltradas' >>>
+          if (metricsProvider.parcelasFiltradas.isEmpty) return const Center(child: Text('Nenhuma parcela sincronizada para exibir no mapa.'));
 
           List<Marker> markersToShow = [];
           
           if (_fazendaSelecionada == null) {
-            // MODO FAZENDA: Agrupa parcelas por fazenda e cria os clusters
-            final parcelasPorFazenda = groupBy(provider.parcelasFiltradas, (Parcela p) => p.nomeFazenda ?? 'Fazenda Desconhecida');
+            // <<< CORREÇÃO 5: Usamos 'metricsProvider' aqui também >>>
+            final parcelasPorFazenda = groupBy(metricsProvider.parcelasFiltradas, (Parcela p) => p.nomeFazenda ?? 'Fazenda Desconhecida');
             final List<FazendaCluster> fazendaClusters = [];
 
             parcelasPorFazenda.forEach((nomeFazenda, parcelas) {
@@ -146,7 +154,6 @@ if (bounds != LatLngBounds(LatLng(0, 0), LatLng(0, 0))) { // Placeholder check
                 child: GestureDetector(
                   onTap: () {
                     setState(() => _fazendaSelecionada = cluster.nome);
-                    // Dá um pequeno delay para o setState reconstruir a UI antes de mover o mapa
                     Future.delayed(const Duration(milliseconds: 100), () => _centerMapOnBounds(cluster.bounds));
                   },
                   child: Card(
@@ -169,15 +176,16 @@ if (bounds != LatLngBounds(LatLng(0, 0), LatLng(0, 0))) { // Placeholder check
             }).toList();
 
           } else {
-            // MODO PARCELA: Mostra os marcadores individuais da fazenda selecionada
-            final parcelasVisiveis = provider.parcelasFiltradas.where((p) => p.nomeFazenda == _fazendaSelecionada).toList();
+            // <<< CORREÇÃO 6: E aqui também >>>
+            final parcelasVisiveis = metricsProvider.parcelasFiltradas.where((p) => p.nomeFazenda == _fazendaSelecionada).toList();
             markersToShow = parcelasVisiveis.map<Marker>((parcela) {
               return Marker(
                 width: 35.0, height: 35.0,
                 point: LatLng(parcela.latitude!, parcela.longitude!),
                 child: GestureDetector(
                   onTap: () {
-                    final nomeProjeto = provider.projetosDisponiveis.firstWhereOrNull((p) => p.id == parcela.projetoId)?.nome ?? 'N/A';
+                    // <<< CORREÇÃO 7: Usamos 'filterProvider' para buscar os nomes dos projetos >>>
+                    final nomeProjeto = filterProvider.projetosDisponiveis.firstWhereOrNull((p) => p.id == parcela.projetoId)?.nome ?? 'N/A';
                     final infoText = 
                         'Projeto: $nomeProjeto\n'
                         'Fazenda: ${parcela.nomeFazenda ?? 'N/A'}\n'
@@ -191,7 +199,6 @@ if (bounds != LatLngBounds(LatLng(0, 0), LatLng(0, 0))) { // Placeholder check
             }).toList();
           }
 
-          // Adiciona o marcador do usuário por último
           if (_currentUserPosition != null) {
             markersToShow.add(Marker(
               point: LatLng(_currentUserPosition!.latitude, _currentUserPosition!.longitude),
@@ -222,6 +229,7 @@ if (bounds != LatLngBounds(LatLng(0, 0), LatLng(0, 0))) { // Placeholder check
   }
 }
 
+// A classe LocationMarker não precisa de alterações.
 class LocationMarker extends StatefulWidget {
   const LocationMarker({super.key});
   @override

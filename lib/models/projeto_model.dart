@@ -10,6 +10,7 @@ class Projeto {
   final String status;
   // <<< MUDANÇA 1: Adicionado o novo campo para rastrear a delegação >>>
   final String? delegadoPorLicenseId;
+  final DateTime? lastModified;
 
   Projeto({
     this.id,
@@ -21,6 +22,7 @@ class Projeto {
     this.status = 'ativo',
     // <<< MUDANÇA 2: Adicionado ao construtor >>>
     this.delegadoPorLicenseId,
+    this.lastModified,
   });
 
   Projeto copyWith({
@@ -33,6 +35,7 @@ class Projeto {
     String? status,
     // <<< MUDANÇA 3: Adicionado ao método copyWith >>>
     String? delegadoPorLicenseId,
+    DateTime? lastModified,
   }) {
     return Projeto(
       id: id ?? this.id,
@@ -44,6 +47,8 @@ class Projeto {
       status: status ?? this.status,
       // <<< MUDANÇA 4: Adicionado aqui >>>
       delegadoPorLicenseId: delegadoPorLicenseId ?? this.delegadoPorLicenseId,
+      lastModified: lastModified ?? this.lastModified,
+      
     );
   }
 
@@ -58,6 +63,7 @@ class Projeto {
       'status': status,
       // <<< MUDANÇA 5: Adicionado ao mapa para salvar no banco de dados >>>
       'delegado_por_license_id': delegadoPorLicenseId,
+      'lastModified': lastModified?.toIso8601String(),
     };
   }
 
@@ -72,6 +78,7 @@ class Projeto {
       status: map['status'] ?? 'ativo',
       // <<< MUDANÇA 6: Lendo o novo campo do banco de dados >>>
       delegadoPorLicenseId: map['delegado_por_license_id'],
+      lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null,
     );
   }
 }

@@ -1,4 +1,5 @@
-// lib/data/repositories/cubagem_repository.dart (VERSÃO ATUALIZADA)
+// lib/data/repositories/cubagem_repository.dart (VERSÃO FINAL CORRIGIDA)
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
@@ -22,17 +23,16 @@ class CubagemRepository {
     debugPrint('Tabela de cubagens e seções limpa.');
   }
 
-  // ===================================================================
-  // ============ MÉTODO salvarCubagemCompleta ATUALIZADO =============
-  // ===================================================================
   Future<void> salvarCubagemCompleta(CubagemArvore arvore, List<CubagemSecao> secoes) async {
     final db = await _dbHelper.database;
+    final now = DateTime.now().toIso8601String();
+
     await db.transaction((txn) async {
       int id;
       arvore.isSynced = false;
       final map = arvore.toMap();
+      map['lastModified'] = now;
 
-      // --- INÍCIO DA LÓGICA ADICIONADA ---
       final prefs = await SharedPreferences.getInstance();
       String? nomeDoResponsavel = prefs.getString('nome_lider');
       if (nomeDoResponsavel == null || nomeDoResponsavel.isEmpty) {
@@ -44,7 +44,6 @@ class CubagemRepository {
       if (nomeDoResponsavel != null) {
         map['nomeLider'] = nomeDoResponsavel;
       }
-      // --- FIM DA LÓGICA ADICIONADA ---
 
       if (arvore.id == null) {
         id = await txn.insert('cubagens_arvores', map, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -56,13 +55,52 @@ class CubagemRepository {
       await txn.delete('cubagens_secoes', where: 'cubagemArvoreId = ?', whereArgs: [id]);
       for (var s in secoes) {
         s.cubagemArvoreId = id;
-        await txn.insert('cubagens_secoes', s.toMap());
+        final secaoMap = s.toMap();
+        secaoMap['lastModified'] = now;
+        await txn.insert('cubagens_secoes', secaoMap);
       }
     });
   }
-  // ===================================================================
-  // ===================== FIM DA ATUALIZAÇÃO ==========================
-  // ===================================================================
+
+  Future<void> gerarPlanoDeCubagemNoBanco(Talhao talhao, int totalParaCubar, int novaAtividadeId, AnalysisService analysisService) async {
+    final dadosAgregados = await _analiseRepository.getDadosAgregadosDoTalhao(talhao.id!);
+
+    final parcelas = dadosAgregados['parcelas'] as List<Parcela>;
+    final arvores = dadosAgregados['arvores'] as List<Arvore>;
+    if (parcelas.isEmpty || arvores.isEmpty) throw Exception('Não há árvores suficientes neste talhão para gerar um plano.');
+
+    final analise = analysisService.getTalhaoInsights(parcelas, arvores);
+    final plano = analysisService.gerarPlanoDeCubagem(analise.distribuicaoDiametrica, analise.totalArvoresAmostradas, totalParaCubar);
+
+    if (plano.isEmpty) throw Exception('Não foi possível gerar o plano de cubagem. Verifique os dados das parcelas.');
+
+    final db = await _dbHelper.database;
+    final now = DateTime.now().toIso8601String(); // <<< ADICIONADO AQUI
+
+    await db.transaction((txn) async {
+      for (final entry in plano.entries) {
+        final classe = entry.key;
+        final quantidade = entry.value;
+        for (int i = 1; i <= quantidade; i++) {
+          final arvoreCubagem = CubagemArvore(
+              talhaoId: talhao.id!,
+              idFazenda: talhao.fazendaId,
+              nomeFazenda: talhao.fazendaNome ?? 'N/A',
+              nomeTalhao: talhao.nome,
+              identificador: '${talhao.nome} - Árvore ${i.toString().padLeft(2, '0')}',
+              classe: classe,
+              isSynced: false);
+              
+          final map = arvoreCubagem.toMap();
+          map['lastModified'] = now; // <<< E AQUI PARA CARIMBAR
+          await txn.insert('cubagens_arvores', map);
+        }
+      }
+    });
+  }
+
+  // --- O RESTANTE DO ARQUIVO PERMANECE IGUAL ---
+  // ... (getters e outros métodos)
 
   Future<List<CubagemArvore>> getTodasCubagensDoTalhao(int talhaoId) async {
     final db = await _dbHelper.database;
@@ -93,35 +131,24 @@ class CubagemRepository {
     await db.delete('cubagens_arvores', where: 'id IN (${List.filled(ids.length, '?').join(',')})', whereArgs: ids);
   }
 
-  Future<void> gerarPlanoDeCubagemNoBanco(Talhao talhao, int totalParaCubar, int novaAtividadeId, AnalysisService analysisService) async {
-    final dadosAgregados = await _analiseRepository.getDadosAgregadosDoTalhao(talhao.id!);
-
-    final parcelas = dadosAgregados['parcelas'] as List<Parcela>;
-    final arvores = dadosAgregados['arvores'] as List<Arvore>;
-    if (parcelas.isEmpty || arvores.isEmpty) throw Exception('Não há árvores suficientes neste talhão para gerar um plano.');
-
-    final analise = analysisService.getTalhaoInsights(parcelas, arvores);
-    final plano = analysisService.gerarPlanoDeCubagem(analise.distribuicaoDiametrica, analise.totalArvoresAmostradas, totalParaCubar);
-
-    if (plano.isEmpty) throw Exception('Não foi possível gerar o plano de cubagem. Verifique os dados das parcelas.');
-
-    final db = await _dbHelper.database;
-    await db.transaction((txn) async {
-      for (final entry in plano.entries) {
-        final classe = entry.key;
-        final quantidade = entry.value;
-        for (int i = 1; i <= quantidade; i++) {
-          final arvoreCubagem = CubagemArvore(talhaoId: talhao.id!, idFazenda: talhao.fazendaId, nomeFazenda: talhao.fazendaNome ?? 'N/A', nomeTalhao: talhao.nome, identificador: '${talhao.nome} - Árvore ${i.toString().padLeft(2, '0')}', classe: classe, isSynced: false);
-          await txn.insert('cubagens_arvores', arvoreCubagem.toMap());
-        }
-      }
-    });
-  }
-
   Future<List<CubagemArvore>> getUnsyncedCubagens() async {
     final db = await _dbHelper.database;
     final maps = await db.query('cubagens_arvores', where: 'isSynced = ?', whereArgs: [0]);
     return List.generate(maps.length, (i) => CubagemArvore.fromMap(maps[i]));
+  }
+
+  Future<CubagemArvore?> getOneUnsyncedCubagem() async {
+    final db = await _dbHelper.database;
+    final maps = await db.query(
+      'cubagens_arvores',
+      where: 'isSynced = ?',
+      whereArgs: [0],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return CubagemArvore.fromMap(maps.first);
+    }
+    return null;
   }
 
   Future<List<CubagemArvore>> getUnexportedCubagens() async {

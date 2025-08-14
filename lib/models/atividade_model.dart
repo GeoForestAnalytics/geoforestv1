@@ -23,6 +23,7 @@ class Atividade {
   // <<< NOVO CAMPO AQUI >>>
   // Guarda o método de cubagem ('Fixas' ou 'Relativas') se a atividade for de cubagem.
   final String? metodoCubagem;
+  final DateTime? lastModified; 
 
   Atividade({
     this.id,
@@ -31,6 +32,7 @@ class Atividade {
     required this.descricao,
     required this.dataCriacao,
     this.metodoCubagem, // <<< ADICIONADO AO CONSTRUTOR
+    this.lastModified,
   });
 
   Atividade copyWith({
@@ -40,6 +42,7 @@ class Atividade {
     String? descricao,
     DateTime? dataCriacao,
     String? metodoCubagem, // <<< ADICIONADO AO COPYWITH
+    DateTime? lastModified,
   }) {
     return Atividade(
       id: id ?? this.id,
@@ -48,6 +51,7 @@ class Atividade {
       descricao: descricao ?? this.descricao,
       dataCriacao: dataCriacao ?? this.dataCriacao,
       metodoCubagem: metodoCubagem ?? this.metodoCubagem, // <<< ADICIONADO AQUI
+      lastModified: lastModified ?? this.lastModified,
     );
   }
 
@@ -60,6 +64,7 @@ class Atividade {
       'descricao': descricao,
       'dataCriacao': dataCriacao.toIso8601String(),
       'metodoCubagem': metodoCubagem, // <<< ADICIONADO AO MAP
+      'lastModified': lastModified?.toIso8601String(),
     };
   }
 
@@ -71,6 +76,9 @@ class Atividade {
       descricao: map['descricao'],
       dataCriacao: DateTime.parse(map['dataCriacao']),
       metodoCubagem: map['metodoCubagem'], // <<< ADICIONADO AO FACTORY
+      lastModified: map['lastModified'] != null
+          ? DateTime.parse(map['lastModified'])
+          : null,
     );
   }
 }

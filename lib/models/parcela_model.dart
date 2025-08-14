@@ -47,6 +47,7 @@ class Parcela {
   
   List<String> photoPaths;
   List<Arvore> arvores;
+  final DateTime? lastModified;
 
   Parcela({
     this.dbId,
@@ -73,6 +74,7 @@ class Parcela {
     this.estado,
     this.photoPaths = const [],
     this.arvores = const [],
+    this.lastModified,
   }) : uuid = uuid ?? const Uuid().v4();
 
   Parcela copyWith({
@@ -100,6 +102,7 @@ class Parcela {
     String? estado,
     List<String>? photoPaths,
     List<Arvore>? arvores,
+    DateTime? lastModified,
   }) {
     return Parcela(
       dbId: dbId ?? this.dbId,
@@ -126,6 +129,7 @@ class Parcela {
       estado: estado ?? this.estado,
       photoPaths: photoPaths ?? this.photoPaths,
       arvores: arvores ?? this.arvores,
+      lastModified: lastModified ?? this.lastModified,
     );
   }
 
@@ -154,6 +158,7 @@ class Parcela {
       'municipio': municipio,
       'estado': estado,
       'photoPaths': jsonEncode(photoPaths),
+      'lastModified': lastModified?.toIso8601String()
     };
   }
 
@@ -202,6 +207,7 @@ class Parcela {
     nomeLider: map['nomeLider'],
     projetoId: map['projetoId'], // Mantém a leitura do projetoId
     photoPaths: paths,
+    lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null,
   );
 }
 }
