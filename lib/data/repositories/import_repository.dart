@@ -151,7 +151,7 @@ class ImportRepository {
                       }
                   }
 
-                  final statusStr = getValue(row, ['status_parcela']) ?? 'concluida';
+                  final statusStr = getValue(row, ['status_parcela']) ?? 'pendente';
                   final novaParcela = Parcela(
                       talhaoId: talhao.id!, 
                       idParcela: idParcelaColeta,

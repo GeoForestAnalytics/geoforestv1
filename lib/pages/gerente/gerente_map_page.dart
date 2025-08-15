@@ -1,4 +1,4 @@
-// lib/pages/gerente/gerente_map_page.dart (VERSÃO FINAL E 100% CORRIGIDA)
+// lib/pages/gerente/gerente_map_page.dart (VERSÃO FINAL COM ANEL DE PROGRESSO)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -8,9 +8,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:collection/collection.dart';
-
-
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
+// <<< PASSO 3.1: IMPORTAR O NOVO WIDGET DO ANEL >>>
+import 'package:geoforestv1/widgets/fazenda_progress_cluster.dart'; 
+
 
 class MapLayer {
   final String name;
@@ -24,7 +25,18 @@ class FazendaCluster {
   final int parcelaCount;
   final LatLng center;
   final LatLngBounds bounds;
-  FazendaCluster({required this.nome, required this.parcelaCount, required this.center, required this.bounds});
+  // <<< Dados de progresso adicionados ao cluster >>>
+  final int concluidas;
+  final double progresso;
+
+  FazendaCluster({
+    required this.nome,
+    required this.parcelaCount,
+    required this.center,
+    required this.bounds,
+    required this.concluidas,
+    required this.progresso,
+  });
 }
 
 class GerenteMapPage extends StatefulWidget {
@@ -114,12 +126,10 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
             )
           : null,
       ),
-      body: Consumer<GerenteProvider>(
-        builder: (context, gerenteProvider, child) {
+      // <<< PASSO 3.2: O Consumer agora busca também o DashboardMetricsProvider >>>
+      body: Consumer2<GerenteProvider, DashboardMetricsProvider>(
+        builder: (context, gerenteProvider, metricsProvider, child) {
           if (gerenteProvider.isLoading) return const Center(child: CircularProgressIndicator());
-
-          final metricsProvider = context.watch<DashboardMetricsProvider>();
-          
           
           if (metricsProvider.parcelasFiltradas.isEmpty) return const Center(child: Text('Nenhuma parcela sincronizada para exibir no mapa.'));
 
@@ -129,43 +139,46 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
             final parcelasPorFazenda = groupBy(metricsProvider.parcelasFiltradas, (Parcela p) => p.nomeFazenda ?? 'Fazenda Desconhecida');
             final List<FazendaCluster> fazendaClusters = [];
 
+            // <<< PASSO 3.3: LÓGICA DE CRIAÇÃO DO CLUSTER ATUALIZADA >>>
+            // Busca os dados de progresso calculados pelo MetricsProvider
+            final progressoData = metricsProvider.progressoPorFazenda;
+
             parcelasPorFazenda.forEach((nomeFazenda, parcelas) {
               final points = parcelas.where((p) => p.latitude != null && p.longitude != null).map((p) => LatLng(p.latitude!, p.longitude!)).toList();
               if (points.isNotEmpty) {
                 final bounds = LatLngBounds.fromPoints(points);
+                
+                // Encontra os dados de progresso para esta fazenda específica
+                final progressoInfo = progressoData.firstWhere(
+                  (p) => p.nome == nomeFazenda, 
+                  orElse: () => ProgressoFazenda(nome: nomeFazenda, totalParcelas: parcelas.length, concluidas: 0, progresso: 0.0)
+                );
+
                 fazendaClusters.add(FazendaCluster(
                   nome: nomeFazenda,
-                  parcelaCount: parcelas.length,
+                  parcelaCount: progressoInfo.totalParcelas,
+                  concluidas: progressoInfo.concluidas,
+                  progresso: progressoInfo.progresso,
                   center: bounds.center,
                   bounds: bounds,
                 ));
               }
             });
 
+            // <<< PASSO 3.4: USA O NOVO WIDGET FazendaProgressCluster PARA CRIAR OS MARCADORES >>>
             markersToShow = fazendaClusters.map((cluster) {
               return Marker(
-                width: 120, height: 80,
+                width: 120, height: 120, // Aumenta o tamanho para o anel
                 point: cluster.center,
-                child: GestureDetector(
+                child: FazendaProgressCluster(
+                  nomeFazenda: cluster.nome,
+                  totalParcelas: cluster.parcelaCount,
+                  concluidas: cluster.concluidas,
+                  progresso: cluster.progresso,
                   onTap: () {
                     setState(() => _fazendaSelecionada = cluster.nome);
                     Future.delayed(const Duration(milliseconds: 100), () => _centerMapOnBounds(cluster.bounds));
                   },
-                  child: Card(
-                    elevation: 4,
-                    color: Theme.of(context).colorScheme.primary,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(cluster.nome, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                          const SizedBox(height: 4),
-                          Text("${cluster.parcelaCount} parcelas", style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                  ),
                 )
               );
             }).toList();

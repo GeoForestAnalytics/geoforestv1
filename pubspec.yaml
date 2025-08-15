@@ -61,6 +61,7 @@ dependencies:
   fl_chart: ^1.0.0 # Gráficos interativos
   flutter_archive: ^6.0.3 # Compactar/descompactar arquivos ZIP
   uuid: ^4.3.3 # Gerar identificadores únicos
+  pie_chart: ^5.4.0
 
   # Imagens
   image_picker: ^1.0.7 # Capturar ou escolher imagens

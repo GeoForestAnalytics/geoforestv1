@@ -1,4 +1,4 @@
-// lib/providers/dashboard_metrics_provider.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/providers/dashboard_metrics_provider.dart (VERSÃO COM VARIÁVEIS CORRIGIDAS)
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +9,20 @@ import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:intl/intl.dart';
 
+class ProgressoFazenda {
+  final String nome;
+  final int totalParcelas;
+  final int concluidas;
+  final double progresso;
+
+  ProgressoFazenda({
+    required this.nome,
+    required this.totalParcelas,
+    required this.concluidas,
+    required this.progresso,
+  });
+}
+
 class DesempenhoCubagem {
   final String nome;
   final int pendentes;
@@ -18,7 +32,6 @@ class DesempenhoCubagem {
   DesempenhoCubagem({ required this.nome, this.pendentes = 0, this.concluidas = 0, this.exportadas = 0, this.total = 0 });
 }
 
-// <<< CORREÇÃO 1: Mudar a estrutura do modelo para ter campos separados >>>
 class DesempenhoFazenda {
   final String nomeAtividade;
   final String nomeFazenda;
@@ -46,12 +59,14 @@ class DashboardMetricsProvider with ChangeNotifier {
   Map<String, int> _progressoPorEquipe = {};
   Map<String, int> _coletasPorMes = {};
   List<DesempenhoFazenda> _desempenhoPorFazenda = [];
+  List<ProgressoFazenda> _progressoPorFazenda = [];
   
   List<Parcela> get parcelasFiltradas => _parcelasFiltradas;
   List<DesempenhoCubagem> get desempenhoPorCubagem => _desempenhoPorCubagem;
   Map<String, int> get progressoPorEquipe => _progressoPorEquipe;
   Map<String, int> get coletasPorMes => _coletasPorMes;
   List<DesempenhoFazenda> get desempenhoPorFazenda => _desempenhoPorFazenda;
+  List<ProgressoFazenda> get progressoPorFazenda => _progressoPorFazenda;
 
   void update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) {
     debugPrint("METRICS PROVIDER UPDATE: Recebeu ${gerenteProvider.parcelasSincronizadas.length} parcelas para calcular.");
@@ -72,9 +87,10 @@ class DashboardMetricsProvider with ChangeNotifier {
       projetosAtivos,
       filterProvider,
     );
-    _recalcularProgressoPorEquipe();
-    _recalcularColetasPorMes();
-    _recalcularDesempenhoPorFazenda();
+    _recalcularProgressoPorEquipe(filterProvider); // <<< PASSA O FILTRO
+    _recalcularColetasPorMes(filterProvider); // <<< PASSA O FILTRO
+    _recalcularDesempenhoPorFazenda(filterProvider); // <<< PASSA O FILTRO
+    _recalcularProgressoPorFazenda();
     
     notifyListeners();
   }
@@ -93,16 +109,41 @@ class DashboardMetricsProvider with ChangeNotifier {
           .where((p) => p.projetoId != null && filterProvider.selectedProjetoIds.contains(p.projetoId))
           .toList();
     }
-
-    if (filterProvider.selectedFazendaNomes.isNotEmpty) {
-      parcelasVisiveis = parcelasVisiveis
-          .where((p) => p.nomeFazenda != null && filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!))
-          .toList();
-    }
-
+    
     _parcelasFiltradas = parcelasVisiveis;
   }
   
+  void _recalcularProgressoPorFazenda() {
+    if (_parcelasFiltradas.isEmpty) {
+      _progressoPorFazenda = [];
+      return;
+    }
+
+    final grupoPorFazenda = groupBy(
+      _parcelasFiltradas,
+      (Parcela p) => p.nomeFazenda ?? 'Fazenda Desconhecida'
+    );
+
+    _progressoPorFazenda = grupoPorFazenda.entries.map((entry) {
+      final nomeFazenda = entry.key;
+      final parcelasDaFazenda = entry.value;
+
+      final total = parcelasDaFazenda.length;
+      final concluidas = parcelasDaFazenda
+          .where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada)
+          .length;
+      
+      final progresso = (total > 0) ? concluidas / total : 0.0;
+
+      return ProgressoFazenda(
+        nome: nomeFazenda,
+        totalParcelas: total,
+        concluidas: concluidas,
+        progresso: progresso,
+      );
+    }).toList();
+  }
+
   void _recalcularDesempenhoPorCubagem(
     List<CubagemArvore> todasAsCubagens, 
     Map<int, int> talhaoToProjetoMap, 
@@ -110,10 +151,6 @@ class DashboardMetricsProvider with ChangeNotifier {
     Map<int, String> atividadeIdToTipoMap,
     List<Projeto> projetosAtivos, 
     DashboardFilterProvider filterProvider) {
-    if (todasAsCubagens.isEmpty) {
-      _desempenhoPorCubagem = [];
-      return;
-    }
     
     List<CubagemArvore> cubagensFiltradas;
     
@@ -160,8 +197,13 @@ class DashboardMetricsProvider with ChangeNotifier {
     }).toList()..sort((a,b) => a.nome.compareTo(b.nome));
   }
   
-  void _recalcularProgressoPorEquipe() {
-    final parcelasConcluidas = _parcelasFiltradas.where((p) => p.status == StatusParcela.concluida).toList();
+  // <<< CORREÇÃO: As funções de cálculo agora recebem o filterProvider como parâmetro >>>
+  void _recalcularProgressoPorEquipe(DashboardFilterProvider filterProvider) {
+    final parcelasVisiveis = filterProvider.selectedFazendaNomes.isNotEmpty
+      ? _parcelasFiltradas.where((p) => p.nomeFazenda != null && filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!)).toList()
+      : _parcelasFiltradas;
+
+    final parcelasConcluidas = parcelasVisiveis.where((p) => p.status == StatusParcela.concluida).toList();
     if (parcelasConcluidas.isEmpty) {
       _progressoPorEquipe = {};
       return;
@@ -172,8 +214,12 @@ class DashboardMetricsProvider with ChangeNotifier {
     _progressoPorEquipe = Map.fromEntries(sortedEntries);
   }
 
-  void _recalcularColetasPorMes() {
-    final parcelas = _parcelasFiltradas.where((p) => p.status == StatusParcela.concluida && p.dataColeta != null).toList();
+  void _recalcularColetasPorMes(DashboardFilterProvider filterProvider) {
+    final parcelasVisiveis = filterProvider.selectedFazendaNomes.isNotEmpty
+      ? _parcelasFiltradas.where((p) => p.nomeFazenda != null && filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!)).toList()
+      : _parcelasFiltradas;
+      
+    final parcelas = parcelasVisiveis.where((p) => p.status == StatusParcela.concluida && p.dataColeta != null).toList();
     if (parcelas.isEmpty) {
       _coletasPorMes = {};
       return;
@@ -190,21 +236,22 @@ class DashboardMetricsProvider with ChangeNotifier {
     _coletasPorMes = {for (var key in chavesOrdenadas) key: mapaContagem[key]!};
   }
 
-  void _recalcularDesempenhoPorFazenda() {
-    if (_parcelasFiltradas.isEmpty) {
+  void _recalcularDesempenhoPorFazenda(DashboardFilterProvider filterProvider) {
+    final parcelasVisiveis = filterProvider.selectedFazendaNomes.isNotEmpty
+      ? _parcelasFiltradas.where((p) => p.nomeFazenda != null && filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!)).toList()
+      : _parcelasFiltradas;
+
+    if (parcelasVisiveis.isEmpty) {
       _desempenhoPorFazenda = [];
       return;
     }
     
-    // <<< CORREÇÃO 2: A chave de agrupamento agora é uma string com um separador único >>>
     final grupoPorFazendaEAtividade = groupBy(
-      _parcelasFiltradas, 
+      parcelasVisiveis, 
       (Parcela p) => "${p.atividadeTipo ?? 'N/A'}:::${p.nomeFazenda ?? 'Fazenda Desconhecida'}"
     );
 
-    // <<< CORREÇÃO 3: Mapear os resultados para a nova estrutura DesempenhoFazenda >>>
     _desempenhoPorFazenda = grupoPorFazendaEAtividade.entries.map((entry) {
-      // Separa a chave novamente para obter os valores individuais
       final parts = entry.key.split(':::');
       final nomeAtividade = parts[0];
       final nomeFazenda = parts[1];
@@ -215,7 +262,7 @@ class DashboardMetricsProvider with ChangeNotifier {
         nomeFazenda: nomeFazenda,
         pendentes: parcelas.where((p) => p.status == StatusParcela.pendente).length,
         emAndamento: parcelas.where((p) => p.status == StatusParcela.emAndamento).length,
-        concluidas: parcelas.where((p) => p.status == StatusParcela.concluida).length,
+        concluidas: parcelas.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada).length,
         exportadas: parcelas.where((p) => p.exportada).length,
         total: parcelas.length,
       );
