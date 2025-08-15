@@ -72,7 +72,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       data = await _projetoRepository.getTodosProjetos(licenseId);
     }
     
-    // Filtra para não mostrar projetos "deletados"
     final projetosVisiveis = data.where((p) => p.status != 'deletado').toList();
 
     if (mounted) {
@@ -83,7 +82,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     }
   }
 
-  // <<< ESTE É O MÉTODO PRINCIPAL QUE FOI MODIFICADO >>>
   Future<void> _deletarProjetosSelecionados() async {
     if (_selectedProjetos.isEmpty || !mounted) return;
     if (!_isGerente) {
@@ -117,10 +115,9 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     for (final id in _selectedProjetos) {
       try {
         final functions = FirebaseFunctions.instanceFor(region: 'southamerica-east1');
-        final callable = functions.httpsCallable('deletarProjeto');
+        final callable = functions.httpsCallable('deletarProjeto' );
         await callable.call({'projetoId': id});
         
-        // Se a chamada na nuvem deu certo, atualiza o status localmente para UI imediata
         final projetoLocal = await _projetoRepository.getProjetoById(id);
         if (projetoLocal != null) {
           await _projetoRepository.updateProjeto(projetoLocal.copyWith(status: 'deletado'));
@@ -149,8 +146,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     await _checkUserRoleAndLoadProjects();
   }
   
-  // O resto do arquivo (demais funções e build) permanece o mesmo...
-
   Future<void> _delegarProjeto(Projeto projeto) async {
     final bool? confirmar = await showDialog<bool>(
       context: context,
@@ -169,7 +164,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
 
     try {
       final functions = FirebaseFunctions.instanceFor(region: 'southamerica-east1');
-      final callable = functions.httpsCallable('delegarProjeto');
+      final callable = functions.httpsCallable('delegarProjeto' );
       final result = await callable.call(<String, dynamic>{
         'projetoId': projeto.id,
         'nomeProjeto': projeto.nome,
@@ -225,7 +220,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
 
     try {
       final functions = FirebaseFunctions.instanceFor(region: 'southamerica-east1');
-      final callable = functions.httpsCallable('vincularProjetoDelegado');
+      final callable = functions.httpsCallable('vincularProjetoDelegado' );
       await callable.call({'chave': chave.trim()});
 
       if (!mounted) return;

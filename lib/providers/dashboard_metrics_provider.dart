@@ -44,21 +44,19 @@ class DashboardMetricsProvider with ChangeNotifier {
   List<DesempenhoFazenda> get desempenhoPorFazenda => _desempenhoPorFazenda;
 
   void update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) {
-    // <<< CORREÇÃO PRINCIPAL AQUI >>>
-    // Pega a lista de projetos diretamente do GerenteProvider
     debugPrint("METRICS PROVIDER UPDATE: Recebeu ${gerenteProvider.parcelasSincronizadas.length} parcelas para calcular.");
     final projetosAtivos = gerenteProvider.projetos.where((p) => p.status == 'ativo').toList();
 
     _recalcularParcelasFiltradas(
       gerenteProvider.parcelasSincronizadas,
-      projetosAtivos, // Usa a lista correta
+      projetosAtivos,
       filterProvider.selectedProjetoIds,
     );
 
     _recalcularDesempenhoPorCubagem(
       gerenteProvider.cubagensSincronizadas,
       gerenteProvider.talhaoToProjetoMap,
-      projetosAtivos, // Usa a lista correta
+      projetosAtivos,
       filterProvider.selectedProjetoIds,
     );
     _recalcularProgressoPorEquipe();
@@ -68,9 +66,8 @@ class DashboardMetricsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // A função _recalcularParcelasFiltradas também precisa de um pequeno ajuste
   void _recalcularParcelasFiltradas(List<Parcela> todasAsParcelas, List<Projeto> projetosAtivos, Set<int> selectedProjetoIds) {
-    final idsProjetosAtivos = projetosAtivos.map((p) => p.id!).toSet(); // Adicionado '!' para garantir que o id não seja nulo
+    final idsProjetosAtivos = projetosAtivos.map((p) => p.id!).toSet();
      debugPrint("FILTRANDO... IDs de projetos ativos na nuvem: $idsProjetosAtivos");
     if (todasAsParcelas.isNotEmpty) {
       debugPrint("FILTRANDO... ID do projeto da primeira parcela: ${todasAsParcelas.first.projetoId}");
@@ -79,11 +76,11 @@ class DashboardMetricsProvider with ChangeNotifier {
 
     if (selectedProjetoIds.isEmpty) {
       parcelasVisiveis = todasAsParcelas
-          .where((p) => p.projetoId != null && idsProjetosAtivos.contains(p.projetoId)) // Adicionada verificação de nulo
+          .where((p) => p.projetoId != null && idsProjetosAtivos.contains(p.projetoId))
           .toList();
     } else {
       parcelasVisiveis = todasAsParcelas
-          .where((p) => p.projetoId != null && selectedProjetoIds.contains(p.projetoId)) // Adicionada verificação de nulo
+          .where((p) => p.projetoId != null && selectedProjetoIds.contains(p.projetoId))
           .toList();
     }
     _parcelasFiltradas = parcelasVisiveis;

@@ -38,7 +38,7 @@ class TalhaoRepository {
     ''', [id]);
 
     if (maps.isNotEmpty) {
-      // O factory Talhao.fromMap (que vamos corrigir a seguir) saberá como ler o projetoId.
+      // O factory Talhao.fromMap saberá como ler o projetoId.
       return Talhao.fromMap(maps.first);
     }
     return null;

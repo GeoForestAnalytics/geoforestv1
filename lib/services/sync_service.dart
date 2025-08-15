@@ -238,12 +238,10 @@ class SyncService {
       await firestoreBatch.commit();
   }
   
-  // <<< INÍCIO DA CORREÇÃO >>>
   Future<void> _uploadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
     final batch = _firestore.batch();
     
-    // 1. Upload de PROJETOS
     final projetosProprios = await db.query('projetos', where: 'delegado_por_license_id IS NULL AND licenseId = ?', whereArgs: [licenseId]);
     if (projetosProprios.isEmpty) return;
     for (var p in projetosProprios) {
@@ -253,7 +251,6 @@ class SyncService {
       batch.set(docRef, map, firestore.SetOptions(merge: true));
     }
 
-    // 2. Upload de ATIVIDADES
     final projetosIds = projetosProprios.map((p) => p['id'] as int).toList();
     if(projetosIds.isEmpty) return;
     
@@ -265,7 +262,6 @@ class SyncService {
         batch.set(docRef, map, firestore.SetOptions(merge: true));
     }
 
-    // 3. Upload de FAZENDAS
     final atividadeIds = atividades.map((a) => a['id'] as int).toList();
     if (atividadeIds.isEmpty) return;
     
@@ -278,10 +274,8 @@ class SyncService {
         batch.set(docRef, map, firestore.SetOptions(merge: true));
     }
 
-    // 4. Upload de TALHÕES (COM CONSULTA CORRIGIDA)
     final fazendaIds = fazendas.map((f) => f['id'] as String).toList();
     if (fazendaIds.isNotEmpty) {
-        // A consulta 'IN' no sqflite requer que a lista seja formatada como uma string entre parênteses
         final idsFormatados = fazendaIds.map((id) => "'$id'").join(',');
         final talhoes = await db.query('talhoes', where: 'fazendaId IN ($idsFormatados)');
         
@@ -296,8 +290,6 @@ class SyncService {
     await batch.commit();
     debugPrint("Hierarquia de projetos próprios enviada para a nuvem com sucesso.");
   }
-  // <<< FIM DA CORREÇÃO >>>
-
 
   Future<void> _downloadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;

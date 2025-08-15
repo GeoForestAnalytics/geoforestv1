@@ -173,7 +173,6 @@ class MyApp extends StatelessWidget {
         // --- FIM DA ARQUITETURA CORRETA ---
       ],
       child: Consumer<ThemeProvider>(
-        // O restante do seu arquivo main.dart continua exatamente igual...
         builder: (context, themeProvider, child) {
               return MaterialApp(
             title: 'Geo Forest Analytics',
@@ -236,7 +235,7 @@ class MyApp extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
-      cardTheme: CardThemeData( // <<< CORREÇÃO: Usar CardThemeData
+      cardTheme: CardThemeData(
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         color: isLight ? Colors.white : Colors.grey.shade800,

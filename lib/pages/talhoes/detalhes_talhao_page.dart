@@ -11,11 +11,9 @@ import 'package:geoforestv1/pages/amostra/coleta_dados_page.dart';
 import 'package:geoforestv1/pages/cubagem/cubagem_dados_page.dart';
 import 'package:geoforestv1/utils/navigation_helper.dart';
 
-// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
-// ------------------------------------
 
 class DetalhesTalhaoPage extends StatefulWidget {
   final Talhao talhao;
@@ -31,11 +29,9 @@ class DetalhesTalhaoPage extends StatefulWidget {
 class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
   late Future<List<dynamic>> _dataFuture;
   
-  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS ---
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
   final _talhaoRepository = TalhaoRepository();
-  // ---------------------------------------
 
   bool _isSelectionMode = false;
   final Set<int> _selectedItens = {};
@@ -53,7 +49,6 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     _carregarDados();
   }
 
-  // --- MÉTODO ATUALIZADO ---
   void _carregarDados() {
     if (mounted) {
       setState(() {
@@ -68,7 +63,6 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     }
   }
 
-  // --- MÉTODO ATUALIZADO ---
   Future<void> _navegarParaNovaParcela() async {
     // Busca diretamente o talhão que precisamos, já com o projetoId.
     final talhaoCompleto = await _talhaoRepository.getTalhaoById(widget.talhao.id!);
@@ -84,10 +78,8 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     if (recarregar == true && mounted) {
       _carregarDados();
     }
-  
-}
+  }
 
-  // --- MÉTODO ATUALIZADO ---
   Future<void> _deleteSelectedItems() async {
     if (_selectedItens.isEmpty || !mounted) return;
 
@@ -106,10 +98,8 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
 
     if (confirmar == true) {
       if (_isAtividadeDeInventario) {
-        // Usa o ParcelaRepository
         await _parcelaRepository.deletarMultiplasParcelas(_selectedItens.toList());
       } else {
-        // Usa o CubagemRepository
         await _cubagemRepository.deletarMultiplasCubagens(_selectedItens.toList());
       }
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_selectedItens.length} $itemType apagados.'), backgroundColor: Colors.green));
@@ -117,8 +107,6 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     }
   }
   
-  // O restante do arquivo (lógica de navegação, build, etc.) não precisa de alterações.
-
   Future<void> _navegarParaNovaCubagem() async {
     final String? metodoEscolhido = await showDialog<String>(
       context: context,

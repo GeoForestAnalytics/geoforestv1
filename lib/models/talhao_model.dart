@@ -93,13 +93,13 @@ class Talhao {
       id: map['id'],
       fazendaId: map['fazendaId'],
       fazendaAtividadeId: map['fazendaAtividadeId'],
-      projetoId: map['projetoId'],
+      projetoId: map['projetoId'], // <<< CAMPO ADICIONADO PARA LER O RESULTADO DO JOIN
       nome: map['nome'],
       areaHa: map['areaHa'],
       idadeAnos: map['idadeAnos'],
       especie: map['especie'],
       espacamento: map['espacamento'],
-      fazendaNome: map['fazendaNome'], 
+      fazendaNome: map['fazendaNome'], // <<< CAMPO ADICIONADO PARA LER O RESULTADO DO JOIN
       municipio: map['municipio'],
       estado: map['estado'],
       lastModified: parseDate(map['lastModified']),

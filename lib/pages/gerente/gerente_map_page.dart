@@ -40,8 +40,8 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
   String? _fazendaSelecionada;
 
   static final List<MapLayer> _mapLayers = [
-    MapLayer(name: 'Ruas', icon: Icons.map_outlined, tileLayer: TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.example.geoforestv1')),
-    MapLayer(name: 'Satélite', icon: Icons.satellite_alt_outlined, tileLayer: TileLayer(urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', userAgentPackageName: 'com.example.geoforestv1')),
+    MapLayer(name: 'Ruas', icon: Icons.map_outlined, tileLayer: TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.example.geoforestv1' )),
+    MapLayer(name: 'Satélite', icon: Icons.satellite_alt_outlined, tileLayer: TileLayer(urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', userAgentPackageName: 'com.example.geoforestv1' )),
   ];
   
   late MapLayer _currentLayer;
@@ -55,9 +55,6 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
   }
 
   void _centerMapOnBounds(LatLngBounds bounds) {
-    // <<< CORREÇÃO 3: Substituindo .isValid por uma verificação manual >>>
-    // Verificamos se os cantos do bounds não são o ponto de origem (0,0),
-    // o que indica um bounds inválido ou vazio.
     if (bounds.southWest != const LatLng(0,0) || bounds.northEast != const LatLng(0,0)) {
       try {
          _mapController.fitCamera(CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50.0)));
@@ -176,7 +173,6 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
           } else {
             final parcelasVisiveis = metricsProvider.parcelasFiltradas.where((p) => p.nomeFazenda == _fazendaSelecionada).toList();
             
-            // <<< CORREÇÃO 2: .map() agora filtra os nulos antes de converter para lista >>>
             markersToShow = parcelasVisiveis.map<Marker?>((parcela) {
               if(parcela.latitude == null || parcela.longitude == null) return null;
               
@@ -185,7 +181,6 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
                 point: LatLng(parcela.latitude!, parcela.longitude!),
                 child: GestureDetector(
                   onTap: () {
-                    // <<< CORREÇÃO 1: Busca a lista de projetos no GerenteProvider >>>
                     final nomeProjeto = gerenteProvider.projetos.firstWhereOrNull((p) => p.id == parcela.projetoId)?.nome ?? 'N/A';
                     final infoText = 
                         'Projeto: $nomeProjeto\n'
@@ -197,7 +192,7 @@ class _GerenteMapPageState extends State<GerenteMapPage> {
                   child: Icon(Icons.location_pin, color: _getMarkerColor(parcela.status), size: 35.0, shadows: const [Shadow(color: Colors.black, blurRadius: 5)]),
                 ),
               );
-            }).whereType<Marker>().toList(); // .whereType<Marker>() remove todos os nulos
+            }).whereType<Marker>().toList();
           }
 
           if (_currentUserPosition != null) {

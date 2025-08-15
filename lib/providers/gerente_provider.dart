@@ -38,7 +38,6 @@ class GerenteProvider with ChangeNotifier {
     initializeDateFormatting('pt_BR', null);
   }
 
-  /// Constrói os mapas de ligação a partir do banco de dados local.
   Future<void> _buildAuxiliaryMaps() async {
     final todosOsTalhoes = await _talhaoRepository.getTodosOsTalhoes();
     _talhaoToProjetoMap = { for (var talhao in todosOsTalhoes) if (talhao.id != null && talhao.projetoId != null) talhao.id!: talhao.projetoId! };
@@ -57,27 +56,24 @@ class GerenteProvider with ChangeNotifier {
       _projetos = await _gerenteService.getTodosOsProjetosStream();
       _projetos.sort((a, b) => a.nome.compareTo(b.nome));
       
-      // Constrói os mapas uma vez no início.
       await _buildAuxiliaryMaps();
 
       _dadosColetaSubscription = _gerenteService.getDadosColetaStream().listen(
-        (listaDeParcelas) async { // <<< MUDANÇA: O listener agora é async
+        (listaDeParcelas) async {
           debugPrint("GERENTE PROVIDER RECEBEU: ${listaDeParcelas.length} parcelas do stream.");
 
-          // <<< CORREÇÃO PRINCIPAL: Recarrega os mapas ANTES de processar as parcelas >>>
           await _buildAuxiliaryMaps();
 
           _parcelasSincronizadas = listaDeParcelas.map((p) {
             final nomeFazenda = _fazendaIdToNomeMap[p.idFazenda] ?? p.nomeFazenda;
             final nomeTalhao = _talhaoIdToNomeMap[p.talhaoId] ?? p.nomeTalhao;
             
-            // Adiciona o projetoId à parcela se ele não veio da nuvem (legado)
             final projetoId = p.projetoId ?? _talhaoToProjetoMap[p.talhaoId];
 
             return p.copyWith(
               nomeFazenda: nomeFazenda, 
               nomeTalhao: nomeTalhao,
-              projetoId: projetoId, // Garante que o projetoId está presente
+              projetoId: projetoId,
             );
           }).toList();
 
