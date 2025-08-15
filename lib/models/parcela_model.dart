@@ -28,11 +28,10 @@ class Parcela {
   final String? nomeFazenda;
   final String? nomeTalhao;
   final String? nomeLider;
-  final int? projetoId;    // <<< CAMPO ADICIONADO PARA CORRIGIR O FILTRO
+  final int? projetoId;
   final String? municipio;
   final String? estado;
 
-  // Campos principais
   final String idParcela;
   final double areaMetrosQuadrados;
   final String? observacao;
@@ -69,7 +68,7 @@ class Parcela {
     this.comprimento,
     this.raio,
     this.nomeLider,
-    this.projetoId, // <<< ADICIONADO AO CONSTRUTOR
+    this.projetoId,
     this.municipio,
     this.estado,
     this.photoPaths = const [],
@@ -97,7 +96,7 @@ class Parcela {
     double? comprimento,
     double? raio,
     String? nomeLider,
-    int? projetoId, // <<< ADICIONADO AO COPYWITH
+    int? projetoId,
     String? municipio,
     String? estado,
     List<String>? photoPaths,
@@ -124,7 +123,7 @@ class Parcela {
       comprimento: comprimento ?? this.comprimento,
       raio: raio ?? this.raio,
       nomeLider: nomeLider ?? this.nomeLider,
-      projetoId: projetoId ?? this.projetoId, // <<< ADICIONADO AO COPYWITH
+      projetoId: projetoId ?? this.projetoId,
       municipio: municipio ?? this.municipio,
       estado: estado ?? this.estado,
       photoPaths: photoPaths ?? this.photoPaths,
@@ -154,7 +153,7 @@ class Parcela {
       'comprimento': comprimento,
       'raio': raio,
       'nomeLider': nomeLider,
-      'projetoId': projetoId, // <<< ADICIONADO AO MAP
+      'projetoId': projetoId,
       'municipio': municipio,
       'estado': estado,
       'photoPaths': jsonEncode(photoPaths),
@@ -163,51 +162,51 @@ class Parcela {
   }
 
   factory Parcela.fromMap(Map<String, dynamic> map) {
-  List<String> paths = [];
-  if (map['photoPaths'] != null) {
-    try {
-      paths = List<String>.from(jsonDecode(map['photoPaths']));
-    } catch (e) {
-      print("Erro ao decodificar photoPaths: $e");
+    // <<< INÍCIO DA CORREÇÃO >>>
+    DateTime? parseDate(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.tryParse(value);
+      return null;
     }
-  }
+    // <<< FIM DA CORREÇÃO >>>
 
-  // Lógica de data mais segura
-  DateTime? dataColetaFinal;
-  if (map['dataColeta'] is Timestamp) {
-    // Se o Firestore enviar um Timestamp (padrão para datas salvas via servidor)
-    dataColetaFinal = (map['dataColeta'] as Timestamp).toDate();
-  } else if (map['dataColeta'] is String) {
-    // Se for uma string (como vem do SQLite)
-    dataColetaFinal = DateTime.tryParse(map['dataColeta']);
-  }
+    List<String> paths = [];
+    if (map['photoPaths'] != null) {
+      try {
+        paths = List<String>.from(jsonDecode(map['photoPaths']));
+      } catch (e) {
+        debugPrint("Erro ao decodificar photoPaths: $e");
+      }
+    }
 
-  return Parcela(
-    dbId: map['id'],
-    uuid: map['uuid'] ?? const Uuid().v4(), // Garante que o UUID nunca seja nulo
-    talhaoId: map['talhaoId'],
-    idFazenda: map['idFazenda'],
-    nomeFazenda: map['nomeFazenda'],
-    nomeTalhao: map['nomeTalhao'],
-    idParcela: map['idParcela'] ?? 'ID_N/A', // Evita erro se o ID for nulo
-    areaMetrosQuadrados: (map['areaMetrosQuadrados'] as num?)?.toDouble() ?? 0.0,
-    observacao: map['observacao'],
-    latitude: (map['latitude'] as num?)?.toDouble(),
-    longitude: (map['longitude'] as num?)?.toDouble(),
-    dataColeta: dataColetaFinal, // Usa a data segura
-    status: StatusParcela.values.firstWhere(
-          (e) => e.name == map['status'],
-      orElse: () => StatusParcela.pendente,
-    ),
-    exportada: map['exportada'] == 1,
-    isSynced: map['isSynced'] == 1,
-    largura: (map['largura'] as num?)?.toDouble(),
-    comprimento: (map['comprimento'] as num?)?.toDouble(),
-    raio: (map['raio'] as num?)?.toDouble(),
-    nomeLider: map['nomeLider'],
-    projetoId: map['projetoId'], // Mantém a leitura do projetoId
-    photoPaths: paths,
-    lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null,
-  );
-}
+    return Parcela(
+      dbId: map['id'],
+      uuid: map['uuid'] ?? const Uuid().v4(),
+      talhaoId: map['talhaoId'],
+      idFazenda: map['idFazenda'],
+      nomeFazenda: map['nomeFazenda'],
+      nomeTalhao: map['nomeTalhao'],
+      idParcela: map['idParcela'] ?? 'ID_N/A',
+      areaMetrosQuadrados: (map['areaMetrosQuadrados'] as num?)?.toDouble() ?? 0.0,
+      observacao: map['observacao'],
+      latitude: (map['latitude'] as num?)?.toDouble(),
+      longitude: (map['longitude'] as num?)?.toDouble(),
+      // <<< CORREÇÃO APLICADA >>>
+      dataColeta: parseDate(map['dataColeta']),
+      status: StatusParcela.values.firstWhere(
+            (e) => e.name == map['status'],
+        orElse: () => StatusParcela.pendente,
+      ),
+      exportada: map['exportada'] == 1,
+      isSynced: map['isSynced'] == 1,
+      largura: (map['largura'] as num?)?.toDouble(),
+      comprimento: (map['comprimento'] as num?)?.toDouble(),
+      raio: (map['raio'] as num?)?.toDouble(),
+      nomeLider: map['nomeLider'],
+      projetoId: map['projetoId'],
+      photoPaths: paths,
+      // <<< CORREÇÃO APLICADA >>>
+      lastModified: parseDate(map['lastModified']),
+    );
+  }
 }

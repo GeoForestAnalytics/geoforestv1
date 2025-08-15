@@ -26,8 +26,7 @@ class TalhaoRepository {
   Future<Talhao?> getTalhaoById(int id) async {
     final db = await _dbHelper.database;
     
-    // A consulta agora faz JOIN com 'fazendas' E 'atividades' para pegar
-    // tanto o 'fazendaNome' quanto o 'projetoId'.
+    // A consulta com JOIN para pegar o projetoId está CORRETA.
     final maps = await db.rawQuery('''
         SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId 
         FROM talhoes T

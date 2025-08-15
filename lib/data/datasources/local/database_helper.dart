@@ -1,4 +1,4 @@
-// lib/data/datasources/local/database_helper.dart (VERSÃO FINAL E COMPLETA)
+// lib/data/datasources/local/database_helper.dart (VERSÃO CORRIGIDA)
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
@@ -29,7 +29,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 33, 
+      // <<< CORREÇÃO 2.1: Incrementar a versão do banco de dados
+      version: 34, 
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -76,11 +77,14 @@ class DatabaseHelper {
         FOREIGN KEY (atividadeId) REFERENCES atividades (id) ON DELETE CASCADE
       )
     ''');
+    
+    // <<< CORREÇÃO 1: Removida a tabela duplicada. Esta é a versão CORRETA.
     await db.execute('''
       CREATE TABLE talhoes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         fazendaId TEXT NOT NULL,
         fazendaAtividadeId INTEGER NOT NULL,
+        projetoId INTEGER, 
         nome TEXT NOT NULL,
         areaHa REAL,
         idadeAnos REAL,
@@ -90,6 +94,7 @@ class DatabaseHelper {
         FOREIGN KEY (fazendaId, fazendaAtividadeId) REFERENCES fazendas (id, atividadeId) ON DELETE CASCADE
       )
     ''');
+
     await db.execute('''
       CREATE TABLE parcelas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -236,6 +241,10 @@ class DatabaseHelper {
           await db.update('arvores', {'lastModified': now}, where: 'lastModified IS NULL');
           await db.update('cubagens_arvores', {'lastModified': now}, where: 'lastModified IS NULL');
           await db.update('cubagens_secoes', {'lastModified': now}, where: 'lastModified IS NULL');
+          break;
+        // <<< CORREÇÃO 2.2: Adicionar a migração para a nova versão
+        case 34:
+          await db.execute('ALTER TABLE talhoes ADD COLUMN projetoId INTEGER');
           break;
         }
     }

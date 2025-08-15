@@ -1,4 +1,4 @@
-// lib/main.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/main.dart (VERSÃO FINAL COM FILTRO DE FAZENDA INTEGRADO)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
@@ -152,9 +153,30 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProxyProvider<GerenteProvider, DashboardFilterProvider>(
           create: (_) => DashboardFilterProvider(),
           update: (_, gerenteProvider, previousFilterProvider) {
-            // A função 'update' é o local SEGURO para passar dados entre providers.
             final filterProvider = previousFilterProvider ?? DashboardFilterProvider();
+            
+            // <<< INÍCIO DA ALTERAÇÃO >>>
+
+            // 1. Atualiza a lista de projetos disponíveis (como antes)
             filterProvider.updateProjetosDisponiveis(gerenteProvider.projetos);
+
+            // 2. Filtra as parcelas com base nos projetos já selecionados no provider
+            List<Parcela> parcelasParaFiltroDeFazenda;
+            if (filterProvider.selectedProjetoIds.isEmpty) {
+              // Se nenhum projeto está selecionado, todas as parcelas são candidatas
+              parcelasParaFiltroDeFazenda = gerenteProvider.parcelasSincronizadas;
+            } else {
+              // Se projetos estão selecionados, usa apenas as parcelas desses projetos
+              parcelasParaFiltroDeFazenda = gerenteProvider.parcelasSincronizadas
+                  .where((p) => filterProvider.selectedProjetoIds.contains(p.projetoId))
+                  .toList();
+            }
+            
+            // 3. Envia essa lista pré-filtrada para o FilterProvider popular as fazendas
+            filterProvider.updateFazendasDisponiveis(parcelasParaFiltroDeFazenda);
+
+            // <<< FIM DA ALTERAÇÃO >>>
+
             return filterProvider;
           },
         ),

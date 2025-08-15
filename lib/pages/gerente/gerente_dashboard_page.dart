@@ -1,4 +1,4 @@
-// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO FINAL SIMPLIFICADA E CORRETA)
+// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO COMPLETA COM FILTRO DE FAZENDA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -64,6 +64,8 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
             padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
             children: [
               _buildMultiSelectProjectFilter(context, filterProvider, projetosDisponiveis),
+              const SizedBox(height: 8),
+              _buildMultiSelectFazendaFilter(context, filterProvider),
               const SizedBox(height: 16),
               _buildSummaryCard(
                 context: context,
@@ -116,7 +118,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
     );
   }
 
-  // Cole aqui todos os seus métodos _build... (eles não precisam de alteração)
+  // <<< FUNÇÃO QUE FALTAVA ADICIONADA AQUI >>>
   Widget _buildMultiSelectProjectFilter(BuildContext context,
       DashboardFilterProvider provider, List<Projeto> projetosDisponiveis) {
     String displayText;
@@ -199,6 +201,81 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
     );
   }
 
+  // A sua função de filtro de fazenda, já correta.
+  Widget _buildMultiSelectFazendaFilter(BuildContext context, DashboardFilterProvider provider) {
+    if (provider.fazendasDisponiveis.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    String displayText;
+    if (provider.selectedFazendaNomes.isEmpty) {
+      displayText = 'Todas as Fazendas';
+    } else if (provider.selectedFazendaNomes.length == 1) {
+      displayText = provider.selectedFazendaNomes.first;
+    } else {
+      displayText = '${provider.selectedFazendaNomes.length} fazendas selecionadas';
+    }
+
+    return InkWell(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (dialogContext) {
+            return Consumer<DashboardFilterProvider>(
+              builder: (context, filterProvider, _) {
+                return AlertDialog(
+                  title: const Text('Filtrar por Fazenda'),
+                  content: SizedBox(
+                    width: double.maxFinite,
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: filterProvider.fazendasDisponiveis.map((nomeFazenda) {
+                        return CheckboxListTile(
+                          title: Text(nomeFazenda),
+                          value: filterProvider.selectedFazendaNomes.contains(nomeFazenda),
+                          onChanged: (bool? value) {
+                            context.read<DashboardFilterProvider>().toggleFazendaSelection(nomeFazenda);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        context.read<DashboardFilterProvider>().clearFazendaSelection();
+                        Navigator.of(dialogContext).pop();
+                      },
+                      child: const Text('Limpar (Todas)'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text('Aplicar'),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Expanded(child: Text(displayText, overflow: TextOverflow.ellipsis)),
+            const Icon(Icons.arrow_drop_down),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // O resto dos seus métodos _build... permanecem inalterados.
   Widget _buildSummaryCard(
       {required BuildContext context,
       required String title,

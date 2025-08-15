@@ -2,7 +2,6 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-
 class Projeto {
   final String? licenseId;
   final int? id;
@@ -65,7 +64,7 @@ class Projeto {
   }
 
   factory Projeto.fromMap(Map<String, dynamic> map) {
-    // Função auxiliar para converter datas de forma segura
+    // <<< INÍCIO DA CORREÇÃO >>>
     DateTime? parseDate(dynamic value) {
       if (value is Timestamp) {
         return value.toDate();
@@ -74,6 +73,7 @@ class Projeto {
       }
       return null;
     }
+    // <<< FIM DA CORREÇÃO >>>
 
     final dataCriacao = parseDate(map['dataCriacao']);
     if (dataCriacao == null) {

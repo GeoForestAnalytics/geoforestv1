@@ -1,4 +1,4 @@
-// lib/providers/dashboard_metrics_provider.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/providers/dashboard_metrics_provider.dart (VERSÃO FINAL E COMPLETA)
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
@@ -50,14 +50,16 @@ class DashboardMetricsProvider with ChangeNotifier {
     _recalcularParcelasFiltradas(
       gerenteProvider.parcelasSincronizadas,
       projetosAtivos,
-      filterProvider.selectedProjetoIds,
+      // <<< CORREÇÃO 1.1: Passar o provider inteiro
+      filterProvider,
     );
 
     _recalcularDesempenhoPorCubagem(
       gerenteProvider.cubagensSincronizadas,
       gerenteProvider.talhaoToProjetoMap,
       projetosAtivos,
-      filterProvider.selectedProjetoIds,
+      // <<< CORREÇÃO 2.1: Passar o provider inteiro
+      filterProvider,
     );
     _recalcularProgressoPorEquipe();
     _recalcularColetasPorMes();
@@ -66,34 +68,44 @@ class DashboardMetricsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void _recalcularParcelasFiltradas(List<Parcela> todasAsParcelas, List<Projeto> projetosAtivos, Set<int> selectedProjetoIds) {
+  // <<< CORREÇÃO 1.2: Ajustar a assinatura do método
+  void _recalcularParcelasFiltradas(List<Parcela> todasAsParcelas, List<Projeto> projetosAtivos, DashboardFilterProvider filterProvider) {
     final idsProjetosAtivos = projetosAtivos.map((p) => p.id!).toSet();
-     debugPrint("FILTRANDO... IDs de projetos ativos na nuvem: $idsProjetosAtivos");
-    if (todasAsParcelas.isNotEmpty) {
-      debugPrint("FILTRANDO... ID do projeto da primeira parcela: ${todasAsParcelas.first.projetoId}");
-    }
+    
     List<Parcela> parcelasVisiveis;
 
-    if (selectedProjetoIds.isEmpty) {
+    // Filtro por PROJETO (lógica existente, está correta)
+    if (filterProvider.selectedProjetoIds.isEmpty) {
       parcelasVisiveis = todasAsParcelas
           .where((p) => p.projetoId != null && idsProjetosAtivos.contains(p.projetoId))
           .toList();
     } else {
       parcelasVisiveis = todasAsParcelas
-          .where((p) => p.projetoId != null && selectedProjetoIds.contains(p.projetoId))
+          .where((p) => p.projetoId != null && filterProvider.selectedProjetoIds.contains(p.projetoId))
           .toList();
     }
+
+    // Filtro por FAZENDA (lógica existente, está correta)
+    if (filterProvider.selectedFazendaNomes.isNotEmpty) {
+      parcelasVisiveis = parcelasVisiveis
+          .where((p) => p.nomeFazenda != null && filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!))
+          .toList();
+    }
+
     _parcelasFiltradas = parcelasVisiveis;
   }
 
-  void _recalcularDesempenhoPorCubagem(List<CubagemArvore> todasAsCubagens, Map<int, int> talhaoToProjetoMap, List<Projeto> projetosAtivos, Set<int> selectedProjetoIds) {
+  // <<< CORREÇÃO 2.2: Ajustar a assinatura e adicionar o filtro de fazenda
+  void _recalcularDesempenhoPorCubagem(List<CubagemArvore> todasAsCubagens, Map<int, int> talhaoToProjetoMap, List<Projeto> projetosAtivos, DashboardFilterProvider filterProvider) {
     if (todasAsCubagens.isEmpty) {
       _desempenhoPorCubagem = [];
       return;
     }
     
     List<CubagemArvore> cubagensFiltradas;
-    if (selectedProjetoIds.isEmpty) {
+    
+    // Filtro por PROJETO
+    if (filterProvider.selectedProjetoIds.isEmpty) {
        final idsProjetosAtivos = projetosAtivos.map((p) => p.id).toSet();
        cubagensFiltradas = todasAsCubagens.where((c) {
          final projetoId = talhaoToProjetoMap[c.talhaoId];
@@ -102,8 +114,15 @@ class DashboardMetricsProvider with ChangeNotifier {
     } else {
       cubagensFiltradas = todasAsCubagens.where((c) {
         final projetoId = talhaoToProjetoMap[c.talhaoId];
-        return projetoId != null && selectedProjetoIds.contains(projetoId);
+        return projetoId != null && filterProvider.selectedProjetoIds.contains(projetoId);
       }).toList();
+    }
+
+    // <<< NOVO FILTRO POR FAZENDA APLICADO AQUI >>>
+    if (filterProvider.selectedFazendaNomes.isNotEmpty) {
+        cubagensFiltradas = cubagensFiltradas
+            .where((c) => filterProvider.selectedFazendaNomes.contains(c.nomeFazenda))
+            .toList();
     }
 
     if (cubagensFiltradas.isEmpty) {
@@ -125,6 +144,9 @@ class DashboardMetricsProvider with ChangeNotifier {
       );
     }).toList()..sort((a,b) => a.nome.compareTo(b.nome));
   }
+
+  // O resto dos métodos já usa a lista `_parcelasFiltradas`, então eles
+  // automaticamente respeitarão os novos filtros. Nenhuma alteração é necessária abaixo.
 
   void _recalcularProgressoPorEquipe() {
     final parcelasConcluidas = _parcelasFiltradas.where((p) => p.status == StatusParcela.concluida).toList();

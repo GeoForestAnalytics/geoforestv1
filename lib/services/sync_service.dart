@@ -1,7 +1,6 @@
-// lib/services/sync_service.dart (VERSÃO FINALÍSSIMA COM CORREÇÃO DE DADOS DELEGADOS)
+// lib/services/sync_service.dart (VERSÃO COM DOWNLOAD HIERÁRQUICO CORRIGIDO)
 
 import 'dart:async';
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -19,7 +18,6 @@ import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/services/licensing_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:collection/collection.dart';
 
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
@@ -76,8 +74,13 @@ class SyncService {
       await _uploadColetasNaoSincronizadas(licenseId, totalGeral);
 
       _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, processados: totalGeral, mensagem: "Baixando dados da nuvem..."));
+      
+      // <<< MUDANÇA SUTIL MAS IMPORTANTE >>>
+      // Ambas as funções de download agora são chamadas para garantir que tanto os projetos
+      // próprios quanto os delegados sejam sempre sincronizados.
       await _downloadHierarquiaCompleta(licenseId);
       await _downloadProjetosDelegados(licenseId);
+      
       await _downloadColetas(licenseId);
 
       String finalMessage = "Sincronização Concluída!";
@@ -100,6 +103,7 @@ class SyncService {
     }
   }
 
+  // A função de upload não precisa de alterações.
   Future<void> _uploadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
     final batch = _firestore.batch();
@@ -153,6 +157,7 @@ class SyncService {
     await batch.commit();
   }
   
+  // A função de upload de coletas não precisa de alterações.
   Future<void> _uploadColetasNaoSincronizadas(String licenseIdDoUsuarioLogado, int totalGeral) async {
     int processados = 0;
     while (true) {
@@ -237,6 +242,7 @@ class SyncService {
     }
   }
 
+  // Funções auxiliares de upload não precisam de alterações.
   Future<void> _uploadParcela(firestore.DocumentReference docRef, Parcela parcela) async {
       final firestoreBatch = _firestore.batch();
       final parcelaMap = parcela.toMap();
@@ -270,6 +276,7 @@ class SyncService {
       await firestoreBatch.commit();
   }
   
+  // A função auxiliar _upsert não precisa de alterações.
   Future<void> _upsert(DatabaseExecutor txn, String table, Map<String, dynamic> data, String primaryKey, {String? secondaryKey}) async {
       List<String> whereArgs = [data[primaryKey].toString()];
       String whereClause = '$primaryKey = ?';
@@ -285,44 +292,24 @@ class SyncService {
       }
   }
 
+  // <<< INÍCIO DA LÓGICA HIERÁRQUICA CORRIGIDA >>>
   Future<void> _downloadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
     final projetosSnap = await _firestore.collection('clientes').doc(licenseId).collection('projetos').get();
-    for (var doc in projetosSnap.docs) {
-      final projeto = Projeto.fromMap(doc.data());
-      await db.transaction((txn) async {
-        await _upsert(txn, 'projetos', projeto.toMap(), 'id');
-      });
-    }
-    final atividadesSnap = await _firestore.collection('clientes').doc(licenseId).collection('atividades').get();
-    for (var doc in atividadesSnap.docs) {
-      final atividade = Atividade.fromMap(doc.data());
-      await db.transaction((txn) async {
-        await _upsert(txn, 'atividades', atividade.toMap(), 'id');
-      });
-    }
-    final fazendasSnap = await _firestore.collection('clientes').doc(licenseId).collection('fazendas').get();
-    for (var doc in fazendasSnap.docs) {
-      final fazenda = Fazenda.fromMap(doc.data());
-      await db.transaction((txn) async {
-        await _upsert(txn, 'fazendas', fazenda.toMap(), 'id', secondaryKey: 'atividadeId');
-      });
-    }
-    final talhoesSnap = await _firestore.collection('clientes').doc(licenseId).collection('talhoes').get();
-    for (var doc in talhoesSnap.docs) {
-      final data = doc.data();
-      final atividadeId = data['fazendaAtividadeId'];
-      final atividadeDoc = await _firestore.collection('clientes').doc(licenseId).collection('atividades').doc(atividadeId.toString()).get();
-      if(atividadeDoc.exists) {
-        data['projetoId'] = atividadeDoc.data()!['projetoId'];
-      }
-      final talhao = Talhao.fromMap(data);
-       await db.transaction((txn) async {
-        await _upsert(txn, 'talhoes', talhao.toMap(), 'id');
-      });
+
+    for (var projDoc in projetosSnap.docs) {
+        final projeto = Projeto.fromMap(projDoc.data());
+        
+        // Primeiro, salva o Projeto (o "pai")
+        await db.transaction((txn) async {
+            await _upsert(txn, 'projetos', projeto.toMap(), 'id');
+        });
+        
+        // SÓ DEPOIS, busca e salva os filhos daquele projeto
+        await _downloadFilhosDeProjeto(licenseId, projeto.id!);
     }
   }
-  
+
   Future<void> _downloadProjetosDelegados(String licenseIdDoUsuarioLogado) async {
     final db = await _dbHelper.database;
     final query = _firestore.collectionGroup('chavesDeDelegacao')
@@ -330,50 +317,65 @@ class SyncService {
         .where('status', isEqualTo: 'ativa');
     final snapshot = await query.get();
     if (snapshot.docs.isEmpty) return;
+    
     for (final docChave in snapshot.docs) {
       final licenseIdDoCliente = docChave.reference.parent.parent!.id;
       final dataChave = docChave.data();
       final projetosPermitidosIds = (dataChave['projetosPermitidos'] as List<dynamic>).cast<int>();
       if (projetosPermitidosIds.isEmpty) continue;
+
       for (final projetoId in projetosPermitidosIds) {
         final projDoc = await _firestore.collection('clientes').doc(licenseIdDoCliente)
             .collection('projetos').doc(projetoId.toString()).get();
         if (projDoc.exists) {
-          final projeto = Projeto.fromMap(projDoc.data()!)
-              .copyWith(delegadoPorLicenseId: licenseIdDoCliente);
-          await db.transaction((txn) async {
-            await _upsert(txn, 'projetos', projeto.toMap(), 'id');
-          });
-          await _downloadFilhosDeProjeto(licenseIdDoCliente, projetoId);
+            final projeto = Projeto.fromMap(projDoc.data()!)
+                .copyWith(delegadoPorLicenseId: licenseIdDoCliente);
+            await db.transaction((txn) async {
+                await _upsert(txn, 'projetos', projeto.toMap(), 'id');
+            });
+            // Inicia o download dos filhos deste projeto delegado
+            await _downloadFilhosDeProjeto(licenseIdDoCliente, projetoId);
         }
       }
     }
   }
 
-  Future<void> _downloadFilhosDeProjeto(String licenseIdDoCliente, int projetoId) async {
+  /// Função auxiliar robusta que baixa toda a hierarquia (atividades, fazendas, talhões)
+  /// a partir de um projeto específico, vindo de uma licença específica.
+  Future<void> _downloadFilhosDeProjeto(String licenseId, int projetoId) async {
     final db = await _dbHelper.database;
-    final atividadesSnap = await _firestore.collection('clientes').doc(licenseIdDoCliente)
+    
+    // 1. Busca ATIVIDADES do projeto
+    final atividadesSnap = await _firestore.collection('clientes').doc(licenseId)
         .collection('atividades').where('projetoId', isEqualTo: projetoId).get();
     if (atividadesSnap.docs.isEmpty) return;
-    for (var doc in atividadesSnap.docs) {
-      final atividade = Atividade.fromMap(doc.data());
+
+    for (var ativDoc in atividadesSnap.docs) {
+      final atividade = Atividade.fromMap(ativDoc.data());
       await db.transaction((txn) async {
          await _upsert(txn, 'atividades', atividade.toMap(), 'id');
       });
-      final fazendasSnap = await _firestore.collection('clientes').doc(licenseIdDoCliente)
+
+      // 2. Para cada atividade, busca suas FAZENDAS
+      final fazendasSnap = await _firestore.collection('clientes').doc(licenseId)
           .collection('fazendas').where('atividadeId', isEqualTo: atividade.id).get();
+          
       for (var fazendaDoc in fazendasSnap.docs) {
         final fazenda = Fazenda.fromMap(fazendaDoc.data());
         await db.transaction((txn) async {
            await _upsert(txn, 'fazendas', fazenda.toMap(), 'id', secondaryKey: 'atividadeId');
         });
-        final talhoesSnap = await _firestore.collection('clientes').doc(licenseIdDoCliente)
+
+        // 3. Para cada fazenda, busca seus TALHÕES
+        final talhoesSnap = await _firestore.collection('clientes').doc(licenseId)
             .collection('talhoes')
             .where('fazendaId', isEqualTo: fazenda.id)
             .where('fazendaAtividadeId', isEqualTo: fazenda.atividadeId)
             .get();
+            
         for (var talhaoDoc in talhoesSnap.docs) {
           final data = talhaoDoc.data();
+          // Enriquecemos os dados do talhão com o projetoId, garantindo a consistência
           data['projetoId'] = atividade.projetoId; 
           final talhao = Talhao.fromMap(data);
           await db.transaction((txn) async {
@@ -383,7 +385,9 @@ class SyncService {
       }
     }
   }
+  // <<< FIM DA LÓGICA HIERÁRQUICA CORRIGIDA >>>
   
+  // As funções de download de coletas não precisam de alterações.
   Future<void> _downloadColetas(String licenseId) async {
     await _downloadParcelasDaNuvem(licenseId);
     await _downloadCubagensDaNuvem(licenseId);
