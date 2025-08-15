@@ -1,4 +1,4 @@
-// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO COMPLETA COM FILTRO DE FAZENDA)
+// lib/pages/gerente/gerente_dashboard_page.dart (VERSÃO FINAL E COMPLETA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -23,7 +23,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
   @override
   void initState() {
     super.initState();
-    // Apenas inicia o monitoramento. A lógica de atualização agora é automática.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<GerenteProvider>().iniciarMonitoramento();
     });
@@ -31,11 +30,9 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    // A página agora consome os três providers para obter os dados já processados.
     return Consumer3<GerenteProvider, DashboardFilterProvider, DashboardMetricsProvider>(
       builder: (context, gerenteProvider, filterProvider, metricsProvider, child) {
         
-        // A lógica de verificação de loading/erro permanece.
         if (gerenteProvider.isLoading && metricsProvider.parcelasFiltradas.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -47,15 +44,18 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                   style: const TextStyle(color: Colors.red)));
         }
         
-        // Os cálculos são feitos aqui, com os dados já prontos dos providers.
-        final totalPlanejado = metricsProvider.parcelasFiltradas.length;
-        final concluidas = metricsProvider.parcelasFiltradas
-            .where((p) => p.status == StatusParcela.concluida)
+        // Aplica o filtro de fazenda aqui para os cálculos visuais do dashboard
+        final parcelasParaDashboard = filterProvider.selectedFazendaNomes.isNotEmpty
+            ? metricsProvider.parcelasFiltradas.where((p) => p.nomeFazenda != null && filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!)).toList()
+            : metricsProvider.parcelasFiltradas;
+            
+        final totalPlanejado = parcelasParaDashboard.length;
+        final concluidas = parcelasParaDashboard
+            .where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada)
             .length;
         final progressoGeral =
             totalPlanejado > 0 ? concluidas / totalPlanejado : 0.0;
         
-        // Usamos a lista de projetos do filterProvider, que já foi atualizada pelo proxy.
         final projetosDisponiveis = filterProvider.projetosDisponiveis.where((p) => p.status == 'ativo').toList();
 
         return RefreshIndicator(
@@ -90,10 +90,11 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
               ],
               const SizedBox(height: 32),
               ElevatedButton.icon(
+                // <<< CORREÇÃO: Passa os filtros de projeto para a função de exportação >>>
                 onPressed: () {
                   final Set<int> projetosFiltrados = filterProvider.selectedProjetoIds;
                   _exportService.exportarDesenvolvimentoEquipes(context,
-                      projetoIdsFiltrados: projetosFiltrados);
+                      projetoIdsFiltrados: projetosFiltrados.isNotEmpty ? projetosFiltrados : null);
                 },
                 icon: const Icon(Icons.download_outlined),
                 label: const Text('Exportar Desenvolvimento das Equipes'),
@@ -118,7 +119,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
     );
   }
 
-  // <<< FUNÇÃO QUE FALTAVA ADICIONADA AQUI >>>
   Widget _buildMultiSelectProjectFilter(BuildContext context,
       DashboardFilterProvider provider, List<Projeto> projetosDisponiveis) {
     String displayText;
@@ -201,7 +201,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
     );
   }
 
-  // A sua função de filtro de fazenda, já correta.
   Widget _buildMultiSelectFazendaFilter(BuildContext context, DashboardFilterProvider provider) {
     if (provider.fazendasDisponiveis.isEmpty) {
       return const SizedBox.shrink();
@@ -275,7 +274,6 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
     );
   }
 
-  // O resto dos seus métodos _build... permanecem inalterados.
   Widget _buildSummaryCard(
       {required BuildContext context,
       required String title,
@@ -519,9 +517,12 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
-              columnSpacing: 20.0,
+              columnSpacing: 18.0,
               headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
               columns: const [
+                DataColumn(
+                    label: Text('Atividade',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
                 DataColumn(
                     label: Text('Fazenda',
                         style: TextStyle(fontWeight: FontWeight.bold))),
@@ -536,7 +537,8 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
               ],
               rows: data
                   .map((d) => DataRow(cells: [
-                        DataCell(Text(d.nome,
+                        DataCell(Text(d.nomeAtividade)),
+                        DataCell(Text(d.nomeFazenda,
                             style:
                                 const TextStyle(fontWeight: FontWeight.w500))),
                         DataCell(Text(d.pendentes.toString())),
@@ -574,7 +576,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
               headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
               columns: const [
                 DataColumn(
-                    label: Text('Fazenda / Talhão',
+                    label: Text('Atividade / Fazenda / Talhão',
                         style: TextStyle(fontWeight: FontWeight.bold))),
                 DataColumn(label: Text('Pendentes'), numeric: true),
                 DataColumn(label: Text('Concluídas'), numeric: true),

@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO COM DIÁLOGO DE PROGRESSO)
+// lib/services/export_service.dart (VERSÃO COM EXPORTAÇÃO DETALHADA RESTAURADA)
 
 import 'dart:io';
 import 'dart:convert';
@@ -7,10 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
-import 'package:geoforestv1/widgets/progress_dialog.dart'; // <<< 1. IMPORTAR O NOVO WIDGET
+import 'package:geoforestv1/widgets/progress_dialog.dart';
 import 'package:provider/provider.dart';
-
-// Imports do projeto
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -33,7 +31,6 @@ import 'package:geoforestv1/widgets/manager_export_dialog.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
-// PAYLOADS PARA ISOLATES (sem alterações)
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
@@ -66,6 +63,7 @@ class _CsvCubagemPayload {
   });
 }
 
+// <<< CORREÇÃO: Payload para a exportação detalhada >>>
 class _DevEquipePayload {
   final List<Map<String, dynamic>> coletasData;
   final String nomeZona;
@@ -78,7 +76,6 @@ class _DevEquipePayload {
   });
 }
 
-// FUNÇÕES DE ISOLATE (sem alterações)
 Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
@@ -110,13 +107,13 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 
     final liderDaColeta = p.nomeLider ?? payload.nomeLider;
     if (arvores.isEmpty) {
-      rows.add(['IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null]);
+      rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null]);
     } else {
       Map<String, int> fusteCounter = {};
       for (final a in arvores) {
         String key = '${a.linha}-${a.posicaoNaLinha}';
         fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
-        rows.add(['IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.dominante ? 'Sim' : 'Não']);
+        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.dominante ? 'Sim' : 'Não']);
       }
     }
   }
@@ -144,6 +141,7 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
   return const ListToCsvConverter().convert(rows);
 }
 
+// <<< CORREÇÃO: Isolate para gerar o CSV detalhado, como na sua imagem >>>
 Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
@@ -160,7 +158,7 @@ Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
 
   List<List<dynamic>> rows = [];
   rows.add([
-    'Projeto', 'Atividade', 'Fazenda', 'Talhao', 'ID_Amostra_Cubagem', 'Area_Talhao_ha',
+    'Projeto', 'Atividade', 'Fazenda', 'Talhao', 'ID_Amostra_Coleta', 'Area_Talhao_ha',
     'Situacao', 'Data_Alteracao', 'Responsavel', 'Coord_X_UTM', 'Coord_Y_UTM', 'Area_Parcela_m2',
     'Largura_m', 'Comprimento_m', 'Observacao_Parcela', 'Total_Fustes', 'Total_Covas', 'Total_Falhas', 'Total_Codigos_Especiais'
   ]);
@@ -209,13 +207,12 @@ class ExportService {
   final _atividadeRepository = AtividadeRepository();
   final _talhaoRepository = TalhaoRepository();
   
-  // <<< 2. FUNÇÃO MODIFICADA PARA USAR O DIÁLOGO DE PROGRESSO >>>
+  // <<< CORREÇÃO: Lógica de busca de dados detalhados restaurada >>>
   Future<void> exportarDesenvolvimentoEquipes(BuildContext context, {Set<int>? projetoIdsFiltrados}) async {
     try {
       if (!await _requestPermission(context)) return;
       
-      // MOSTRA o diálogo de progresso
-      ProgressDialog.show(context, 'Gerando relatório...');
+      ProgressDialog.show(context, 'Gerando relatório detalhado...');
 
       final todosProjetos = await _projetoRepository.getTodosOsProjetosParaGerente();
       final projetos = (projetoIdsFiltrados == null || projetoIdsFiltrados.isEmpty)
@@ -223,7 +220,7 @@ class ExportService {
           : todosProjetos.where((p) => projetoIdsFiltrados.contains(p.id!)).toList();
       
       if (projetos.isEmpty) {
-        ProgressDialog.hide(context); // Esconde o diálogo antes de mostrar a mensagem
+        ProgressDialog.hide(context);
         if(context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum projeto encontrado para o filtro selecionado.'), backgroundColor: Colors.orange));
         }
@@ -318,7 +315,7 @@ class ExportService {
       }
       
       if(allColetasData.isEmpty) {
-        ProgressDialog.hide(context); // Esconde o diálogo antes de mostrar a mensagem
+        ProgressDialog.hide(context);
         if(context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma coleta encontrada para os filtros selecionados.'), backgroundColor: Colors.orange));
         }
@@ -341,18 +338,17 @@ class ExportService {
       final bytes = utf8.encode(csvData);
       await File(path).writeAsBytes([...bom, ...bytes]);
 
-      ProgressDialog.hide(context); // Esconde o diálogo antes de compartilhar
+      ProgressDialog.hide(context);
       if (context.mounted) {
         await Share.shareXFiles([XFile(path)], subject: 'Relatório de Desenvolvimento de Equipes - GeoForest');
       }
 
     } catch (e, s) {
-      ProgressDialog.hide(context); // Garante que o diálogo feche em caso de erro
+      ProgressDialog.hide(context);
       _handleExportError(context, 'gerar relatório de desenvolvimento', e, s);
     }
   }
-
-  // O resto do arquivo permanece igual
+  
   Future<void> exportarDados(BuildContext context) async {
     try {
       if (!await _requestPermission(context)) return;
@@ -593,7 +589,7 @@ class ExportService {
     }
   }
 
-    Future<void> exportarAnaliseTalhaoCsv({
+  Future<void> exportarAnaliseTalhaoCsv({
     required BuildContext context,
     required Talhao talhao,
     required TalhaoAnalysisResult analise,

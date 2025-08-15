@@ -1,4 +1,4 @@
-// lib/models/parcela_model.dart (VERSÃO CORRIGIDA E COMPLETA)
+// lib/models/parcela_model.dart (VERSÃO CORRIGIDA E MELHORADA)
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -31,6 +31,7 @@ class Parcela {
   final int? projetoId;
   final String? municipio;
   final String? estado;
+  final String? atividadeTipo;
 
   final String idParcela;
   final double areaMetrosQuadrados;
@@ -71,6 +72,7 @@ class Parcela {
     this.projetoId,
     this.municipio,
     this.estado,
+    this.atividadeTipo,
     this.photoPaths = const [],
     this.arvores = const [],
     this.lastModified,
@@ -99,6 +101,7 @@ class Parcela {
     int? projetoId,
     String? municipio,
     String? estado,
+    String? atividadeTipo,
     List<String>? photoPaths,
     List<Arvore>? arvores,
     DateTime? lastModified,
@@ -126,6 +129,7 @@ class Parcela {
       projetoId: projetoId ?? this.projetoId,
       municipio: municipio ?? this.municipio,
       estado: estado ?? this.estado,
+      atividadeTipo: atividadeTipo ?? this.atividadeTipo,
       photoPaths: photoPaths ?? this.photoPaths,
       arvores: arvores ?? this.arvores,
       lastModified: lastModified ?? this.lastModified,
@@ -162,13 +166,11 @@ class Parcela {
   }
 
   factory Parcela.fromMap(Map<String, dynamic> map) {
-    // <<< INÍCIO DA CORREÇÃO >>>
     DateTime? parseDate(dynamic value) {
       if (value is Timestamp) return value.toDate();
       if (value is String) return DateTime.tryParse(value);
       return null;
     }
-    // <<< FIM DA CORREÇÃO >>>
 
     List<String> paths = [];
     if (map['photoPaths'] != null) {
@@ -191,7 +193,6 @@ class Parcela {
       observacao: map['observacao'],
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
-      // <<< CORREÇÃO APLICADA >>>
       dataColeta: parseDate(map['dataColeta']),
       status: StatusParcela.values.firstWhere(
             (e) => e.name == map['status'],
@@ -204,8 +205,8 @@ class Parcela {
       raio: (map['raio'] as num?)?.toDouble(),
       nomeLider: map['nomeLider'],
       projetoId: map['projetoId'],
+      atividadeTipo: map['atividadeTipo'],
       photoPaths: paths,
-      // <<< CORREÇÃO APLICADA >>>
       lastModified: parseDate(map['lastModified']),
     );
   }
