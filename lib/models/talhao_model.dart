@@ -1,4 +1,4 @@
-// lib/models/talhao_model.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/models/talhao_model.dart (VERSÃO CORRIGIDA E FINAL)
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Talhao {
@@ -68,11 +68,13 @@ class Talhao {
     );
   }
 
+  // toMap para o BANCO DE DADOS LOCAL. Ele precisa do projetoId.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'fazendaId': fazendaId,
       'fazendaAtividadeId': fazendaAtividadeId,
+      'projetoId': projetoId, // <<< CORREÇÃO CRÍTICA AQUI
       'nome': nome,
       'areaHa': areaHa,
       'idadeAnos': idadeAnos,
@@ -82,6 +84,20 @@ class Talhao {
     };
   }
 
+  // toMap para o FIRESTORE. Não deve ter o projetoId.
+  Map<String, dynamic> toFirestoreMap() {
+    return {
+      'id': id,
+      'fazendaId': fazendaId,
+      'fazendaAtividadeId': fazendaAtividadeId,
+      'nome': nome,
+      'areaHa': areaHa,
+      'idadeAnos': idadeAnos,
+      'especie': especie,
+      'espacamento': espacamento,
+    };
+  }
+  
   factory Talhao.fromMap(Map<String, dynamic> map) {
     DateTime? parseDate(dynamic value) {
       if (value is Timestamp) return value.toDate();
@@ -93,13 +109,13 @@ class Talhao {
       id: map['id'],
       fazendaId: map['fazendaId'],
       fazendaAtividadeId: map['fazendaAtividadeId'],
-      projetoId: map['projetoId'], // <<< CAMPO ADICIONADO PARA LER O RESULTADO DO JOIN
+      projetoId: map['projetoId'],
       nome: map['nome'],
       areaHa: map['areaHa'],
       idadeAnos: map['idadeAnos'],
       especie: map['especie'],
       espacamento: map['espacamento'],
-      fazendaNome: map['fazendaNome'], // <<< CAMPO ADICIONADO PARA LER O RESULTADO DO JOIN
+      fazendaNome: map['fazendaNome'],
       municipio: map['municipio'],
       estado: map['estado'],
       lastModified: parseDate(map['lastModified']),
