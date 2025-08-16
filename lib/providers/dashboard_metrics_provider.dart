@@ -1,4 +1,4 @@
-// lib/providers/dashboard_metrics_provider.dart (VERSÃO COM VARIÁVEIS CORRIGIDAS)
+// lib/providers/dashboard_metrics_provider.dart (VERSÃO COM AGRUPAMENTO DE CUBAGEM CORRIGIDO)
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
@@ -23,14 +23,7 @@ class ProgressoFazenda {
   });
 }
 
-class DesempenhoCubagem {
-  final String nome;
-  final int pendentes;
-  final int concluidas;
-  final int exportadas;
-  final int total;
-  DesempenhoCubagem({ required this.nome, this.pendentes = 0, this.concluidas = 0, this.exportadas = 0, this.total = 0 });
-}
+// Removido o DesempenhoCubagem, pois usaremos o DesempenhoFazenda para ambos.
 
 class DesempenhoFazenda {
   final String nomeAtividade;
@@ -55,14 +48,16 @@ class DesempenhoFazenda {
 class DashboardMetricsProvider with ChangeNotifier {
   
   List<Parcela> _parcelasFiltradas = [];
-  List<DesempenhoCubagem> _desempenhoPorCubagem = [];
+  // <<< MUDANÇA 1: A lista de cubagem agora usa o mesmo modelo da de inventário >>>
+  List<DesempenhoFazenda> _desempenhoPorCubagem = [];
   Map<String, int> _progressoPorEquipe = {};
   Map<String, int> _coletasPorMes = {};
   List<DesempenhoFazenda> _desempenhoPorFazenda = [];
   List<ProgressoFazenda> _progressoPorFazenda = [];
   
   List<Parcela> get parcelasFiltradas => _parcelasFiltradas;
-  List<DesempenhoCubagem> get desempenhoPorCubagem => _desempenhoPorCubagem;
+  // <<< MUDANÇA 2: O getter é atualizado para o novo tipo >>>
+  List<DesempenhoFazenda> get desempenhoPorCubagem => _desempenhoPorCubagem;
   Map<String, int> get progressoPorEquipe => _progressoPorEquipe;
   Map<String, int> get coletasPorMes => _coletasPorMes;
   List<DesempenhoFazenda> get desempenhoPorFazenda => _desempenhoPorFazenda;
@@ -87,9 +82,9 @@ class DashboardMetricsProvider with ChangeNotifier {
       projetosAtivos,
       filterProvider,
     );
-    _recalcularProgressoPorEquipe(filterProvider); // <<< PASSA O FILTRO
-    _recalcularColetasPorMes(filterProvider); // <<< PASSA O FILTRO
-    _recalcularDesempenhoPorFazenda(filterProvider); // <<< PASSA O FILTRO
+    _recalcularProgressoPorEquipe(filterProvider);
+    _recalcularColetasPorMes(filterProvider);
+    _recalcularDesempenhoPorFazenda(filterProvider);
     _recalcularProgressoPorFazenda();
     
     notifyListeners();
@@ -144,33 +139,36 @@ class DashboardMetricsProvider with ChangeNotifier {
     }).toList();
   }
 
+  // <<< MUDANÇA 3: A função inteira é reescrita para agrupar por fazenda e usar o modelo DesempenhoFazenda >>>
   void _recalcularDesempenhoPorCubagem(
-    List<CubagemArvore> todasAsCubagens, 
-    Map<int, int> talhaoToProjetoMap, 
+    List<CubagemArvore> todasAsCubagens,
+    Map<int, int> talhaoToProjetoMap,
     Map<int, int> talhaoToAtividadeMap,
     Map<int, String> atividadeIdToTipoMap,
-    List<Projeto> projetosAtivos, 
-    DashboardFilterProvider filterProvider) {
-    
+    List<Projeto> projetosAtivos,
+    DashboardFilterProvider filterProvider,
+  ) {
     List<CubagemArvore> cubagensFiltradas;
-    
+
     if (filterProvider.selectedProjetoIds.isEmpty) {
-       final idsProjetosAtivos = projetosAtivos.map((p) => p.id).toSet();
-       cubagensFiltradas = todasAsCubagens.where((c) {
-         final projetoId = talhaoToProjetoMap[c.talhaoId];
-         return projetoId != null && idsProjetosAtivos.contains(projetoId);
-       }).toList();
+      final idsProjetosAtivos = projetosAtivos.map((p) => p.id).toSet();
+      cubagensFiltradas = todasAsCubagens.where((c) {
+        final projetoId = talhaoToProjetoMap[c.talhaoId];
+        return projetoId != null && idsProjetosAtivos.contains(projetoId);
+      }).toList();
     } else {
       cubagensFiltradas = todasAsCubagens.where((c) {
         final projetoId = talhaoToProjetoMap[c.talhaoId];
-        return projetoId != null && filterProvider.selectedProjetoIds.contains(projetoId);
+        return projetoId != null &&
+            filterProvider.selectedProjetoIds.contains(projetoId);
       }).toList();
     }
 
     if (filterProvider.selectedFazendaNomes.isNotEmpty) {
-        cubagensFiltradas = cubagensFiltradas
-            .where((c) => filterProvider.selectedFazendaNomes.contains(c.nomeFazenda))
-            .toList();
+      cubagensFiltradas = cubagensFiltradas
+          .where((c) =>
+              filterProvider.selectedFazendaNomes.contains(c.nomeFazenda))
+          .toList();
     }
 
     if (cubagensFiltradas.isEmpty) {
@@ -178,26 +176,33 @@ class DashboardMetricsProvider with ChangeNotifier {
       return;
     }
 
-    final grupoPorTalhao = groupBy(cubagensFiltradas, (CubagemArvore c) {
+    // Agrupa por uma chave combinada de Atividade e Fazenda
+    final grupoPorAtividadeEFazenda =
+        groupBy(cubagensFiltradas, (CubagemArvore c) {
       final atividadeId = talhaoToAtividadeMap[c.talhaoId];
       final tipoAtividade = atividadeId != null ? atividadeIdToTipoMap[atividadeId] : "N/A";
-      return "$tipoAtividade - ${c.nomeFazenda} / ${c.nomeTalhao}";
+      return "$tipoAtividade:::${c.nomeFazenda}";
     });
-    
-    _desempenhoPorCubagem = grupoPorTalhao.entries.map((entry) {
-      final nome = entry.key;
+
+    _desempenhoPorCubagem = grupoPorAtividadeEFazenda.entries.map((entry) {
+      final parts = entry.key.split(':::');
+      final nomeAtividade = parts[0];
+      final nomeFazenda = parts[1];
       final cubagens = entry.value;
-      return DesempenhoCubagem(
-        nome: nome,
-        pendentes: cubagens.where((c) => c.alturaTotal == 0).length,
-        concluidas: cubagens.where((c) => c.alturaTotal > 0).length,
+
+      return DesempenhoFazenda(
+        nomeAtividade: nomeAtividade,
+        nomeFazenda: nomeFazenda,
+        pendentes: cubagens.where((c) => c.alturaTotal == 0 && !c.exportada).length,
+        emAndamento: 0, // Cubagem não tem estado "em andamento"
+        concluidas: cubagens.where((c) => c.alturaTotal > 0 && !c.exportada).length,
         exportadas: cubagens.where((c) => c.exportada).length,
         total: cubagens.length,
       );
-    }).toList()..sort((a,b) => a.nome.compareTo(b.nome));
+    }).toList()
+      ..sort((a, b) => '${a.nomeAtividade}-${a.nomeFazenda}'.compareTo('${b.nomeAtividade}-${b.nomeFazenda}'));
   }
   
-  // <<< CORREÇÃO: As funções de cálculo agora recebem o filterProvider como parâmetro >>>
   void _recalcularProgressoPorEquipe(DashboardFilterProvider filterProvider) {
     final parcelasVisiveis = filterProvider.selectedFazendaNomes.isNotEmpty
       ? _parcelasFiltradas.where((p) => p.nomeFazenda != null && filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!)).toList()

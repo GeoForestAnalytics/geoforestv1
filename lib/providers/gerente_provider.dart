@@ -1,4 +1,4 @@
-// lib/providers/gerente_provider.dart (VERSÃO COM CORREÇÃO FINAL DA CONDIÇÃO DE CORRIDA)
+// lib/providers/gerente_provider.dart (VERSÃO CORRIGIDA QUE RESOLVE PARCELAS E CUBAGENS)
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -67,16 +67,12 @@ class GerenteProvider with ChangeNotifier {
       _atividades = await _atividadeRepository.getTodasAsAtividades();
       final Map<int, String> atividadeIdToTipoMap = { for (var a in _atividades) if (a.id != null) a.id!: a.tipo };
       
-      // <<< O build inicial dos mapas é feito aqui, como antes >>>
       await _buildAuxiliaryMaps();
 
       _dadosColetaSubscription = _gerenteService.getDadosColetaStream().listen(
         (listaDeParcelas) async {
-          debugPrint("GERENTE PROVIDER RECEBEU: ${listaDeParcelas.length} parcelas do stream.");
-
-          // <<< CORREÇÃO CRÍTICA: Recarrega os mapas de referência A CADA ATUALIZAÇÃO >>>
-          // Isso garante que se um novo talhão foi sincronizado, a informação dele
-          // estará disponível para a busca a seguir, evitando o "N/A".
+          // <<< CORREÇÃO APLICADA AQUI >>>
+          // Reconstrói os mapas com os dados mais recentes antes de processar as parcelas.
           await _buildAuxiliaryMaps();
 
           _parcelasSincronizadas = listaDeParcelas.map((p) {
@@ -107,8 +103,13 @@ class GerenteProvider with ChangeNotifier {
       );
 
       _dadosCubagemSubscription = _gerenteService.getDadosCubagemStream().listen(
-        (listaDeCubagens) {
+        (listaDeCubagens) async { // <-- Adicionado async
+          // <<< CORREÇÃO APLICADA AQUI TAMBÉM >>>
+          // Garante que os mapas também sejam reconstruídos quando chegam dados de cubagem.
+          await _buildAuxiliaryMaps();
+          
           _cubagensSincronizadas = listaDeCubagens;
+          if (_isLoading) _isLoading = false; // Garante que o loading termine
           notifyListeners();
         },
         onError: (e) {

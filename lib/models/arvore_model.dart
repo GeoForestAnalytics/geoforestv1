@@ -1,4 +1,6 @@
-// lib/models/arvore_model.dart (VERSÃO ATUALIZADA COM lastModified)
+// lib/models/arvore_model.dart (VERSÃO ATUALIZADA E CORRIGIDA)
+
+import 'package:cloud_firestore/cloud_firestore.dart'; // <<< PASSO 1: IMPORTAR CLOUD_FIRESTORE
 
 enum Codigo {
   normal, falha, bifurcada, multipla, quebrada, morta, caida,
@@ -23,7 +25,7 @@ class Arvore {
   final double? capAuditoria;
   final double? alturaAuditoria;
   double? volume;
-  final DateTime? lastModified; // <<< ADICIONADO
+  final DateTime? lastModified;
 
   Arvore({
     this.id,
@@ -38,7 +40,7 @@ class Arvore {
     this.capAuditoria,
     this.alturaAuditoria,
     this.volume,
-    this.lastModified, // <<< ADICIONADO
+    this.lastModified,
   });
 
   Arvore copyWith({
@@ -54,7 +56,7 @@ class Arvore {
     double? capAuditoria,
     double? alturaAuditoria,
     double? volume,
-    DateTime? lastModified, // <<< ADICIONADO
+    DateTime? lastModified,
   }) {
     return Arvore(
       id: id ?? this.id,
@@ -69,7 +71,7 @@ class Arvore {
       capAuditoria: capAuditoria ?? this.capAuditoria,
       alturaAuditoria: alturaAuditoria ?? this.alturaAuditoria,
       volume: volume ?? this.volume,
-      lastModified: lastModified ?? this.lastModified, // <<< ADICIONADO
+      lastModified: lastModified ?? this.lastModified,
     );
   }
 
@@ -86,11 +88,21 @@ class Arvore {
       'codigo2': codigo2?.name,
       'capAuditoria': capAuditoria,
       'alturaAuditoria': alturaAuditoria,
-      'lastModified': lastModified?.toIso8601String(), // <<< ADICIONADO
+      'lastModified': lastModified?.toIso8601String(),
     };
   }
 
   factory Arvore.fromMap(Map<String, dynamic> map) {
+    // <<< PASSO 2: ADICIONAR FUNÇÃO AUXILIAR PARA PARSE DE DATAS >>>
+    DateTime? parseDate(dynamic value) {
+      if (value is Timestamp) {
+        return value.toDate();
+      } else if (value is String) {
+        return DateTime.tryParse(value);
+      }
+      return null;
+    }
+
     return Arvore(
       id: map['id'],
       cap: map['cap']?.toDouble() ?? 0.0,
@@ -103,7 +115,8 @@ class Arvore {
       codigo2: map['codigo2'] != null ? Codigo2.values.firstWhere((e) => e.name == map['codigo2']) : null,
       capAuditoria: map['capAuditoria']?.toDouble(),
       alturaAuditoria: map['alturaAuditoria']?.toDouble(),
-      lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null, // <<< ADICIONADO
+      // <<< PASSO 3: USAR A FUNÇÃO AUXILIAR NO CAMPO 'lastModified' >>>
+      lastModified: parseDate(map['lastModified']),
     );
   }
 }

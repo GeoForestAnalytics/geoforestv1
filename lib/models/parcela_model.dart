@@ -1,4 +1,4 @@
-// lib/models/parcela_model.dart (VERSÃO CORRIGIDA E MELHORADA)
+// lib/models/parcela_model.dart (VERSÃO ATUALIZADA E CORRIGIDA)
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -166,6 +166,7 @@ class Parcela {
   }
 
   factory Parcela.fromMap(Map<String, dynamic> map) {
+    // <<< CORREÇÃO APLICADA AQUI >>>
     DateTime? parseDate(dynamic value) {
       if (value is Timestamp) return value.toDate();
       if (value is String) return DateTime.tryParse(value);

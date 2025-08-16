@@ -1,4 +1,5 @@
-// lib/models/cubagem_arvore_model.dart (VERSÃO ATUALIZADA COM lastModified)
+// lib/models/cubagem_arvore_model.dart (VERSÃO ATUALIZADA E CORRIGIDA)
+import 'package:cloud_firestore/cloud_firestore.dart'; // <<< PASSO 1: IMPORTAR CLOUD_FIRESTORE
 
 class CubagemArvore {
   int? id;
@@ -15,7 +16,7 @@ class CubagemArvore {
   String tipoMedidaCAP;
   double valorCAP;
   double alturaBase;
-  final DateTime? lastModified; // <<< ADICIONADO
+  final DateTime? lastModified;
 
   CubagemArvore({
     this.id,
@@ -32,7 +33,7 @@ class CubagemArvore {
     this.tipoMedidaCAP = 'fita',
     this.valorCAP = 0,
     this.alturaBase = 0,
-    this.lastModified, // <<< ADICIONADO
+    this.lastModified,
   });
 
   CubagemArvore copyWith({
@@ -50,7 +51,7 @@ class CubagemArvore {
     String? tipoMedidaCAP,
     double? valorCAP,
     double? alturaBase,
-    DateTime? lastModified, // <<< ADICIONADO
+    DateTime? lastModified,
   }) {
     return CubagemArvore(
       id: id ?? this.id,
@@ -67,7 +68,7 @@ class CubagemArvore {
       tipoMedidaCAP: tipoMedidaCAP ?? this.tipoMedidaCAP,
       valorCAP: valorCAP ?? this.valorCAP,
       alturaBase: alturaBase ?? this.alturaBase,
-      lastModified: lastModified ?? this.lastModified, // <<< ADICIONADO
+      lastModified: lastModified ?? this.lastModified,
     );
   }
 
@@ -87,11 +88,21 @@ class CubagemArvore {
       'exportada': exportada ? 1 : 0,
       'isSynced': isSynced ? 1 : 0,
       'nomeLider': nomeLider,
-      'lastModified': lastModified?.toIso8601String(), // <<< ADICIONADO
+      'lastModified': lastModified?.toIso8601String(),
     };
   }
 
   factory CubagemArvore.fromMap(Map<String, dynamic> map) {
+    // <<< PASSO 2: ADICIONAR FUNÇÃO AUXILIAR PARA PARSE DE DATAS >>>
+    DateTime? parseDate(dynamic value) {
+      if (value is Timestamp) {
+        return value.toDate();
+      } else if (value is String) {
+        return DateTime.tryParse(value);
+      }
+      return null;
+    }
+
     return CubagemArvore(
       id: map['id'],
       talhaoId: map['talhaoId'],
@@ -107,7 +118,8 @@ class CubagemArvore {
       tipoMedidaCAP: map['tipoMedidaCAP'] ?? 'fita',
       valorCAP: map['valorCAP']?.toDouble() ?? 0,
       alturaBase: map['alturaBase']?.toDouble() ?? 0,
-      lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null, // <<< ADICIONADO
+      // <<< PASSO 3: USAR A FUNÇÃO AUXILIAR NO CAMPO 'lastModified' >>>
+      lastModified: parseDate(map['lastModified']),
     );
   }
 }

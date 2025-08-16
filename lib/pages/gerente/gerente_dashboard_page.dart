@@ -558,7 +558,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
   }
 
   Widget _buildCubagemDataTableCard(
-      BuildContext context, List<DesempenhoCubagem> data) {
+      BuildContext context, List<DesempenhoFazenda> data) {
     return Card(
       elevation: 2,
       child: Column(
@@ -566,19 +566,24 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-            child: Text("Produção de Cubagem por Talhão",
+            child: Text("Desempenho por Fazenda (Cubagem)", // Título corrigido
                 style: Theme.of(context).textTheme.titleLarge),
           ),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
-              columnSpacing: 20.0,
+              columnSpacing: 18.0,
               headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+              // Colunas idênticas à tabela de inventário
               columns: const [
                 DataColumn(
-                    label: Text('Atividade / Fazenda / Talhão',
+                    label: Text('Atividade',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(
+                    label: Text('Fazenda',
                         style: TextStyle(fontWeight: FontWeight.bold))),
                 DataColumn(label: Text('Pendentes'), numeric: true),
+                DataColumn(label: Text('Iniciadas'), numeric: true),
                 DataColumn(label: Text('Concluídas'), numeric: true),
                 DataColumn(label: Text('Exportadas'), numeric: true),
                 DataColumn(
@@ -586,12 +591,15 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                         style: TextStyle(fontWeight: FontWeight.bold)),
                     numeric: true),
               ],
+              // Mapeamento dos dados para as células da tabela
               rows: data
                   .map((d) => DataRow(cells: [
-                        DataCell(Text(d.nome,
+                        DataCell(Text(d.nomeAtividade)),
+                        DataCell(Text(d.nomeFazenda,
                             style:
                                 const TextStyle(fontWeight: FontWeight.w500))),
                         DataCell(Text(d.pendentes.toString())),
+                        DataCell(Text(d.emAndamento.toString())), // Será sempre 0
                         DataCell(Text(d.concluidas.toString())),
                         DataCell(Text(d.exportadas.toString())),
                         DataCell(Text(d.total.toString(),
