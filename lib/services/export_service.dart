@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO COM EXPORTAÇÃO DETALHADA RESTAURADA)
+// lib/services/export_service.dart (VERSÃO COMPLETA COM EXPORTAÇÃO ENRIQUECIDA)
 
 import 'dart:io';
 import 'dart:convert';
@@ -31,9 +31,11 @@ import 'package:geoforestv1/widgets/manager_export_dialog.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
+// PAYLOADS ATUALIZADOS PARA INCLUIR DADOS DOS TALHÕES
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
+  final Map<int, Map<String, dynamic>> talhoesMap;
   final String nomeLider;
   final String nomesAjudantes;
   final String nomeZona;
@@ -42,6 +44,7 @@ class _CsvParcelaPayload {
   _CsvParcelaPayload({
     required this.parcelasMap,
     required this.arvoresPorParcelaMap,
+    required this.talhoesMap,
     required this.nomeLider,
     required this.nomesAjudantes,
     required this.nomeZona,
@@ -52,18 +55,19 @@ class _CsvParcelaPayload {
 class _CsvCubagemPayload {
   final List<Map<String, dynamic>> cubagensMap;
   final Map<int, List<Map<String, dynamic>>> secoesPorCubagemMap;
+  final Map<int, Map<String, dynamic>> talhoesMap;
   final String nomeLider;
   final String nomesAjudantes;
 
   _CsvCubagemPayload({
     required this.cubagensMap,
     required this.secoesPorCubagemMap,
+    required this.talhoesMap,
     required this.nomeLider,
     required this.nomesAjudantes,
   });
 }
 
-// <<< CORREÇÃO: Payload para a exportação detalhada >>>
 class _DevEquipePayload {
   final List<Map<String, dynamic>> coletasData;
   final String nomeZona;
@@ -76,6 +80,7 @@ class _DevEquipePayload {
   });
 }
 
+// FUNÇÃO ISOLATE ATUALIZADA PARA PARCELAS
 Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
@@ -91,10 +96,13 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
   }
 
   List<List<dynamic>> rows = [];
-  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'Talhao', 'ID_Coleta_Parcela', 'Area_m2', 'Largura_m', 'Comprimento_m', 'Raio_m', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Dominante']);
+  // CABEÇALHO ATUALIZADO
+  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_m2', 'Largura_m', 'Comprimento_m', 'Raio_m', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Dominante']);
   
   for (var pMap in payload.parcelasMap) {
     final p = Parcela.fromMap(pMap);
+    final talhaoData = payload.talhoesMap[p.talhaoId] ?? {};
+    
     String easting = '', northing = '';
     if (p.latitude != null && p.longitude != null) {
       var pUtm = projWGS84.transform(projUTM, proj4.Point(x: p.longitude!, y: p.latitude!));
@@ -107,41 +115,43 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 
     final liderDaColeta = p.nomeLider ?? payload.nomeLider;
     if (arvores.isEmpty) {
-      rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null]);
+      rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null]);
     } else {
       Map<String, int> fusteCounter = {};
       for (final a in arvores) {
         String key = '${a.linha}-${a.posicaoNaLinha}';
         fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
-        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.dominante ? 'Sim' : 'Não']);
+        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.dominante ? 'Sim' : 'Não']);
       }
     }
   }
   return const ListToCsvConverter().convert(rows);
 }
 
+// FUNÇÃO ISOLATE ATUALIZADA PARA CUBAGEM
 Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) async {
   List<List<dynamic>> rows = [];
-  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'id_db_arvore', 'id_fazenda', 'fazenda', 'talhao', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm']);
+  // CABEÇALHO ATUALIZADO
+  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'id_db_arvore', 'id_fazenda', 'fazenda', 'talhao', 'area_talhao_ha', 'especie', 'espacamento', 'idade_anos', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm']);
   for (var cMap in payload.cubagensMap) {
     final arvore = CubagemArvore.fromMap(cMap);
-    
+    final talhaoData = payload.talhoesMap[arvore.talhaoId] ?? {};
+
     final secoesMap = payload.secoesPorCubagemMap[arvore.id] ?? [];
     final secoes = secoesMap.map((sMap) => CubagemSecao.fromMap(sMap)).toList();
     
     final liderDaColeta = arvore.nomeLider ?? payload.nomeLider;
     if (secoes.isEmpty) {
-      rows.add(['CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao, arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, arvore.valorCAP, arvore.alturaBase, null, null, null, null, null]);
+      rows.add(['CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, arvore.valorCAP, arvore.alturaBase, null, null, null, null, null]);
     } else {
       for (var secao in secoes) {
-        rows.add(['CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao, arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, arvore.valorCAP, arvore.alturaBase, secao.alturaMedicao, secao.circunferencia, secao.casca1_mm, secao.casca2_mm, secao.diametroSemCasca.toStringAsFixed(2)]);
+        rows.add(['CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, arvore.valorCAP, arvore.alturaBase, secao.alturaMedicao, secao.circunferencia, secao.casca1_mm, secao.casca2_mm, secao.diametroSemCasca.toStringAsFixed(2)]);
       }
     }
   }
   return const ListToCsvConverter().convert(rows);
 }
 
-// <<< CORREÇÃO: Isolate para gerar o CSV detalhado, como na sua imagem >>>
 Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
@@ -207,7 +217,6 @@ class ExportService {
   final _atividadeRepository = AtividadeRepository();
   final _talhaoRepository = TalhaoRepository();
   
-  // <<< CORREÇÃO: Lógica de busca de dados detalhados restaurada >>>
   Future<void> exportarDesenvolvimentoEquipes(BuildContext context, {Set<int>? projetoIdsFiltrados}) async {
     try {
       if (!await _requestPermission(context)) return;
@@ -491,6 +500,15 @@ class ExportService {
   
   Future<String> _gerarCsvParcela(List<Parcela> parcelas, String nomeArquivo) async {
     final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap = {};
+    final Set<int> talhaoIds = parcelas.map((p) => p.talhaoId).whereType<int>().toSet();
+    final Map<int, Map<String, dynamic>> talhoesMapParaIsolate = {};
+
+    for (final talhaoId in talhaoIds) {
+      final talhao = await _talhaoRepository.getTalhaoById(talhaoId);
+      if (talhao != null) {
+        talhoesMapParaIsolate[talhaoId] = talhao.toMap();
+      }
+    }
     
     for (final parcela in parcelas) {
       if (parcela.dbId != null) {
@@ -503,6 +521,7 @@ class ExportService {
     final payload = _CsvParcelaPayload(
       parcelasMap: parcelas.map((p) => p.toMap()).toList(),
       arvoresPorParcelaMap: arvoresPorParcelaMap,
+      talhoesMap: talhoesMapParaIsolate,
       nomeLider: prefs.getString('nome_lider') ?? 'N/A',
       nomesAjudantes: prefs.getString('nomes_ajudantes') ?? 'N/A',
       nomeZona: prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S',
@@ -550,6 +569,15 @@ class ExportService {
     }
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando CSV de cubagens em segundo plano...')));
 
+    final Set<int> talhaoIds = cubagens.map((c) => c.talhaoId).whereType<int>().toSet();
+    final Map<int, Map<String, dynamic>> talhoesMapParaIsolate = {};
+    for (final talhaoId in talhaoIds) {
+      final talhao = await _talhaoRepository.getTalhaoById(talhaoId);
+      if (talhao != null) {
+        talhoesMapParaIsolate[talhaoId] = talhao.toMap();
+      }
+    }
+
     final Map<int, List<Map<String, dynamic>>> secoesPorCubagemMap = {};
     for (final cubagem in cubagens) {
       if (cubagem.id != null) {
@@ -562,6 +590,7 @@ class ExportService {
     final payload = _CsvCubagemPayload(
       cubagensMap: cubagens.map((c) => c.toMap()).toList(),
       secoesPorCubagemMap: secoesPorCubagemMap,
+      talhoesMap: talhoesMapParaIsolate,
       nomeLider: teamProvider.lider ?? 'N/A',
       nomesAjudantes: teamProvider.ajudantes ?? 'N/A',
     );

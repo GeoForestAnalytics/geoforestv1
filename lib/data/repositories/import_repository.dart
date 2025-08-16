@@ -1,10 +1,11 @@
-// lib/data/repositories/import_repository.dart (VERSÃO FINAL E COMPLETA COM lastModified)
+// lib/data/repositories/import_repository.dart (VERSÃO FINAL E COMPLETA)
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:sqflite/sqflite.dart';
 
 // Repositórios e Constantes
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -76,7 +77,7 @@ class ImportRepository {
 
       await db.transaction((txn) async {
         final now = DateTime.now().toIso8601String();
-
+        
         for (final row in dataRows) {
           linhasProcessadas++;
           
@@ -108,13 +109,33 @@ class ImportRepository {
           final nomeTalhao = getValue(row, ['talhao', 'nome_talhao']);
           if (nomeTalhao == null) continue;
           Talhao? talhao = (await txn.query('talhoes', where: 'nome = ? AND fazendaId = ? AND fazendaAtividadeId = ?', whereArgs: [nomeTalhao, fazenda.id, fazenda.atividadeId])).map(Talhao.fromMap).firstOrNull;
+          
           if(talhao == null) {
-              talhao = Talhao(fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao);
+              talhao = Talhao(
+                fazendaId: fazenda.id, 
+                fazendaAtividadeId: fazenda.atividadeId, 
+                nome: nomeTalhao, 
+                projetoId: projeto.id,
+                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_talhão'])?.replaceAll(',', '.') ?? ''),
+                especie: getValue(row, ['especie']),
+                espacamento: getValue(row, ['espacamento', 'espacame']),
+                idadeAnos: double.tryParse(getValue(row, ['idade_anos', 'idade'])?.replaceAll(',', '.') ?? ''),
+              );
               final map = talhao.toMap();
               map['lastModified'] = now;
               final tId = await txn.insert('talhoes', map);
               talhao = talhao.copyWith(id: tId);
               talhoesCriados++;
+          } else {
+              final talhaoAtualizado = talhao.copyWith(
+                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_talhão'])?.replaceAll(',', '.') ?? talhao.areaHa?.toString() ?? ''),
+                especie: getValue(row, ['especie']) ?? talhao.especie,
+                espacamento: getValue(row, ['espacamento', 'espacame']) ?? talhao.espacamento,
+                idadeAnos: double.tryParse(getValue(row, ['idade_anos', 'idade'])?.replaceAll(',', '.') ?? talhao.idadeAnos?.toString() ?? ''),
+              );
+              final map = talhaoAtualizado.toMap();
+              map['lastModified'] = now;
+              await txn.update('talhoes', map, where: 'id = ?', whereArgs: [talhao.id]);
           }
           
           final tipoLinha = ['IPC', 'IFC', 'AUD', 'IFS', 'BIO', 'IFQ'].any((e) => tipoAtividadeStr.contains(e)) ? TipoImportacao.inventario : (tipoAtividadeStr.contains('CUB') ? TipoImportacao.cubagem : TipoImportacao.desconhecido);
@@ -155,8 +176,8 @@ class ImportRepository {
                   final novaParcela = Parcela(
                       talhaoId: talhao.id!, 
                       idParcela: idParcelaColeta,
-                      areaMetrosQuadrados: double.tryParse(getValue(row, ['area_m2'])?.replaceAll(',', '.') ?? '0') ?? 0,
-                      status: StatusParcela.values.firstWhere((e) => e.name == statusStr, orElse: ()=> StatusParcela.concluida), 
+                      areaMetrosQuadrados: double.tryParse(getValue(row, ['area_m2'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0,
+                      status: StatusParcela.values.firstWhere((e) => e.name == statusStr, orElse: ()=> StatusParcela.pendente), 
                       dataColeta: DateTime.tryParse(getValue(row, ['data_coleta']) ?? ''),
                       nomeFazenda: fazenda.nome, 
                       nomeTalhao: talhao.nome, 
@@ -213,39 +234,36 @@ class ImportRepository {
               }
           } 
           else if (tipoLinha == TipoImportacao.cubagem) {
+              
               final idArvore = getValue(row, ['identificador_arvore', 'id_db_arvore']);
               if (idArvore == null) continue;
 
               CubagemArvore? arvoreCubagem = (await txn.query('cubagens_arvores', where: 'talhaoId = ? AND identificador = ?', whereArgs: [talhao.id!, idArvore])).map(CubagemArvore.fromMap).firstOrNull;
               
-              final dadosArvore = CubagemArvore(
-                  talhaoId: talhao.id!, 
-                  idFazenda: fazenda.id, 
-                  nomeFazenda: fazenda.nome, 
-                  nomeTalhao: talhao.nome, 
-                  identificador: idArvore, 
-                  alturaTotal: double.tryParse(getValue(row, ['altura_total_m'])?.replaceAll(',', '.') ?? '0') ?? 0, 
-                  valorCAP: double.tryParse(getValue(row, ['valor_cap', 'cap_cm'])?.replaceAll(',', '.') ?? '0') ?? 0, 
-                  alturaBase: double.tryParse(getValue(row, ['altura_base_m'])?.replaceAll(',', '.') ?? '0') ?? 0, 
-                  tipoMedidaCAP: getValue(row, ['tipo_medida_cap']) ?? 'fita', 
-                  classe: getValue(row, ['classe']),
-                  isSynced: false,
-                  nomeLider: getValue(row, ['lider_equipe']) ?? nomeDoResponsavel
-              );
-              
-              final map = dadosArvore.toMap();
-              map['lastModified'] = now;
-
               if (arvoreCubagem == null) {
+                final dadosArvore = CubagemArvore(
+                    talhaoId: talhao.id!, 
+                    idFazenda: fazenda.id, 
+                    nomeFazenda: fazenda.nome, 
+                    nomeTalhao: talhao.nome, 
+                    identificador: idArvore, 
+                    alturaTotal: double.tryParse(getValue(row, ['altura_total_m', 'altura_m'])?.replaceAll(',', '.') ?? '0') ?? 0, 
+                    valorCAP: double.tryParse(getValue(row, ['valor_cap', 'cap_cm'])?.replaceAll(',', '.') ?? '0') ?? 0, 
+                    alturaBase: double.tryParse(getValue(row, ['altura_base_m'])?.replaceAll(',', '.') ?? '0') ?? 0, 
+                    tipoMedidaCAP: getValue(row, ['tipo_medida_cap']) ?? 'fita', 
+                    classe: getValue(row, ['classe']),
+                    isSynced: false,
+                    nomeLider: getValue(row, ['lider_equipe']) ?? nomeDoResponsavel
+                );
+                
+                final map = dadosArvore.toMap();
+                map['lastModified'] = now;
+                
                 final cubagemId = await txn.insert('cubagens_arvores', map);
                 arvoreCubagem = dadosArvore.copyWith(id: cubagemId);
                 cubagensCriadas++;
-              } else {
-                map['id'] = arvoreCubagem.id;
-                await txn.update('cubagens_arvores', map, where: 'id = ?', whereArgs: [arvoreCubagem.id]);
-                cubagensAtualizadas++;
               }
-
+              
               final alturaMedicaoStr = getValue(row, ['altura_medicao_secao_m', 'altura_medicao_m']);
               if (alturaMedicaoStr != null) {
                   final alturaMedicao = double.tryParse(alturaMedicaoStr.replaceAll(',', '.')) ?? -1;
@@ -259,7 +277,7 @@ class ImportRepository {
                       );
                       final secaoMap = novaSecao.toMap();
                       secaoMap['lastModified'] = now;
-                      await txn.insert('cubagens_secoes', secaoMap);
+                      await txn.insert('cubagens_secoes', secaoMap, conflictAlgorithm: ConflictAlgorithm.replace);
                       secoesCriadas++;
                   }
               }

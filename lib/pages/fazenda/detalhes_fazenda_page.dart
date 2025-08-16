@@ -1,15 +1,17 @@
-// lib/pages/fazenda/detalhes_fazenda_page.dart (VERSÃO FINAL COM OTIMIZADOR INTEGRADO)
+// lib/pages/fazenda/detalhes_fazenda_page.dart (VERSÃO COM LÓGICA DE VERIFICAÇÃO CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/pages/talhoes/form_talhao_page.dart';
 import 'package:geoforestv1/pages/talhoes/detalhes_talhao_page.dart';
-import 'package:geoforestv1/services/activity_optimizer_service.dart';
 import 'package:geoforestv1/utils/navigation_helper.dart';
+
+// <<< IMPORTS ADICIONAIS NECESSÁRIOS >>>
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 
 class DetalhesFazendaPage extends StatefulWidget {
@@ -28,7 +30,9 @@ class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
   bool _isLoading = true;
   
   final _talhaoRepository = TalhaoRepository();
-  final _optimizerService = ActivityOptimizerService(dbHelper: DatabaseHelper.instance);
+  // <<< NOVAS INSTÂNCIAS DOS REPOSITÓRIOS NECESSÁRIOS PARA A VERIFICAÇÃO >>>
+  final _parcelaRepository = ParcelaRepository();
+  final _cubagemRepository = CubagemRepository();
 
   bool _isSelectionMode = false;
   final Set<int> _selectedTalhoes = {};
@@ -39,6 +43,7 @@ class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
     _carregarTalhoes();
   }
 
+  // <<< LÓGICA DE CARREGAMENTO COMPLETAMENTE REESCRITA >>>
   void _carregarTalhoes() async {
     if (mounted) {
       setState(() {
@@ -47,25 +52,33 @@ class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
         _selectedTalhoes.clear();
       });
     }
-
-    // Chama a otimização antes de carregar os dados.
-    // Isso garante que qualquer talhão vazio seja removido antes da lista ser exibida.
-    final int talhoesRemovidos = await _optimizerService.otimizarAtividade(widget.atividade.id!);
-    if (talhoesRemovidos > 0 && mounted) {
-      debugPrint("$talhoesRemovidos talhões vazios otimizados na atividade ${widget.atividade.id!}");
-      // Opcional: Mostra uma mensagem discreta para o usuário.
-      // ScaffoldMessenger.of(context).showSnackBar(
-      //   SnackBar(content: Text("$talhoesRemovidos talhões sem amostras foram ocultados."), duration: Duration(seconds: 2)),
-      // );
-    }
     
-    // Agora, busca apenas os talhões que sobraram (que têm parcelas).
-    final todosOsTalhoes = await _talhaoRepository.getTalhoesDaFazenda(
+    // 1. Busca todos os talhões associados a esta fazenda nesta atividade.
+    final todosOsTalhoesDaFazenda = await _talhaoRepository.getTalhoesDaFazenda(
         widget.fazenda.id, widget.fazenda.atividadeId);
+
+    final List<Talhao> talhoesComDados = [];
+
+    // 2. Para cada talhão encontrado, verifica se ele tem dados (parcelas OU cubagens).
+    for (final talhao in todosOsTalhoesDaFazenda) {
+        // Roda as duas verificações em paralelo para ser mais rápido
+        final results = await Future.wait([
+            _parcelaRepository.getParcelasDoTalhao(talhao.id!),
+            _cubagemRepository.getTodasCubagensDoTalhao(talhao.id!),
+        ]);
+
+        final parcelas = results[0] as List;
+        final cubagens = results[1] as List;
+
+        // 3. Se o talhão tiver qualquer um dos dois tipos de dado, ele é adicionado à lista para exibição.
+        if (parcelas.isNotEmpty || cubagens.isNotEmpty) {
+            talhoesComDados.add(talhao);
+        }
+    }
 
     if (mounted) {
       setState(() {
-        _talhoes = todosOsTalhoes;
+        _talhoes = talhoesComDados;
         _isLoading = false;
       });
     }

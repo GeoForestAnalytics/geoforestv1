@@ -1,4 +1,4 @@
-// lib/services/sync_service.dart (VERSÃO COM DOWNLOAD HIERÁRQUICO CORRIGIDO)
+// lib/services/sync_service.dart (VERSÃO FINAL COM DOWNLOAD HIERÁRQUICO COMPLETO)
 
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
@@ -75,9 +75,9 @@ class SyncService {
 
       _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, processados: totalGeral, mensagem: "Baixando dados da nuvem..."));
       
-      // <<< MUDANÇA SUTIL MAS IMPORTANTE >>>
-      // Ambas as funções de download agora são chamadas para garantir que tanto os projetos
-      // próprios quanto os delegados sejam sempre sincronizados.
+      // Limpa o banco de dados local para garantir uma cópia limpa da nuvem
+      await _dbHelper.deleteDatabaseFile(); 
+      
       await _downloadHierarquiaCompleta(licenseId);
       await _downloadProjetosDelegados(licenseId);
       
@@ -103,7 +103,6 @@ class SyncService {
     }
   }
 
-  // A função de upload não precisa de alterações.
   Future<void> _uploadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
     final batch = _firestore.batch();
@@ -157,7 +156,6 @@ class SyncService {
     await batch.commit();
   }
   
-  // A função de upload de coletas não precisa de alterações.
   Future<void> _uploadColetasNaoSincronizadas(String licenseIdDoUsuarioLogado, int totalGeral) async {
     int processados = 0;
     while (true) {
@@ -242,7 +240,6 @@ class SyncService {
     }
   }
 
-  // Funções auxiliares de upload não precisam de alterações.
   Future<void> _uploadParcela(firestore.DocumentReference docRef, Parcela parcela) async {
       final firestoreBatch = _firestore.batch();
       final parcelaMap = parcela.toMap();
@@ -259,6 +256,7 @@ class SyncService {
       }
       await firestoreBatch.commit();
   }
+  
   Future<void> _uploadCubagem(firestore.DocumentReference docRef, CubagemArvore cubagem) async {
       final firestoreBatch = _firestore.batch();
       final cubagemMap = cubagem.toMap();
@@ -276,7 +274,6 @@ class SyncService {
       await firestoreBatch.commit();
   }
   
-  // A função auxiliar _upsert não precisa de alterações.
   Future<void> _upsert(DatabaseExecutor txn, String table, Map<String, dynamic> data, String primaryKey, {String? secondaryKey}) async {
       List<String> whereArgs = [data[primaryKey].toString()];
       String whereClause = '$primaryKey = ?';
@@ -292,7 +289,6 @@ class SyncService {
       }
   }
 
-  // <<< INÍCIO DA LÓGICA HIERÁRQUICA CORRIGIDA >>>
   Future<void> _downloadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
     final projetosSnap = await _firestore.collection('clientes').doc(licenseId).collection('projetos').get();
@@ -300,12 +296,10 @@ class SyncService {
     for (var projDoc in projetosSnap.docs) {
         final projeto = Projeto.fromMap(projDoc.data());
         
-        // Primeiro, salva o Projeto (o "pai")
         await db.transaction((txn) async {
             await _upsert(txn, 'projetos', projeto.toMap(), 'id');
         });
         
-        // SÓ DEPOIS, busca e salva os filhos daquele projeto
         await _downloadFilhosDeProjeto(licenseId, projeto.id!);
     }
   }
@@ -333,19 +327,15 @@ class SyncService {
             await db.transaction((txn) async {
                 await _upsert(txn, 'projetos', projeto.toMap(), 'id');
             });
-            // Inicia o download dos filhos deste projeto delegado
             await _downloadFilhosDeProjeto(licenseIdDoCliente, projetoId);
         }
       }
     }
   }
 
-  /// Função auxiliar robusta que baixa toda a hierarquia (atividades, fazendas, talhões)
-  /// a partir de um projeto específico, vindo de uma licença específica.
   Future<void> _downloadFilhosDeProjeto(String licenseId, int projetoId) async {
     final db = await _dbHelper.database;
     
-    // 1. Busca ATIVIDADES do projeto
     final atividadesSnap = await _firestore.collection('clientes').doc(licenseId)
         .collection('atividades').where('projetoId', isEqualTo: projetoId).get();
     if (atividadesSnap.docs.isEmpty) return;
@@ -356,7 +346,6 @@ class SyncService {
          await _upsert(txn, 'atividades', atividade.toMap(), 'id');
       });
 
-      // 2. Para cada atividade, busca suas FAZENDAS
       final fazendasSnap = await _firestore.collection('clientes').doc(licenseId)
           .collection('fazendas').where('atividadeId', isEqualTo: atividade.id).get();
           
@@ -366,7 +355,6 @@ class SyncService {
            await _upsert(txn, 'fazendas', fazenda.toMap(), 'id', secondaryKey: 'atividadeId');
         });
 
-        // 3. Para cada fazenda, busca seus TALHÕES
         final talhoesSnap = await _firestore.collection('clientes').doc(licenseId)
             .collection('talhoes')
             .where('fazendaId', isEqualTo: fazenda.id)
@@ -375,7 +363,6 @@ class SyncService {
             
         for (var talhaoDoc in talhoesSnap.docs) {
           final data = talhaoDoc.data();
-          // Enriquecemos os dados do talhão com o projetoId, garantindo a consistência
           data['projetoId'] = atividade.projetoId; 
           final talhao = Talhao.fromMap(data);
           await db.transaction((txn) async {
@@ -385,9 +372,7 @@ class SyncService {
       }
     }
   }
-  // <<< FIM DA LÓGICA HIERÁRQUICA CORRIGIDA >>>
   
-  // As funções de download de coletas não precisam de alterações.
   Future<void> _downloadColetas(String licenseId) async {
     await _downloadParcelasDaNuvem(licenseId);
     await _downloadCubagensDaNuvem(licenseId);
@@ -440,14 +425,19 @@ class SyncService {
           final cMap = cubagemDaNuvem.toMap();
           cMap['isSynced'] = 1;
           await _upsert(txn, 'cubagens_arvores', cMap, 'id');
+          
           await txn.delete('cubagens_secoes', where: 'cubagemArvoreId = ?', whereArgs: [cubagemDaNuvem.id]);
+          
           final secoesSnapshot = await docSnapshot.reference.collection('secoes').get();
+
           if (secoesSnapshot.docs.isNotEmpty) {
             for (final doc in secoesSnapshot.docs) {
               final secao = CubagemSecao.fromMap(doc.data());
+              secao.cubagemArvoreId = cubagemDaNuvem.id; 
               await txn.insert('cubagens_secoes', secao.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
             }
           }
+
         } catch (e, s) {
           debugPrint("Erro CRÍTICO ao sincronizar cubagem ${cubagemDaNuvem.id}: $e\n$s");
         }
