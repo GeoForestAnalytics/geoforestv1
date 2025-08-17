@@ -1,4 +1,5 @@
-// lib/models/cubagem_secao_model.dart (VERSÃO ATUALIZADA COM lastModified)
+// lib/models/cubagem_secao_model.dart (VERSÃO CORRIGIDA)
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CubagemSecao {
   int? id;
@@ -7,7 +8,7 @@ class CubagemSecao {
   double circunferencia;
   double casca1_mm;
   double casca2_mm;
-  final DateTime? lastModified; // <<< ADICIONADO
+  final DateTime? lastModified;
 
   double get diametroComCasca => circunferencia / 3.14159;
   double get espessuraMediaCasca_cm => ((casca1_mm + casca2_mm) / 2) / 10;
@@ -20,7 +21,7 @@ class CubagemSecao {
     this.circunferencia = 0,
     this.casca1_mm = 0,
     this.casca2_mm = 0,
-    this.lastModified, // <<< ADICIONADO
+    this.lastModified,
   });
 
   Map<String, dynamic> toMap() {
@@ -31,11 +32,24 @@ class CubagemSecao {
       'circunferencia': circunferencia,
       'casca1_mm': casca1_mm,
       'casca2_mm': casca2_mm,
-      'lastModified': lastModified?.toIso8601String(), // <<< ADICIONADO
+      'lastModified': lastModified?.toIso8601String(),
     };
   }
 
   factory CubagemSecao.fromMap(Map<String, dynamic> map) {
+    // <<< INÍCIO DA CORREÇÃO >>>
+    // Esta função auxiliar agora consegue interpretar tanto o Timestamp do Firebase
+    // quanto a String do banco de dados local.
+    DateTime? parseDate(dynamic value) {
+      if (value is Timestamp) {
+        return value.toDate();
+      } else if (value is String) {
+        return DateTime.tryParse(value);
+      }
+      return null;
+    }
+    // <<< FIM DA CORREÇÃO >>>
+
     return CubagemSecao(
       id: map['id'],
       cubagemArvoreId: map['cubagemArvoreId'],
@@ -43,7 +57,8 @@ class CubagemSecao {
       circunferencia: map['circunferencia'] ?? 0,
       casca1_mm: map['casca1_mm'] ?? 0,
       casca2_mm: map['casca2_mm'] ?? 0,
-      lastModified: map['lastModified'] != null ? DateTime.tryParse(map['lastModified']) : null, // <<< ADICIONADO
+      // Agora usamos a função auxiliar segura.
+      lastModified: parseDate(map['lastModified']),
     );
   }
 }

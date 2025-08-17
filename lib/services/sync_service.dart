@@ -1,4 +1,4 @@
-// lib/services/sync_service.dart (VERSÃO CORRIGIDA SEM EXCLUSÃO DO BANCO)
+// lib/services/sync_service.dart (VERSÃO CORRIGIDA COM DOWNLOAD DE SEÇÕES)
 
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
@@ -75,12 +75,6 @@ class SyncService {
 
       _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, processados: totalGeral, mensagem: "Baixando dados da nuvem..."));
       
-      // <<< MUDANÇA CRÍTICA: A LINHA A SEGUIR FOI REMOVIDA >>>
-      // A remoção desta linha é a correção principal para o problema de perda de dados.
-      // Agora, a sincronização será não-destrutiva, apenas atualizando ou inserindo dados.
-      // await _dbHelper.deleteDatabaseFile(); 
-
-      // Garante que o banco de dados esteja inicializado antes de começar a baixar/mesclar os dados.
       await _dbHelper.database;
       
       await _downloadHierarquiaCompleta(licenseId);
@@ -107,11 +101,6 @@ class SyncService {
       rethrow;
     }
   }
-
-  //
-  // --- NENHUMA OUTRA MUDANÇA É NECESSÁRIA NO RESTANTE DO ARQUIVO ---
-  // A lógica de upload, download e _upsert já está correta para uma sincronização não-destrutiva.
-  //
 
   Future<void> _uploadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
@@ -438,6 +427,7 @@ class SyncService {
           
           await txn.delete('cubagens_secoes', where: 'cubagemArvoreId = ?', whereArgs: [cubagemDaNuvem.id]);
           
+          // <<< INÍCIO DA CORREÇÃO >>>
           final secoesSnapshot = await docSnapshot.reference.collection('secoes').get();
 
           if (secoesSnapshot.docs.isNotEmpty) {
@@ -447,6 +437,7 @@ class SyncService {
               await txn.insert('cubagens_secoes', secao.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
             }
           }
+          // <<< FIM DA CORREÇÃO >>>
 
         } catch (e, s) {
           debugPrint("Erro CRÍTICO ao sincronizar cubagem ${cubagemDaNuvem.id}: $e\n$s");
