@@ -1,4 +1,4 @@
-// lib/data/repositories/import_repository.dart (VERSÃO FINAL E COMPLETA)
+// lib/data/repositories/import_repository.dart (VERSÃO COM LEITURA DE RF E GERAÇÃO DE ID ÚNICO)
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
@@ -38,7 +38,7 @@ class ImportRepository {
     int parcelasCriadas = 0, arvoresCriadas = 0, cubagensCriadas = 0, secoesCriadas = 0;
     int parcelasAtualizadas = 0, cubagensAtualizadas = 0;
 
-    final Projeto? projeto = await _projetoRepository.getProjetoById(projetoIdAlvo);
+    Projeto? projeto = await _projetoRepository.getProjetoById(projetoIdAlvo);
     if (projeto == null) return "Erro Crítico: O projeto de destino não foi encontrado.";
     if (csvContent.isEmpty) return "Erro: O arquivo CSV está vazio.";
     
@@ -78,8 +78,26 @@ class ImportRepository {
       await db.transaction((txn) async {
         final now = DateTime.now().toIso8601String();
         
+        // <<< 1. Variável para guardar a RF do projeto durante a importação >>>
+        String? referenciaRfDoProjeto = projeto.referenciaRf;
+
         for (final row in dataRows) {
           linhasProcessadas++;
+
+          // <<< 2. Tenta ler e atualizar a RF a partir do CSV >>>
+          // Isso garante que, se a RF estiver presente em qualquer linha, ela será salva no projeto.
+          if (referenciaRfDoProjeto == null || referenciaRfDoProjeto.isEmpty) {
+            final rfDoCsv = getValue(row, ['referencia_rf', 'rf', 'referencia']);
+            if (rfDoCsv != null && rfDoCsv.isNotEmpty) {
+              referenciaRfDoProjeto = rfDoCsv;
+              await txn.update(
+                'projetos',
+                {'referencia_rf': referenciaRfDoProjeto, 'lastModified': now},
+                where: 'id = ?',
+                whereArgs: [projetoIdAlvo],
+              );
+            }
+          }
           
           final tipoAtividadeStr = getValue(row, ['atividade', 'tipo_atividade'])?.toUpperCase();
           if (tipoAtividadeStr == null) continue;
@@ -172,10 +190,17 @@ class ImportRepository {
                       }
                   }
 
+                  // <<< 3. GERA O ID ÚNICO DA AMOSTRA ("CPF") >>>
+                  String? idUnicoAmostra;
+                  if (referenciaRfDoProjeto != null && referenciaRfDoProjeto.isNotEmpty) {
+                    idUnicoAmostra = '${referenciaRfDoProjeto.trim()}-${talhao.nome.trim()}-${idParcelaColeta.trim()}';
+                  }
+
                   final statusStr = getValue(row, ['status_parcela']) ?? 'pendente';
                   final novaParcela = Parcela(
                       talhaoId: talhao.id!, 
                       idParcela: idParcelaColeta,
+                      idUnicoAmostra: idUnicoAmostra, // <<< 4. ADICIONA O ID ÚNICO AO OBJETO PARCELA >>>
                       areaMetrosQuadrados: double.tryParse(getValue(row, ['area_m2'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0,
                       status: StatusParcela.values.firstWhere((e) => e.name == statusStr, orElse: ()=> StatusParcela.pendente), 
                       dataColeta: DateTime.tryParse(getValue(row, ['data_coleta']) ?? ''),
