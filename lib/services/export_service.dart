@@ -1,43 +1,47 @@
-// lib/services/export_service.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/services/export_service.dart (VERSÃO FINAL, COMPLETA E LIMPA)
 
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_archive/flutter_archive.dart';
+import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
-import 'package:geoforestv1/models/diario_de_campo_model.dart';
-import 'package:geoforestv1/models/talhao_model.dart';
-import 'package:geoforestv1/widgets/progress_dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:geoforestv1/models/arvore_model.dart';
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:geoforestv1/data/repositories/projeto_repository.dart';
+import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
+import 'package:geoforestv1/models/arvore_model.dart';
+import 'package:geoforestv1/models/cubagem_arvore_model.dart';
+import 'package:geoforestv1/models/cubagem_secao_model.dart';
+import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
+import 'package:geoforestv1/models/talhao_model.dart';
+import 'package:geoforestv1/providers/license_provider.dart';
+import 'package:geoforestv1/providers/team_provider.dart';
 import 'package:geoforestv1/services/permission_service.dart';
+import 'package:geoforestv1/utils/constants.dart';
+import 'package:geoforestv1/widgets/manager_export_dialog.dart';
+import 'package:geoforestv1/widgets/progress_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_archive/flutter_archive.dart';
-import 'package:geoforestv1/models/cubagem_arvore_model.dart';
-import 'package:geoforestv1/providers/team_provider.dart';
-import 'package:geoforestv1/providers/license_provider.dart';
-import 'package:geoforestv1/data/repositories/parcela_repository.dart';
-import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
-import 'package:geoforestv1/data/repositories/projeto_repository.dart';
-import 'package:geoforestv1/data/repositories/talhao_repository.dart';
-import 'package:geoforestv1/utils/constants.dart';
-import 'package:geoforestv1/widgets/manager_export_dialog.dart';
-import 'package:geoforestv1/models/cubagem_secao_model.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+// O import do sqflite_common_ffi foi removido pois não é mais necessário aqui.
 
-// Classe de "encomenda" para a função de gerar CSV de parcelas
+// (O resto do arquivo permanece exatamente o mesmo, pois a lógica interna já estava correta)
+// As classes _Csv...Payload continuam iguais.
+// As funções _generate...InIsolate continuam iguais.
+// A classe ExportService continua igual.
+
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
   final Map<int, Map<String, dynamic>> talhoesMap;
-  // <<< DADOS DO PROJETO ADICIONADOS AQUI >>>
   final Map<int, Map<String, dynamic>> projetosMap;
   final String nomeLider;
   final String nomesAjudantes;
@@ -48,7 +52,7 @@ class _CsvParcelaPayload {
     required this.parcelasMap,
     required this.arvoresPorParcelaMap,
     required this.talhoesMap,
-    required this.projetosMap, // <<< ADICIONADO AO CONSTRUTOR
+    required this.projetosMap,
     required this.nomeLider,
     required this.nomesAjudantes,
     required this.nomeZona,
@@ -56,7 +60,6 @@ class _CsvParcelaPayload {
   });
 }
 
-// Classe de "encomenda" para a função de gerar CSV de cubagens
 class _CsvCubagemPayload {
   final List<Map<String, dynamic>> cubagensMap;
   final Map<int, List<Map<String, dynamic>>> secoesPorCubagemMap;
@@ -73,7 +76,6 @@ class _CsvCubagemPayload {
   });
 }
 
-// Classe de "encomenda" para a função de gerar CSV de desenvolvimento
 class _DevEquipePayload {
   final List<Map<String, dynamic>> coletasData;
   final String nomeZona;
@@ -86,7 +88,6 @@ class _DevEquipePayload {
   });
 }
 
-// Função que roda em paralelo para gerar o CSV das parcelas
 Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
@@ -102,14 +103,12 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
   }
 
   List<List<dynamic>> rows = [];
-  // <<< CABEÇALHO ATUALIZADO >>>
   rows.add(['Referencia_RF', 'ID_Unico_Amostra', 'Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_m2', 'Largura_m', 'Comprimento_m', 'Raio_m', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Dominante']);
   
   for (var pMap in payload.parcelasMap) {
     final p = Parcela.fromMap(pMap);
     final talhaoData = payload.talhoesMap[p.talhaoId] ?? {};
     
-    // <<< BUSCA OS DADOS DO PROJETO E A RF >>>
     final projetoData = payload.projetosMap[p.projetoId] ?? {};
     final referenciaRf = projetoData['referencia_rf'];
     
@@ -125,14 +124,12 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 
     final liderDaColeta = p.nomeLider ?? payload.nomeLider;
     if (arvores.isEmpty) {
-      // <<< ADICIONA OS NOVOS DADOS NA LINHA >>>
       rows.add([referenciaRf, p.idUnicoAmostra, p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null]);
     } else {
       Map<String, int> fusteCounter = {};
       for (final a in arvores) {
         String key = '${a.linha}-${a.posicaoNaLinha}';
         fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
-        // <<< ADICIONA OS NOVOS DADOS NA LINHA >>>
         rows.add([referenciaRf, p.idUnicoAmostra, p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.dominante ? 'Sim' : 'Não']);
       }
     }
@@ -140,9 +137,7 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
   return const ListToCsvConverter().convert(rows, fieldDelimiter: ';');
 }
 
-// ... as outras funções isolate não precisam de alteração
 Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) async {
-  // ... (código inalterado)
   List<List<dynamic>> rows = [];
   rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'id_db_arvore', 'id_fazenda', 'fazenda', 'talhao', 'area_talhao_ha', 'especie', 'espacamento', 'idade_anos', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm']);
   for (var cMap in payload.cubagensMap) {
@@ -163,8 +158,8 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
   }
   return const ListToCsvConverter().convert(rows, fieldDelimiter: ';');
 }
+
 Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
-  // ... (código inalterado)
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
     proj4.Projection.add('EPSG:$epsg', def);
@@ -233,14 +228,12 @@ class ExportService {
   final _atividadeRepository = AtividadeRepository();
   final _talhaoRepository = TalhaoRepository();
   
-  // <<< FUNÇÃO PRINCIPAL QUE PREPARA OS DADOS >>>
   Future<String> _gerarCsvParcela(List<Parcela> parcelas, String nomeArquivo) async {
     final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap = {};
     
     final Set<int> talhaoIds = parcelas.map((p) => p.talhaoId).whereType<int>().toSet();
     final Map<int, Map<String, dynamic>> talhoesMapParaIsolate = {};
 
-    // Busque os projetos relacionados para obter a RF
     final Set<int> projetoIds = parcelas.map((p) => p.projetoId).whereType<int>().toSet();
     final Map<int, Map<String, dynamic>> projetosMapParaIsolate = {};
 
@@ -251,7 +244,6 @@ class ExportService {
       }
     }
 
-    // Preencha o mapa de projetos com os dados necessários
     for (final projetoId in projetoIds) {
       final projeto = await _projetoRepository.getProjetoById(projetoId);
       if (projeto != null) {
@@ -271,7 +263,7 @@ class ExportService {
       parcelasMap: parcelas.map((p) => p.toMap()).toList(),
       arvoresPorParcelaMap: arvoresPorParcelaMap,
       talhoesMap: talhoesMapParaIsolate,
-      projetosMap: projetosMapParaIsolate, // <<< PASSE OS DADOS DO PROJETO
+      projetosMap: projetosMapParaIsolate,
       nomeLider: prefs.getString('nome_lider') ?? 'N/A',
       nomesAjudantes: prefs.getString('nomes_ajudantes') ?? 'N/A',
       nomeZona: prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S',
@@ -282,20 +274,18 @@ class ExportService {
 
     final dir = await getApplicationDocumentsDirectory();
     final path = '${dir.path}/$nomeArquivo';
-    final bom = [0xEF, 0xBB, 0xBF]; // BOM para garantir a codificação UTF-8 correta no Excel
+    final bom = [0xEF, 0xBB, 0xBF];
     final bytes = utf8.encode(csvData);
     await File(path).writeAsBytes([...bom, ...bytes]);
     return path;
   }
   
-  // ... (TODAS as outras funções de exportação como exportarDados, exportarBackupDaEquipe, _gerarCsvCubagem, exportarDiarioDeCampoCsv, etc., permanecem exatamente iguais) ...
   Future<void> exportarDesenvolvimentoEquipes(BuildContext context, {Set<int>? projetoIdsFiltrados}) async {
     try {
       if (!await _requestPermission(context)) return;
       
       ProgressDialog.show(context, 'Gerando relatório detalhado...');
 
-      // 1. Obter dados hierárquicos (sem alteração)
       final todosProjetos = await _projetoRepository.getTodosOsProjetosParaGerente();
       final projetos = (projetoIdsFiltrados == null || projetoIdsFiltrados.isEmpty)
           ? todosProjetos
@@ -322,7 +312,6 @@ class ExportService {
 
       final List<Map<String, dynamic>> allColetasData = [];
 
-      // 2. Processar PARCELAS DE INVENTÁRIO e mapear para as colunas corretas
       final todasAsParcelas = await _parcelaRepository.getTodasAsParcelas();
       final parcelasFiltradas = todasAsParcelas.where((p) => talhoesMap.containsKey(p.talhaoId));
 
@@ -366,14 +355,12 @@ class ExportService {
           'total_covas': covas.length,
           'total_falhas': falhas,
           'total_codigos_especiais': codigosEspeciais,
-          // Colunas de cubagem ficam nulas
           'cubagem_classe': null,
           'cubagem_cap': null,
           'cubagem_altura': null,
         });
       }
 
-      // 3. Processar DADOS DE CUBAGEM e mapear para as colunas corretas
       final todasAsCubagens = await _cubagemRepository.getTodasCubagens();
       final cubagensFiltradas = todasAsCubagens.where((c) => talhoesMap.containsKey(c.talhaoId));
 
@@ -397,17 +384,14 @@ class ExportService {
           'data_alteracao': null, 
           'responsavel': cubagem.nomeLider,
           'latitude': null, 'longitude': null,
-          // Colunas de inventário ficam nulas
           'parcela_area_m2': null,
           'parcela_largura_m': null,
           'parcela_comprimento_m': null,
           'parcela_observacao': null,
-          // Estatísticas de árvore
           'total_fustes': 1,
           'total_covas': 1,
           'total_falhas': 0,
           'total_codigos_especiais': 0,
-          // Colunas específicas de cubagem
           'cubagem_classe': cubagem.classe,
           'cubagem_cap': cubagem.valorCAP,
           'cubagem_altura': cubagem.alturaTotal,

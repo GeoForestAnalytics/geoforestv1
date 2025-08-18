@@ -1,4 +1,4 @@
-// lib/data/repositories/import_repository.dart (VERSÃO COM LEITURA DE RF E GERAÇÃO DE ID ÚNICO)
+// lib/data/repositories/import_repository.dart (VERSÃO COMPLETA E CORRIGIDA)
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
@@ -78,26 +78,11 @@ class ImportRepository {
       await db.transaction((txn) async {
         final now = DateTime.now().toIso8601String();
         
-        // <<< 1. Variável para guardar a RF do projeto durante a importação >>>
+        // Otimização: A RF do projeto é lida uma vez e usada como um fallback (plano B)
         String? referenciaRfDoProjeto = projeto.referenciaRf;
 
         for (final row in dataRows) {
           linhasProcessadas++;
-
-          // <<< 2. Tenta ler e atualizar a RF a partir do CSV >>>
-          // Isso garante que, se a RF estiver presente em qualquer linha, ela será salva no projeto.
-          if (referenciaRfDoProjeto == null || referenciaRfDoProjeto.isEmpty) {
-            final rfDoCsv = getValue(row, ['referencia_rf', 'rf', 'referencia']);
-            if (rfDoCsv != null && rfDoCsv.isNotEmpty) {
-              referenciaRfDoProjeto = rfDoCsv;
-              await txn.update(
-                'projetos',
-                {'referencia_rf': referenciaRfDoProjeto, 'lastModified': now},
-                where: 'id = ?',
-                whereArgs: [projetoIdAlvo],
-              );
-            }
-          }
           
           final tipoAtividadeStr = getValue(row, ['atividade', 'tipo_atividade'])?.toUpperCase();
           if (tipoAtividadeStr == null) continue;
@@ -114,7 +99,7 @@ class ImportRepository {
 
           final nomeFazenda = getValue(row, ['fazenda', 'nome_fazenda']);
           if (nomeFazenda == null) continue;
-          final idFazenda = getValue(row, ['codigo_fazenda', 'id_fazenda']) ?? nomeFazenda;
+          final idFazenda = getValue(row, ['codigo_fazenda', 'id_fazenda', 'fazenda_id']) ?? nomeFazenda;
           Fazenda? fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [idFazenda, atividade.id!])).map(Fazenda.fromMap).firstOrNull;
           if (fazenda == null) {
               fazenda = Fazenda(id: idFazenda, atividadeId: atividade.id!, nome: nomeFazenda, municipio: getValue(row, ['municipio']) ?? 'N/I', estado: getValue(row, ['estado']) ?? 'N/I');
@@ -134,7 +119,7 @@ class ImportRepository {
                 fazendaAtividadeId: fazenda.atividadeId, 
                 nome: nomeTalhao, 
                 projetoId: projeto.id,
-                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_talhão'])?.replaceAll(',', '.') ?? ''),
+                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_ha'])?.replaceAll(',', '.') ?? ''),
                 especie: getValue(row, ['especie']),
                 espacamento: getValue(row, ['espacamento', 'espacame']),
                 idadeAnos: double.tryParse(getValue(row, ['idade_anos', 'idade'])?.replaceAll(',', '.') ?? ''),
@@ -146,7 +131,7 @@ class ImportRepository {
               talhoesCriados++;
           } else {
               final talhaoAtualizado = talhao.copyWith(
-                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_talhão'])?.replaceAll(',', '.') ?? talhao.areaHa?.toString() ?? ''),
+                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_ha'])?.replaceAll(',', '.') ?? talhao.areaHa?.toString() ?? ''),
                 especie: getValue(row, ['especie']) ?? talhao.especie,
                 espacamento: getValue(row, ['espacamento', 'espacame']) ?? talhao.espacamento,
                 idadeAnos: double.tryParse(getValue(row, ['idade_anos', 'idade'])?.replaceAll(',', '.') ?? talhao.idadeAnos?.toString() ?? ''),
@@ -159,10 +144,30 @@ class ImportRepository {
           final tipoLinha = ['IPC', 'IFC', 'AUD', 'IFS', 'BIO', 'IFQ'].any((e) => tipoAtividadeStr.contains(e)) ? TipoImportacao.inventario : (tipoAtividadeStr.contains('CUB') ? TipoImportacao.cubagem : TipoImportacao.desconhecido);
 
           if (tipoLinha == TipoImportacao.inventario) {
-              final idParcelaColeta = getValue(row, ['id_coleta_parcela', 'id_parcela']);
+              final idParcelaColeta = getValue(row, ['id_coleta_parcela', 'id_parcela', 'amostra']);
               if (idParcelaColeta == null) continue;
               
-              Parcela? parcela = (await txn.query('parcelas', where: 'idParcela = ? AND talhaoId = ?', whereArgs: [idParcelaColeta, talhao.id!])).map(Parcela.fromMap).firstOrNull;
+              // Lógica de Geração do ID Único
+              final referenciaDaLinha = getValue(row, ['referencia_rf', 'rf', 'referencia']);
+              final referenciaFinal = referenciaDaLinha ?? referenciaRfDoProjeto;
+              String? idUnicoAmostra;
+              if (referenciaFinal != null && referenciaFinal.isNotEmpty) {
+                idUnicoAmostra = '${referenciaFinal.trim()}-${talhao.nome.trim()}-${idParcelaColeta.trim()}';
+              }
+
+              Parcela? parcela;
+              if (idUnicoAmostra != null) {
+                  final List<Map<String, dynamic>> result = await txn.query('parcelas', where: 'id_unico_amostra = ?', whereArgs: [idUnicoAmostra]);
+                  if (result.isNotEmpty) {
+                      parcela = Parcela.fromMap(result.first);
+                  }
+              } else {
+                  final List<Map<String, dynamic>> result = await txn.query('parcelas', where: 'idParcela = ? AND talhaoId = ?', whereArgs: [idParcelaColeta, talhao.id!]);
+                   if (result.isNotEmpty) {
+                      parcela = Parcela.fromMap(result.first);
+                  }
+              }
+
               int parcelaDbId;
 
               if(parcela == null) {
@@ -190,17 +195,11 @@ class ImportRepository {
                       }
                   }
 
-                  // <<< 3. GERA O ID ÚNICO DA AMOSTRA ("CPF") >>>
-                  String? idUnicoAmostra;
-                  if (referenciaRfDoProjeto != null && referenciaRfDoProjeto.isNotEmpty) {
-                    idUnicoAmostra = '${referenciaRfDoProjeto.trim()}-${talhao.nome.trim()}-${idParcelaColeta.trim()}';
-                  }
-
                   final statusStr = getValue(row, ['status_parcela']) ?? 'pendente';
                   final novaParcela = Parcela(
                       talhaoId: talhao.id!, 
                       idParcela: idParcelaColeta,
-                      idUnicoAmostra: idUnicoAmostra, // <<< 4. ADICIONA O ID ÚNICO AO OBJETO PARCELA >>>
+                      idUnicoAmostra: idUnicoAmostra,
                       areaMetrosQuadrados: double.tryParse(getValue(row, ['area_m2'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0,
                       status: StatusParcela.values.firstWhere((e) => e.name == statusStr, orElse: ()=> StatusParcela.pendente), 
                       dataColeta: DateTime.tryParse(getValue(row, ['data_coleta']) ?? ''),
@@ -259,7 +258,6 @@ class ImportRepository {
               }
           } 
           else if (tipoLinha == TipoImportacao.cubagem) {
-              
               final idArvore = getValue(row, ['identificador_arvore', 'id_db_arvore']);
               if (idArvore == null) continue;
 
