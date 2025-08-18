@@ -1,4 +1,4 @@
-// lib/pages/menu/splash_page.dart (VERSÃO CORRIGIDA E SIMPLIFICADA)
+// lib/pages/menu/splash_page.dart
 
 import 'package:flutter/material.dart';
 
@@ -7,15 +7,20 @@ class SplashPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // A Splash Page agora é "burra". Ela apenas exibe a imagem e não faz mais nada.
-    // A lógica de navegação foi movida para o AppInitializer no main.dart.
-    return const Scaffold(
-      backgroundColor: Color.fromARGB(255, 243, 243, 244),
-      body: Center(
-        child: Image(
-          image: AssetImage('assets/images/icon2.png'),
-          width: 280,
-          fit: BoxFit.contain,
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/fundo_textura.png'), // Caminho da sua imagem de textura
+            fit: BoxFit.cover, // Faz a imagem cobrir toda a tela
+          ),
+        ),
+        child: const Center(
+          child: Image(
+            image: AssetImage('assets/images/logo_oficial.png'),
+            width: 280,
+            fit: BoxFit.contain,
+          ),
         ),
       ),
     );
