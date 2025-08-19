@@ -1,8 +1,7 @@
-// lib/providers/map_provider.dart (VERSÃO FINAL COM INICIALIZAÇÃO DE BD NOS ISOLATES)
+// lib/providers/map_provider.dart (VERSÃO CORRIGIDA COM INICIALIZAÇÃO DE BD NOS ISOLATES)
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io'; // Import para Platform
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -25,7 +24,7 @@ import 'package:geoforestv1/services/sampling_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // Import para sqflite_common_ffi
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // --- PACOTES DE DADOS PARA ISOLATES ---
 
@@ -59,20 +58,22 @@ class _GerarAmostrasPayload {
     });
 }
 
-// <<< FUNÇÃO ADICIONADA AQUI >>>
-// Esta função precisa ser chamada no início de qualquer Isolate que acessa o banco.
+// --- FUNÇÃO DE INICIALIZAÇÃO PARA ISOLATES ---
+// <<< CORREÇÃO PRINCIPAL AQUI >>>
 void _initializeDatabaseForIsolate() {
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  }
+  // Como estamos em um Isolate, não podemos usar a implementação padrão do 
+  // sqflite que depende de Platform Channels (usada no Android/iOS).
+  // Portanto, inicializamos a implementação FFI, que funciona em todas 
+  // as plataformas (Desktop, Android, iOS) sem essa dependência.
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
 }
 
 
 // --- FUNÇÕES GLOBAIS PARA ISOLATES ---
 
 Future<String> _processarPlanoDeAmostragemInIsolate(_PlanoImportPayload payload) async {
-  _initializeDatabaseForIsolate(); // <<< CHAMADA ADICIONADA AQUI
+  _initializeDatabaseForIsolate();
   final db = await DatabaseHelper.instance.database;
   final List<Parcela> parcelasParaSalvar = [];
   int novasFazendas = 0;
@@ -125,6 +126,7 @@ Future<String> _processarPlanoDeAmostragemInIsolate(_PlanoImportPayload payload)
         } else {
           talhao = Talhao(
             fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao,
+            projetoId: payload.projetoId, // <<< MELHORIA DE CONSISTÊNCIA
             especie: props['especie']?.toString(), areaHa: (props['area_ha'] as num?)?.toDouble(),
             espacamento: props['espacam']?.toString(),
           );
@@ -183,7 +185,7 @@ Future<String> _processarPlanoDeAmostragemInIsolate(_PlanoImportPayload payload)
 }
 
 Future<String> _gerarAmostrasInIsolate(_GerarAmostrasPayload payload) async {
-    _initializeDatabaseForIsolate(); // <<< CHAMADA ADICIONADA AQUI
+    _initializeDatabaseForIsolate();
     final db = await DatabaseHelper.instance.database;
     final samplingService = SamplingService();
 
@@ -261,7 +263,6 @@ enum MapLayerType { ruas, satelite, sateliteMapbox }
 
 class MapProvider with ChangeNotifier {
   final _geoJsonService = GeoJsonService();
-  final _dbHelper = DatabaseHelper.instance;
   final _exportService = ExportService();
   
   final _parcelaRepository = ParcelaRepository();
@@ -284,7 +285,6 @@ class MapProvider with ChangeNotifier {
 
   MapProvider();
 
-  // Getters
   bool get isDrawing => _isDrawing;
   List<LatLng> get drawnPoints => _drawnPoints;
   List<Polygon> get polygons => _importedPolygons.map((f) => f.polygon).toList();
@@ -368,7 +368,7 @@ class MapProvider with ChangeNotifier {
       final hectaresPorAmostra = double.parse(dadosDoFormulario['hectares']!);
       final now = DateTime.now().toIso8601String();
   
-      final talhaoSalvo = await _dbHelper.database.then((db) async {
+      final talhaoSalvo = await DatabaseHelper.instance.database.then((db) async {
         return await db.transaction((txn) async {
           final idFazenda = codigoFazenda.isNotEmpty ? codigoFazenda : nomeFazenda;
   
@@ -383,6 +383,7 @@ class MapProvider with ChangeNotifier {
           final novoTalhao = Talhao(
             fazendaId: fazenda.id,
             fazendaAtividadeId: fazenda.atividadeId,
+            projetoId: _currentAtividade!.projetoId, // <<< MELHORIA DE CONSISTÊNCIA
             nome: nomeTalhao,
           );
           final map = novoTalhao.toMap();
@@ -624,7 +625,7 @@ class MapProvider with ChangeNotifier {
     int talhoesCriados = 0;
     final now = DateTime.now().toIso8601String();
     
-    await _dbHelper.database.then((db) async => await db.transaction((txn) async {
+    await DatabaseHelper.instance.database.then((db) async => await db.transaction((txn) async {
       for (final feature in features) {
         final props = feature.properties;
         final fazendaId = (props['id_fazenda'] ?? props['fazenda_id'] ?? props['fazenda_nome'] ?? props['fazenda'])?.toString();
@@ -648,6 +649,7 @@ class MapProvider with ChangeNotifier {
         if (talhao == null) {
           talhao = Talhao(
             fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao,
+            projetoId: _currentAtividade!.projetoId, // <<< MELHORIA DE CONSISTÊNCIA
             especie: props['especie']?.toString(), areaHa: (props['area_ha'] as num?)?.toDouble(),
           );
           final map = talhao.toMap();

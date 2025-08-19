@@ -29,7 +29,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 36, // <<< VERSÃO CORRETA >>>
+      version: 37, // <<< VERSÃO CORRETA >>>
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -119,6 +119,7 @@ class DatabaseHelper {
         projetoId INTEGER,
         municipio TEXT, 
         estado TEXT,
+        atividadeTipo TEXT,
         id_unico_amostra TEXT,
         lastModified TEXT NOT NULL,
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
@@ -301,6 +302,9 @@ class DatabaseHelper {
             )
           ''');
           break;
+        case 37:
+        await db.execute('ALTER TABLE parcelas ADD COLUMN atividadeTipo TEXT');
+        break;
         }
     }
   }
