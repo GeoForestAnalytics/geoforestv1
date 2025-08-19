@@ -1,4 +1,4 @@
-// lib/pages/menu/configuracoes_page.dart (VERSÃO CORRETA E LIMPA)
+// lib/pages/menu/configuracoes_page.dart (VERSÃO ATUALIZADA)
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +11,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:geoforestv1/pages/projetos/gerenciar_delegacoes_page.dart';
 import 'package:geoforestv1/providers/theme_provider.dart';
 import 'package:geoforestv1/pages/gerente/gerenciar_equipe_page.dart';
+// <<< ADICIONADO AQUI: Import para a nova página de relatório >>>
+import 'package:geoforestv1/pages/menu/relatorio_diario_page.dart'; 
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/utils/constants.dart';
@@ -214,6 +216,20 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                   const Divider(thickness: 1, height: 48),
                   const Text('Gerenciamento de Dados', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                   const SizedBox(height: 12),
+                  
+                  // <<< ADICIONADO AQUI: O botão para abrir o Diário de Campo >>>
+                  ListTile(
+                    leading: const Icon(Icons.today_outlined, color: Colors.blueGrey),
+                    title: const Text('Gerar Relatório Diário da Equipe'),
+                    subtitle: const Text('Visualize e exporte as coletas de um dia específico.'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const RelatorioDiarioPage()),
+                      );
+                    },
+                  ),
+
                   if (isGerente)
                     ListTile(
                       leading: const Icon(Icons.handshake_outlined, color: Colors.teal),

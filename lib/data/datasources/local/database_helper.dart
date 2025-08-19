@@ -29,8 +29,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      // <<< CORREÇÃO 2.1: Incrementar a versão do banco de dados
-      version: 34, 
+      // <<< MUDANÇA 1: Incrementar a versão do banco de dados para 36 >>>
+      version: 36,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -40,7 +40,8 @@ class DatabaseHelper {
   Future<void> _onConfigure(Database db) async => await db.execute('PRAGMA foreign_keys = ON');
 
   Future<void> _onCreate(Database db, int version) async {
-     await db.execute('''
+    // <<< MUDANÇA 2: Adicionar novas colunas nas tabelas existentes para novas instalações >>>
+    await db.execute('''
       CREATE TABLE projetos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         licenseId TEXT,
@@ -50,6 +51,7 @@ class DatabaseHelper {
         dataCriacao TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'ativo',
         delegado_por_license_id TEXT,
+        referencia_rf TEXT,
         lastModified TEXT NOT NULL 
       )
     ''');
@@ -78,7 +80,6 @@ class DatabaseHelper {
       )
     ''');
     
-    // <<< CORREÇÃO 1: Removida a tabela duplicada. Esta é a versão CORRETA.
     await db.execute('''
       CREATE TABLE talhoes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,6 +121,7 @@ class DatabaseHelper {
         projetoId INTEGER,
         municipio TEXT, 
         estado TEXT,
+        id_unico_amostra TEXT,
         lastModified TEXT NOT NULL,
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
@@ -184,14 +186,41 @@ class DatabaseHelper {
         diametroMaximo REAL NOT NULL
       )
     ''');
+    
+    // <<< MUDANÇA 3: Adicionar a nova tabela de diário de campo para novas instalações >>>
+    await db.execute('''
+      CREATE TABLE diario_de_campo (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        data_relatorio TEXT NOT NULL,
+        nome_lider TEXT NOT NULL,
+        projeto_id INTEGER NOT NULL,
+        talhao_id INTEGER NOT NULL,
+        km_inicial REAL,
+        km_final REAL,
+        localizacao_destino TEXT,
+        pedagio_valor REAL,
+        abastecimento_valor REAL,
+        alimentacao_marmitas_qtd INTEGER,
+        alimentacao_refeicao_valor REAL,
+        alimentacao_descricao TEXT,
+        veiculo_placa TEXT,
+        veiculo_modelo TEXT,
+        equipe_no_carro TEXT,
+        lastModified TEXT NOT NULL,
+        UNIQUE(data_relatorio, nome_lider, talhao_id)
+      )
+    ''');
+    
     await db.execute('CREATE INDEX idx_arvores_parcelaId ON arvores(parcelaId)');
     await db.execute('CREATE INDEX idx_cubagens_secoes_cubagemArvoreId ON cubagens_secoes(cubagemArvoreId)');
+    // <<< MUDANÇA 4: Adicionar o novo índice para o RG da coleta >>>
+    await db.execute('CREATE INDEX idx_parcelas_id_unico ON parcelas(id_unico_amostra)');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     for (var v = oldVersion + 1; v <= newVersion; v++) {
       debugPrint("Executando migração de banco de dados para a versão $v...");
-       switch (v) {
+      switch (v) {
         case 25:
           await db.execute('ALTER TABLE parcelas ADD COLUMN uuid TEXT');
           final parcelasSemUuid = await db.query('parcelas', where: 'uuid IS NULL');
@@ -242,9 +271,39 @@ class DatabaseHelper {
           await db.update('cubagens_arvores', {'lastModified': now}, where: 'lastModified IS NULL');
           await db.update('cubagens_secoes', {'lastModified': now}, where: 'lastModified IS NULL');
           break;
-        // <<< CORREÇÃO 2.2: Adicionar a migração para a nova versão
         case 34:
           await db.execute('ALTER TABLE talhoes ADD COLUMN projetoId INTEGER');
+          break;
+        // <<< MUDANÇA 5: Adicionar a migração para a versão 35 (RG da Coleta) >>>
+        case 35:
+          await db.execute('ALTER TABLE projetos ADD COLUMN referencia_rf TEXT');
+          await db.execute('ALTER TABLE parcelas ADD COLUMN id_unico_amostra TEXT');
+          await db.execute('CREATE INDEX idx_parcelas_id_unico ON parcelas(id_unico_amostra)');
+          break;
+        // <<< MUDANÇA 6: Adicionar a migração para a versão 36 (Diário de Campo) >>>
+        case 36:
+          await db.execute('''
+            CREATE TABLE diario_de_campo (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              data_relatorio TEXT NOT NULL,
+              nome_lider TEXT NOT NULL,
+              projeto_id INTEGER NOT NULL,
+              talhao_id INTEGER NOT NULL,
+              km_inicial REAL,
+              km_final REAL,
+              localizacao_destino TEXT,
+              pedagio_valor REAL,
+              abastecimento_valor REAL,
+              alimentacao_marmitas_qtd INTEGER,
+              alimentacao_refeicao_valor REAL,
+              alimentacao_descricao TEXT,
+              veiculo_placa TEXT,
+              veiculo_modelo TEXT,
+              equipe_no_carro TEXT,
+              lastModified TEXT NOT NULL,
+              UNIQUE(data_relatorio, nome_lider, talhao_id)
+            )
+          ''');
           break;
         }
     }
