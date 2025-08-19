@@ -1,10 +1,12 @@
-// lib/data/repositories/parcela_repository.dart (VERSÃO ATUALIZADA COM lastModified)
+// lib/data/repositories/parcela_repository.dart (VERSÃO ATUALIZADA E CORRIGIDA)
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
+// <<< ADICIONE ESTE IMPORT >>>
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -13,7 +15,7 @@ class ParcelaRepository {
 
   Future<Parcela> saveFullColeta(Parcela p, List<Arvore> arvores) async {
     final db = await _dbHelper.database;
-    final now = DateTime.now().toIso8601String(); // <<< 1. PEGA A HORA ATUAL
+    final now = DateTime.now().toIso8601String();
 
     await db.transaction((txn) async {
       int pId;
@@ -21,12 +23,11 @@ class ParcelaRepository {
       final pMap = p.toMap();
       final d = p.dataColeta ?? DateTime.now();
       pMap['dataColeta'] = d.toIso8601String();
-      pMap['lastModified'] = now; // <<< 2. CARIMBA A PARCELA
+      pMap['lastModified'] = now;
 
-      // ... (o resto da sua lógica para buscar projetoId e nome do líder continua igual)
       if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
         final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
-          SELECT A.projetoId FROM talhoes T
+          SELECT T.projetoId FROM talhoes T
           INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
           INNER JOIN atividades A ON F.atividadeId = A.id
           WHERE T.id = ? LIMIT 1
@@ -37,6 +38,8 @@ class ParcelaRepository {
           p = p.copyWith(projetoId: talhaoInfo.first['projetoId'] as int?);
         }
       }
+           // <<< FIM DA LÓGICA DE GERAÇÃO DO RG DA COLETA >>>
+
 
       final prefs = await SharedPreferences.getInstance();
       String? nomeDoResponsavel = prefs.getString('nome_lider');
@@ -49,7 +52,6 @@ class ParcelaRepository {
       if (nomeDoResponsavel != null) {
         pMap['nomeLider'] = nomeDoResponsavel;
       }
-      // ... (fim da lógica existente)
 
       if (p.dbId == null) {
         pMap.remove('id');
@@ -64,12 +66,13 @@ class ParcelaRepository {
       for (final a in arvores) {
         final aMap = a.toMap();
         aMap['parcelaId'] = pId;
-        aMap['lastModified'] = now; // <<< 3. CARIMBA CADA ÁRVORE
+        aMap['lastModified'] = now;
         await txn.insert('arvores', aMap);
       }
     });
     return p;
   }
+
 
   Future<void> saveBatchParcelas(List<Parcela> parcelas) async {
     final db = await _dbHelper.database;
@@ -96,14 +99,13 @@ class ParcelaRepository {
     final db = await _dbHelper.database;
     await db.update('parcelas', {
       'status': novoStatus.name,
-      'lastModified': DateTime.now().toIso8601String(), // <<< ADICIONADO
+      'lastModified': DateTime.now().toIso8601String(),
     },
         where: 'id = ?', whereArgs: [parcelaId]);
   }
 
   // --- MÉTODOS DE CONSULTA (GET) ---
 
-  // <<< NOVO MÉTODO ADICIONADO AQUI >>>
   Future<List<Parcela>> getTodasAsParcelas() async {
     final db = await _dbHelper.database;
     final maps = await db.query('parcelas', orderBy: 'dataColeta DESC');
@@ -283,8 +285,6 @@ class ParcelaRepository {
 
   Future<Parcela?> getOneUnsyncedParcel() async {
     final db = await _dbHelper.database;
-    // A mágica está no 'LIMIT 1', que garante que o banco de dados
-    // nos retorne no máximo um registro.
     final maps = await db.query(
       'parcelas',
       where: 'isSynced = ?',
@@ -295,5 +295,28 @@ class ParcelaRepository {
       return Parcela.fromMap(maps.first);
     }
     return null;
+  }
+
+  // <<< MÉTODO NOVO PARA O DIÁRIO DE CAMPO >>>
+  Future<List<Parcela>> getParcelasDoDiaPorEquipeEFiltros({
+    required String nomeLider,
+    required DateTime dataSelecionada,
+    required int talhaoId,
+  }) async {
+    final db = await _dbHelper.database;
+    
+    final dataFormatadaParaQuery = DateFormat('yyyy-MM-dd').format(dataSelecionada);
+
+    final List<Map<String, dynamic>> maps = await db.query(
+      'parcelas',
+      where: 'talhaoId = ? AND nomeLider = ? AND DATE(dataColeta) = ?',
+      whereArgs: [talhaoId, nomeLider, dataFormatadaParaQuery],
+      orderBy: 'dataColeta DESC',
+    );
+
+    if (maps.isNotEmpty) {
+      return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
+    }
+    return [];
   }
 }

@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO FINAL COM EXPORTAÇÃO UNIFICADA E COLUNAS SEPARADAS)
+// lib/services/export_service.dart (VERSÃO FINAL COM CORREÇÃO DO LINTER)
 
 import 'dart:io';
 import 'dart:convert';
@@ -6,6 +6,7 @@ import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
+import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/widgets/progress_dialog.dart';
 import 'package:provider/provider.dart';
@@ -31,6 +32,8 @@ import 'package:geoforestv1/widgets/manager_export_dialog.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
+// ... (Classes _CsvParcelaPayload, _CsvCubagemPayload, _DevEquipePayload e as funções Isolate permanecem as mesmas)
+// (Vou omiti-las aqui por brevidade, mas elas devem continuar no seu arquivo)
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
@@ -147,7 +150,6 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
   return const ListToCsvConverter().convert(rows, fieldDelimiter: ';');
 }
 
-// <<< CORREÇÃO: Função Isolate atualizada para o novo formato de CSV >>>
 Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
@@ -216,15 +218,84 @@ class ExportService {
   final _projetoRepository = ProjetoRepository();
   final _atividadeRepository = AtividadeRepository();
   final _talhaoRepository = TalhaoRepository();
+
+  Future<void> exportarDiarioDeCampoCsv({required BuildContext context, required DiarioDeCampo diario}) async {
+    try {
+      if (!await _requestPermission(context)) return;
+
+      final projeto = await _projetoRepository.getProjetoById(diario.projetoId);
+      final talhao = await _talhaoRepository.getTalhaoById(diario.talhaoId);
+
+      List<List<dynamic>> rows = [
+        ['Campo', 'Valor'],
+        ['Data do Relatório', diario.dataRelatorio],
+        ['Líder da Equipe', diario.nomeLider],
+        ['Equipe Completa', diario.equipeNoCarro],
+        ['Projeto', projeto?.nome ?? 'N/A'],
+        ['Fazenda', talhao?.fazendaNome ?? 'N/A'],
+        ['Talhão', talhao?.nome ?? 'N/A'],
+        ['Placa do Veículo', diario.veiculoPlaca],
+        ['Modelo do Veículo', diario.veiculoModelo],
+        ['KM Inicial', diario.kmInicial],
+        ['KM Final', diario.kmFinal],
+        ['Destino', diario.localizacaoDestino],
+        ['Pedágio (R\$)', diario.pedagioValor?.toStringAsFixed(2).replaceAll('.', ',')],
+        ['Abastecimento (R\$)', diario.abastecimentoValor?.toStringAsFixed(2).replaceAll('.', ',')],
+        ['Qtd. Marmitas', diario.alimentacaoMarmitasQtd],
+        ['Valor Refeição (R\$)', diario.alimentacaoRefeicaoValor?.toStringAsFixed(2).replaceAll('.', ',')],
+        ['Descrição Alimentação', diario.alimentacaoDescricao],
+      ];
+
+      final csvData = const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
+      final nomeLiderFormatado = diario.nomeLider.replaceAll(RegExp(r'\s+'), '_');
+      final dataFormatada = diario.dataRelatorio;
+      final fName = 'diario_de_campo_${nomeLiderFormatado}_${dataFormatada}.csv';
+      
+      await _salvarECompartilharCsv(context, csvData, fName, 'Diário de Campo - GeoForest');
+
+    } catch (e, s) {
+      _handleExportError(context, 'exportar diário de campo', e, s);
+    }
+  }
+
+  Future<void> exportarRelatorioDiarioCsv({
+    required BuildContext context,
+    required List<Parcela> parcelas,
+    required String lider,
+    required String ajudantes
+  }) async {
+    try {
+      if (!await _requestPermission(context)) return;
+
+      if (parcelas.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Nenhuma parcela coletada para exportar.'),
+          backgroundColor: Colors.orange,
+        ));
+        return;
+      }
+      
+      final dataFormatada = DateFormat('yyyy-MM-dd').format(parcelas.first.dataColeta!);
+      final nomeLiderFormatado = lider.replaceAll(RegExp(r'\s+'), '_');
+      final fName = 'coletas_${nomeLiderFormatado}_${dataFormatada}.csv';
+      
+      final path = await _gerarCsvParcela(parcelas, fName);
+      
+      if (context.mounted) {
+        await Share.shareXFiles([XFile(path)], subject: 'Coletas do dia - GeoForest');
+      }
+
+    } catch (e, s) {
+      _handleExportError(context, 'exportar coletas do dia', e, s);
+    }
+  }
   
-  // <<< CORREÇÃO: Função principal unificada para gerar o novo CSV >>>
   Future<void> exportarDesenvolvimentoEquipes(BuildContext context, {Set<int>? projetoIdsFiltrados}) async {
     try {
       if (!await _requestPermission(context)) return;
       
       ProgressDialog.show(context, 'Gerando relatório detalhado...');
 
-      // 1. Obter dados hierárquicos (sem alteração)
       final todosProjetos = await _projetoRepository.getTodosOsProjetosParaGerente();
       final projetos = (projetoIdsFiltrados == null || projetoIdsFiltrados.isEmpty)
           ? todosProjetos
@@ -251,7 +322,6 @@ class ExportService {
 
       final List<Map<String, dynamic>> allColetasData = [];
 
-      // 2. Processar PARCELAS DE INVENTÁRIO e mapear para as colunas corretas
       final todasAsParcelas = await _parcelaRepository.getTodasAsParcelas();
       final parcelasFiltradas = todasAsParcelas.where((p) => talhoesMap.containsKey(p.talhaoId));
 
@@ -295,14 +365,12 @@ class ExportService {
           'total_covas': covas.length,
           'total_falhas': falhas,
           'total_codigos_especiais': codigosEspeciais,
-          // Colunas de cubagem ficam nulas
           'cubagem_classe': null,
           'cubagem_cap': null,
           'cubagem_altura': null,
         });
       }
 
-      // 3. Processar DADOS DE CUBAGEM e mapear para as colunas corretas
       final todasAsCubagens = await _cubagemRepository.getTodasCubagens();
       final cubagensFiltradas = todasAsCubagens.where((c) => talhoesMap.containsKey(c.talhaoId));
 
@@ -326,17 +394,14 @@ class ExportService {
           'data_alteracao': null, 
           'responsavel': cubagem.nomeLider,
           'latitude': null, 'longitude': null,
-          // Colunas de inventário ficam nulas
           'parcela_area_m2': null,
           'parcela_largura_m': null,
           'parcela_comprimento_m': null,
           'parcela_observacao': null,
-          // Estatísticas de árvore
           'total_fustes': 1,
           'total_covas': 1,
           'total_falhas': 0,
           'total_codigos_especiais': 0,
-          // Colunas específicas de cubagem
           'cubagem_classe': cubagem.classe,
           'cubagem_cap': cubagem.valorCAP,
           'cubagem_altura': cubagem.alturaTotal,
@@ -360,28 +425,18 @@ class ExportService {
 
       final String csvData = await compute(_generateDevEquipeCsvInIsolate, payload);
       
-      final dir = await getApplicationDocumentsDirectory();
       final fName = 'relatorio_desenvolvimento_equipes_${DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now())}.csv';
-      final path = '${dir.path}/$fName';
-      final bom = [0xEF, 0xBB, 0xBF];
-      final bytes = utf8.encode(csvData);
-      await File(path).writeAsBytes([...bom, ...bytes]);
+      
+      await _salvarECompartilharCsv(context, csvData, fName, 'Relatório de Desenvolvimento de Equipes - GeoForest');
 
       ProgressDialog.hide(context);
-      if (context.mounted) {
-        await Share.shareXFiles([XFile(path)], subject: 'Relatório de Desenvolvimento de Equipes - GeoForest');
-      }
 
     } catch (e, s) {
       ProgressDialog.hide(context);
       _handleExportError(context, 'gerar relatório de desenvolvimento', e, s);
     }
   }
-  
-  // O restante das funções de exportação (exportarDados, exportarTodasAsParcelasBackup, etc.)
-  // não precisa de alteração, pois eles chamam outras funções isolate que geram CSVs específicos.
-  // Apenas a exportação de "Desenvolvimento das Equipes" foi unificada.
-  
+
   Future<void> exportarDados(BuildContext context) async {
     try {
       if (!await _requestPermission(context)) return;
@@ -553,13 +608,8 @@ class ExportService {
     );
 
     final String csvData = await compute(_generateCsvParcelaDataInIsolate, payload);
-
-    final dir = await getApplicationDocumentsDirectory();
-    final path = '${dir.path}/$nomeArquivo';
-    final bom = [0xEF, 0xBB, 0xBF];
-    final bytes = utf8.encode(csvData);
-    await File(path).writeAsBytes([...bom, ...bytes]);
-    return path;
+    
+    return await _salvarEObterCaminho(csvData, nomeArquivo);
   }
   
   Future<void> exportarNovasCubagens(BuildContext context) async {
@@ -624,13 +674,8 @@ class ExportService {
     if (nomeArquivoOuCaminhoCompleto.contains('/')) {
         path = nomeArquivoOuCaminhoCompleto;
     } else {
-        final dir = await getApplicationDocumentsDirectory();
-        path = '${dir.path}/$nomeArquivoOuCaminhoCompleto';
+        path = await _salvarEObterCaminho(csvData, nomeArquivoOuCaminhoCompleto);
     }
-    
-    final bom = [0xEF, 0xBB, 0xBF];
-    final bytes = utf8.encode(csvData);
-    await File(path).writeAsBytes([...bom, ...bytes]);
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -642,6 +687,7 @@ class ExportService {
     }
   }
 
+  // <<< CORREÇÃO APLICADA AQUI >>>
   Future<void> exportarAnaliseTalhaoCsv({
     required BuildContext context,
     required Talhao talhao,
@@ -650,6 +696,7 @@ class ExportService {
     try {
       if (!await _requestPermission(context)) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando arquivo CSV...')));
+      
       List<List<dynamic>> rows = [];
       rows.add(['Resumo do Talhão']);
       rows.add(['Métrica', 'Valor']);
@@ -672,6 +719,7 @@ class ExportService {
       rows.add(['']);
       rows.add(['Distribuição Diamétrica (CAP)']);
       rows.add(['Classe (cm)', 'Nº de Árvores', '%']);
+      
       final totalArvoresVivas = analise.distribuicaoDiametrica.values.fold(0, (a, b) => a + b);
       analise.distribuicaoDiametrica.forEach((pontoMedio, contagem) {
         final inicioClasse = pontoMedio - 2.5;
@@ -679,16 +727,14 @@ class ExportService {
         final porcentagem = totalArvoresVivas > 0 ? (contagem / totalArvoresVivas) * 100 : 0;
         rows.add(['${inicioClasse.toStringAsFixed(1)} - ${fimClasse.toStringAsFixed(1)}', contagem, '${porcentagem.toStringAsFixed(1)}%']);
       });
-      final dir = await getApplicationDocumentsDirectory();
+
       final hoje = DateTime.now();
       final fName = 'analise_talhao_${talhao.nome.replaceAll(' ', '_')}_${DateFormat('yyyy-MM-dd_HH-mm').format(hoje)}.csv';
-      final path = '${dir.path}/$fName';
       final csvData = const ListToCsvConverter().convert(rows);
-      await File(path).writeAsString(csvData, encoding: utf8);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        await Share.shareXFiles([XFile(path)], subject: 'Análise do Talhão ${talhao.nome}');
-      }
+
+      // Substitui a lógica manual pela função auxiliar
+      await _salvarECompartilharCsv(context, csvData, fName, 'Análise do Talhão ${talhao.nome}');
+
     } catch (e, s) {
       _handleExportError(context, 'exportar análise', e, s);
     }
@@ -830,6 +876,23 @@ class ExportService {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Falha ao $action: ${e.toString()}'),
           backgroundColor: Colors.red));
+    }
+  }
+
+  Future<String> _salvarEObterCaminho(String csvData, String fileName) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final path = '${dir.path}/$fileName';
+    final bom = [0xEF, 0xBB, 0xBF]; 
+    final bytes = utf8.encode(csvData);
+    await File(path).writeAsBytes([...bom, ...bytes]);
+    return path;
+  }
+
+  Future<void> _salvarECompartilharCsv(BuildContext context, String csvData, String fileName, String subject) async {
+    final path = await _salvarEObterCaminho(csvData, fileName);
+     if (context.mounted) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      await Share.shareXFiles([XFile(path)], subject: subject);
     }
   }
 }
