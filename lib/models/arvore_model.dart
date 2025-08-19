@@ -26,6 +26,7 @@ class Arvore {
   final double? alturaAuditoria;
   double? volume;
   final DateTime? lastModified;
+  final double? alturaDano; // <<< CAMPO ADICIONADO
 
   Arvore({
     this.id,
@@ -41,6 +42,7 @@ class Arvore {
     this.alturaAuditoria,
     this.volume,
     this.lastModified,
+    this.alturaDano, // <<< CAMPO ADICIONADO
   });
 
   Arvore copyWith({
@@ -57,6 +59,7 @@ class Arvore {
     double? alturaAuditoria,
     double? volume,
     DateTime? lastModified,
+    double? alturaDano, // <<< CAMPO ADICIONADO
   }) {
     return Arvore(
       id: id ?? this.id,
@@ -72,6 +75,7 @@ class Arvore {
       alturaAuditoria: alturaAuditoria ?? this.alturaAuditoria,
       volume: volume ?? this.volume,
       lastModified: lastModified ?? this.lastModified,
+      alturaDano: alturaDano ?? this.alturaDano, // <<< CAMPO ADICIONADO
     );
   }
 
@@ -89,6 +93,7 @@ class Arvore {
       'capAuditoria': capAuditoria,
       'alturaAuditoria': alturaAuditoria,
       'lastModified': lastModified?.toIso8601String(),
+      'alturaDano': alturaDano, // <<< CAMPO ADICIONADO
     };
   }
 
@@ -117,6 +122,7 @@ class Arvore {
       alturaAuditoria: map['alturaAuditoria']?.toDouble(),
       // <<< PASSO 3: USAR A FUNÇÃO AUXILIAR NO CAMPO 'lastModified' >>>
       lastModified: parseDate(map['lastModified']),
+      alturaDano: map['alturaDano']?.toDouble(), // <<< CAMPO ADICIONADO
     );
   }
 }

@@ -32,7 +32,7 @@ class Parcela {
   final String? municipio;
   final String? estado;
   final String? atividadeTipo;
-
+  final String? up; // <<< CAMPO ADICIONADO
   final String idParcela;
   final double areaMetrosQuadrados;
   final String? observacao;
@@ -73,6 +73,7 @@ class Parcela {
     this.municipio,
     this.estado,
     this.atividadeTipo,
+    this.up, // <<< CAMPO ADICIONADO
     this.photoPaths = const [],
     this.arvores = const [],
     this.lastModified,
@@ -102,6 +103,7 @@ class Parcela {
     String? municipio,
     String? estado,
     String? atividadeTipo,
+    String? up, // <<< CAMPO ADICIONADO
     List<String>? photoPaths,
     List<Arvore>? arvores,
     DateTime? lastModified,
@@ -130,6 +132,7 @@ class Parcela {
       municipio: municipio ?? this.municipio,
       estado: estado ?? this.estado,
       atividadeTipo: atividadeTipo ?? this.atividadeTipo,
+      up: up ?? this.up, // <<< CAMPO ADICIONADO
       photoPaths: photoPaths ?? this.photoPaths,
       arvores: arvores ?? this.arvores,
       lastModified: lastModified ?? this.lastModified,
@@ -160,13 +163,13 @@ class Parcela {
       'projetoId': projetoId,
       'municipio': municipio,
       'estado': estado,
+      'up': up, // <<< CAMPO ADICIONADO
       'photoPaths': jsonEncode(photoPaths),
       'lastModified': lastModified?.toIso8601String()
     };
   }
 
   factory Parcela.fromMap(Map<String, dynamic> map) {
-    // <<< CORREÇÃO APLICADA AQUI >>>
     DateTime? parseDate(dynamic value) {
       if (value is Timestamp) return value.toDate();
       if (value is String) return DateTime.tryParse(value);
@@ -207,6 +210,7 @@ class Parcela {
       nomeLider: map['nomeLider'],
       projetoId: map['projetoId'],
       atividadeTipo: map['atividadeTipo'],
+      up: map['up'], // <<< CAMPO ADICIONADO
       photoPaths: paths,
       lastModified: parseDate(map['lastModified']),
     );

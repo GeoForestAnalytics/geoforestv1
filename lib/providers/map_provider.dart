@@ -1,4 +1,4 @@
-// lib/providers/map_provider.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/providers/map_provider.dart (VERSÃO FINAL E COMPLETA COM TUDO CORRIGIDO)
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -17,8 +17,6 @@ import 'package:geoforestv1/services/geojson_service.dart';
 import 'package:geoforestv1/services/sampling_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-
-
 
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
@@ -137,6 +135,7 @@ class MapProvider with ChangeNotifier {
       final nomeFazenda = dadosDoFormulario['nomeFazenda']!;
       final codigoFazenda = dadosDoFormulario['codigoFazenda']!;
       final nomeTalhao = dadosDoFormulario['nomeTalhao']!;
+      final up = dadosDoFormulario['up']!; // <<< LEITURA DO UP
       final hectaresPorAmostra = double.parse(dadosDoFormulario['hectares']!);
       final now = DateTime.now().toIso8601String();
   
@@ -176,6 +175,7 @@ class MapProvider with ChangeNotifier {
           'db_fazenda_nome': talhaoSalvo.fazendaNome,
           'fazenda_id': talhaoSalvo.fazendaId,
           'talhao_nome': talhaoSalvo.nome,
+          'up': up, // <<< SALVANDO O UP NAS PROPRIEDADES
           'municipio': 'N/I',
           'estado': 'N/I',
         },
@@ -199,14 +199,12 @@ class MapProvider with ChangeNotifier {
     }
   }
 
-  // ===================================================================
-  // ==================== INÍCIO DA CORREÇÃO =========================
-  // ===================================================================
   Future<Map<String, String>?> _showDadosAmostragemDialog(BuildContext context) {
     final formKey = GlobalKey<FormState>();
     final nomeFazendaController = TextEditingController();
     final codigoFazendaController = TextEditingController();
     final nomeTalhaoController = TextEditingController();
+    final upController = TextEditingController(); // <<< NOVO CONTROLADOR
     final hectaresController = TextEditingController();
   
     return showDialog<Map<String, String>>(
@@ -215,13 +213,11 @@ class MapProvider with ChangeNotifier {
       builder: (context) {
         return AlertDialog(
           title: const Text('Dados da Amostragem'),
-          content: SizedBox( // <<< ETAPA 1: ENVOLVER COM SIZEDBOX >>>
+          content: SizedBox(
             width: double.maxFinite,
-            // Você pode ajustar a altura conforme necessário
-            height: 320, 
             child: Form(
               key: formKey,
-              child: SingleChildScrollView( // <<< ETAPA 2: AGORA ELE TEM UM LIMITE PARA ROLAR >>>
+              child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -233,6 +229,10 @@ class MapProvider with ChangeNotifier {
                     TextFormField(
                       controller: codigoFazendaController,
                       decoration: const InputDecoration(labelText: 'Código da Fazenda (Opcional)'),
+                    ),
+                    TextFormField( // <<< NOVO CAMPO DE TEXTO
+                      controller: upController,
+                      decoration: const InputDecoration(labelText: 'UP / Unidade (Opcional)'),
                     ),
                     TextFormField(
                       controller: nomeTalhaoController,
@@ -255,6 +255,7 @@ class MapProvider with ChangeNotifier {
               nomeFazendaController.dispose();
               codigoFazendaController.dispose();
               nomeTalhaoController.dispose();
+              upController.dispose(); // <<< DISPOSE
               hectaresController.dispose();
               Navigator.pop(context);
             }, child: const Text('Cancelar')),
@@ -265,11 +266,13 @@ class MapProvider with ChangeNotifier {
                     'nomeFazenda': nomeFazendaController.text.trim(),
                     'codigoFazenda': codigoFazendaController.text.trim(),
                     'nomeTalhao': nomeTalhaoController.text.trim(),
+                    'up': upController.text.trim(), // <<< ADICIONADO AO RESULTADO
                     'hectares': hectaresController.text.replaceAll(',', '.'),
                   };
                   nomeFazendaController.dispose();
                   codigoFazendaController.dispose();
                   nomeTalhaoController.dispose();
+                  upController.dispose(); // <<< DISPOSE
                   hectaresController.dispose();
                   Navigator.pop(context, result);
                 }
@@ -281,9 +284,6 @@ class MapProvider with ChangeNotifier {
       },
     );
   }
-  // ===================================================================
-  // ===================== FIM DA CORREÇÃO ===========================
-  // ===================================================================
   
   Future<String?> showDensityDialogAndGenerateSamples(BuildContext context) async {
     final density = await _showDensityDialog(context);
@@ -367,6 +367,7 @@ class MapProvider with ChangeNotifier {
           nomeFazenda: props['db_fazenda_nome']?.toString(),
           idFazenda: props['fazenda_id']?.toString(),
           nomeTalhao: props['talhao_nome']?.toString(),
+          up: props['up']?.toString(), // <<< LEITURA DO UP
           projetoId: idDoProjetoAtual,
           municipio: props['municipio']?.toString(),
           estado: props['estado']?.toString(),
@@ -443,7 +444,7 @@ class MapProvider with ChangeNotifier {
         
         parcelasParaSalvar.add(Parcela(
           talhaoId: talhao.id,
-          idParcela: props['parcela_id_plano']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+          idParcela: props['parcela_id_plano']?.toString() ?? props['parcela_id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
           areaMetrosQuadrados: (props['area_m2'] as num?)?.toDouble() ?? 0.0,
           latitude: ponto.position.latitude, 
           longitude: ponto.position.longitude,
@@ -452,6 +453,7 @@ class MapProvider with ChangeNotifier {
           nomeFazenda: fazenda.nome, 
           idFazenda: fazenda.id, 
           nomeTalhao: talhao.nome,
+          up: props['up']?.toString() ?? props['bloco']?.toString() ?? props['rf']?.toString(),
           projetoId: idDoProjetoAtual,
           municipio: fazenda.municipio,
           estado: fazenda.estado,
@@ -665,7 +667,6 @@ class MapProvider with ChangeNotifier {
   }
 }
 
-// O Widget LocationMarker não precisa de alterações, pode mantê-lo como está.
 class LocationMarker extends StatefulWidget {
   const LocationMarker({super.key});
   @override

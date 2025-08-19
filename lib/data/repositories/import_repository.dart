@@ -183,11 +183,12 @@ class ImportRepository {
                       nomeTalhao: talhao.nome, 
                       isSynced: false, 
                       projetoId: projeto.id,
+                      up: getValue(row, ['up', 'bloco', 'rf','unidade_planejamento', 'unidade']),
                       latitude: latitudeFinal,
                       longitude: longitudeFinal,
                       largura: double.tryParse(getValue(row, ['largura_m'])?.replaceAll(',', '.') ?? ''),
                       comprimento: double.tryParse(getValue(row, ['comprimento_m'])?.replaceAll(',', '.') ?? ''),
-                      raio: double.tryParse(getValue(row, ['raio_m'])?.replaceAll(',', '.') ?? ''),
+                      raio: double.tryParse(getValue(row, ['raio_m'])?.replaceAll(',', '.') ?? ''),                      
                       observacao: getValue(row, ['observacao_parcela']),
                       nomeLider: getValue(row, ['lider_equipe']) ?? nomeDoResponsavel
                   );
@@ -218,7 +219,8 @@ class ImportRepository {
 
                   final novaArvore = Arvore(
                     cap: double.tryParse(getValue(row, ['cap_cm'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0, 
-                    altura: double.tryParse(getValue(row, ['altura_m'])?.replaceAll(',', '.') ?? ''), 
+                    altura: double.tryParse(getValue(row, ['altura_m'])?.replaceAll(',', '.') ?? ''),
+                    alturaDano: double.tryParse(getValue(row, ['altura_dano_m', 'altura_dano'])?.replaceAll(',', '.') ?? ''),
                     linha: int.tryParse(getValue(row, ['linha']) ?? '0') ?? 0, 
                     posicaoNaLinha: int.tryParse(getValue(row, ['posicao_na_linha']) ?? '0') ?? 0, 
                     dominante: dominante, 
@@ -226,6 +228,7 @@ class ImportRepository {
                     codigo2: finalCodigo2,
                     fimDeLinha: false
                   );
+
                   final arvoreMap = novaArvore.toMap();
                   arvoreMap['parcelaId'] = parcelaDbId;
                   arvoreMap['lastModified'] = now;

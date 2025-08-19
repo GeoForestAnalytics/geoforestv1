@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO FINAL COM CORREÇÃO DO LINTER)
+// lib/services/export_service.dart (VERSÃO CORRIGIDA)
 
 import 'dart:io';
 import 'dart:convert';
@@ -32,8 +32,6 @@ import 'package:geoforestv1/widgets/manager_export_dialog.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
-// ... (Classes _CsvParcelaPayload, _CsvCubagemPayload, _DevEquipePayload e as funções Isolate permanecem as mesmas)
-// (Vou omiti-las aqui por brevidade, mas elas devem continuar no seu arquivo)
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
@@ -97,7 +95,7 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
   }
 
   List<List<dynamic>> rows = [];
-  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_m2', 'Largura_m', 'Comprimento_m', 'Raio_m', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Dominante']);
+  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'UP', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_m2', 'Largura_m', 'Comprimento_m', 'Raio_m', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Altura_Dano_m', 'Dominante']);
   
   for (var pMap in payload.parcelasMap) {
     final p = Parcela.fromMap(pMap);
@@ -115,13 +113,13 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 
     final liderDaColeta = p.nomeLider ?? payload.nomeLider;
     if (arvores.isEmpty) {
-      rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null]);
+      rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null, null]);
     } else {
       Map<String, int> fusteCounter = {};
       for (final a in arvores) {
         String key = '${a.linha}-${a.posicaoNaLinha}';
         fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
-        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.dominante ? 'Sim' : 'Não']);
+        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.alturaDano, a.dominante ? 'Sim' : 'Não']);
       }
     }
   }
@@ -687,7 +685,6 @@ class ExportService {
     }
   }
 
-  // <<< CORREÇÃO APLICADA AQUI >>>
   Future<void> exportarAnaliseTalhaoCsv({
     required BuildContext context,
     required Talhao talhao,
@@ -732,14 +729,14 @@ class ExportService {
       final fName = 'analise_talhao_${talhao.nome.replaceAll(' ', '_')}_${DateFormat('yyyy-MM-dd_HH-mm').format(hoje)}.csv';
       final csvData = const ListToCsvConverter().convert(rows);
 
-      // Substitui a lógica manual pela função auxiliar
       await _salvarECompartilharCsv(context, csvData, fName, 'Análise do Talhão ${talhao.nome}');
 
     } catch (e, s) {
       _handleExportError(context, 'exportar análise', e, s);
     }
   }
-
+  
+  // FUNÇÃO RESTAURADA
   Future<void> exportarPlanoDeAmostragem({
     required BuildContext context,
     required List<int> parcelaIds,
@@ -768,11 +765,18 @@ class ExportService {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [parcela.longitude, parcela.latitude]},
             'properties': {
-              'talhao': parcela.nomeTalhao, 'fazenda': parcela.nomeFazenda,
-              'empresa': projeto?.empresa, 'municipio': 'N/I', 'area_m2': parcela.areaMetrosQuadrados,
-              'projeto_nome': projeto?.nome, 'responsavel': projeto?.responsavel, 'fazenda_id': parcela.idFazenda,
-              'parcela_id_plano': parcela.idParcela,
-            }
+            // Nomes curtos (<= 10 caracteres) para compatibilidade com Shapefile
+            'up': parcela.up,
+            'talhao': parcela.nomeTalhao,
+            'fazenda': parcela.nomeFazenda,
+            'empresa': projeto?.empresa,
+            'municipio': 'N/I', // O nome "municipio" tem 9 caracteres, está OK.
+            'area_m2': parcela.areaMetrosQuadrados,
+            'projeto': projeto?.nome,
+            'respons': projeto?.responsavel, // Corrigido de "responsavel"
+            'fazenda_id': parcela.idFazenda,
+              'parcela_id': parcela.idParcela,
+           }
           });
         }
       }
@@ -795,7 +799,7 @@ class ExportService {
       _handleExportError(context, 'exportar plano de amostragem', e, s);
     }
   }
-  
+
   Future<void> exportarTudoComoZip({
     required BuildContext context,
     required List<Talhao> talhoes,

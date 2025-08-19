@@ -1,4 +1,4 @@
-// lib/widgets/arvore_dialog.dart (VERSÃO FINAL COM LAYOUT CORRIGIDO)
+// lib/widgets/arvore_dialog.dart (VERSÃO FINAL COM CAMPO DE DANO OPCIONAL)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -45,11 +45,17 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   final _alturaController = TextEditingController();
   final _linhaController = TextEditingController();
   final _posicaoController = TextEditingController();
+  final _alturaDanoController = TextEditingController();
 
   late Codigo _codigo;
   Codigo2? _codigo2;
   bool _fimDeLinha = false;
   bool _camposHabilitados = true;
+  
+  final _codesRequiringAlturaDano = [
+    Codigo.bifurcada, Codigo.multipla, Codigo.quebrada,
+    Codigo.ataquemacaco, Codigo.fogo
+  ];
 
   @override
   void initState() {
@@ -58,6 +64,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
       final arvore = widget.arvoreParaEditar!;
       _capController.text = arvore.cap.toString().replaceAll('.', ',');
       _alturaController.text = arvore.altura?.toString().replaceAll('.', ',') ?? '';
+      _alturaDanoController.text = arvore.alturaDano?.toString().replaceAll('.', ',') ?? '';
       _codigo = arvore.codigo;
       _codigo2 = arvore.codigo2;
       _fimDeLinha = arvore.fimDeLinha;
@@ -77,6 +84,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         _camposHabilitados = false;
         _capController.text = '0';
         _alturaController.clear();
+        _alturaDanoController.clear();
       } else {
         _camposHabilitados = true;
         if (_capController.text == '0') {
@@ -92,6 +100,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     _alturaController.dispose();
     _linhaController.dispose();
     _posicaoController.dispose();
+    _alturaDanoController.dispose();
     super.dispose();
   }
 
@@ -99,6 +108,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     if (_formKey.currentState!.validate()) {
       final double cap = double.tryParse(_capController.text.replaceAll(',', '.')) ?? 0.0;
       final double? altura = _alturaController.text.isNotEmpty ? double.tryParse(_alturaController.text.replaceAll(',', '.')) : null;
+      final double? alturaDano = _alturaDanoController.text.isNotEmpty ? double.tryParse(_alturaDanoController.text.replaceAll(',', '.')) : null;
       final int linha = int.tryParse(_linhaController.text) ?? widget.linhaAtual;
       final int posicao = int.tryParse(_posicaoController.text) ?? widget.posicaoNaLinhaAtual;
 
@@ -106,6 +116,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         id: widget.arvoreParaEditar?.id,
         cap: cap,
         altura: altura,
+        alturaDano: alturaDano,
         linha: linha,
         posicaoNaLinha: posicao,
         codigo: _codigo,
@@ -129,6 +140,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final bool showAlturaDano = _codesRequiringAlturaDano.contains(_codigo);
 
     return Dialog(
       insetPadding: const EdgeInsets.all(16.0),
@@ -220,8 +232,21 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                     TextFormField(
                       controller: _alturaController,
                       enabled: _camposHabilitados,
-                      decoration: const InputDecoration(labelText: 'Altura (m) - Opcional'),
+                      decoration: const InputDecoration(labelText: 'Altura Total (m) - Opcional'),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                    Visibility(
+                      visible: showAlturaDano,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 16.0),
+                        child: TextFormField(
+                          controller: _alturaDanoController,
+                          enabled: _camposHabilitados,
+                          decoration: const InputDecoration(labelText: 'Altura do Dano/Bifurcação (m)'),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          // <<< ALTERAÇÃO AQUI: O VALIDATOR FOI REMOVIDO >>>
+                        ),
+                      ),
                     ),
                     if (widget.arvoreParaEditar?.capAuditoria != null)
                       Padding(

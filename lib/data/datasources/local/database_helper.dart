@@ -29,8 +29,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      // <<< MUDANÇA 1: Incrementar a versão do banco de dados para 36 >>>
-      version: 36,
+      version: 39, // <<< VERSÃO INCREMENTADA PARA 39
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -40,7 +39,6 @@ class DatabaseHelper {
   Future<void> _onConfigure(Database db) async => await db.execute('PRAGMA foreign_keys = ON');
 
   Future<void> _onCreate(Database db, int version) async {
-    // <<< MUDANÇA 2: Adicionar novas colunas nas tabelas existentes para novas instalações >>>
     await db.execute('''
       CREATE TABLE projetos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,6 +120,7 @@ class DatabaseHelper {
         municipio TEXT, 
         estado TEXT,
         id_unico_amostra TEXT,
+        up TEXT,
         lastModified TEXT NOT NULL,
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
@@ -141,6 +140,7 @@ class DatabaseHelper {
         observacao TEXT,
         capAuditoria REAL,
         alturaAuditoria REAL,
+        alturaDano REAL,
         lastModified TEXT NOT NULL,
         FOREIGN KEY (parcelaId) REFERENCES parcelas (id) ON DELETE CASCADE
       )
@@ -187,7 +187,6 @@ class DatabaseHelper {
       )
     ''');
     
-    // <<< MUDANÇA 3: Adicionar a nova tabela de diário de campo para novas instalações >>>
     await db.execute('''
       CREATE TABLE diario_de_campo (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -213,7 +212,6 @@ class DatabaseHelper {
     
     await db.execute('CREATE INDEX idx_arvores_parcelaId ON arvores(parcelaId)');
     await db.execute('CREATE INDEX idx_cubagens_secoes_cubagemArvoreId ON cubagens_secoes(cubagemArvoreId)');
-    // <<< MUDANÇA 4: Adicionar o novo índice para o RG da coleta >>>
     await db.execute('CREATE INDEX idx_parcelas_id_unico ON parcelas(id_unico_amostra)');
   }
 
@@ -274,13 +272,11 @@ class DatabaseHelper {
         case 34:
           await db.execute('ALTER TABLE talhoes ADD COLUMN projetoId INTEGER');
           break;
-        // <<< MUDANÇA 5: Adicionar a migração para a versão 35 (RG da Coleta) >>>
         case 35:
           await db.execute('ALTER TABLE projetos ADD COLUMN referencia_rf TEXT');
           await db.execute('ALTER TABLE parcelas ADD COLUMN id_unico_amostra TEXT');
           await db.execute('CREATE INDEX idx_parcelas_id_unico ON parcelas(id_unico_amostra)');
           break;
-        // <<< MUDANÇA 6: Adicionar a migração para a versão 36 (Diário de Campo) >>>
         case 36:
           await db.execute('''
             CREATE TABLE diario_de_campo (
@@ -305,7 +301,24 @@ class DatabaseHelper {
             )
           ''');
           break;
-        }
+        case 37:
+          await db.execute('ALTER TABLE arvores ADD COLUMN alturaDano REAL');
+          break;
+        case 38: // <<< NOVA MIGRAÇÃO
+          await db.execute('ALTER TABLE parcelas ADD COLUMN up TEXT');
+          break;
+      case 39: // <<< NOVA MIGRAÇÃO
+          // Esta migração garante que, para usuários existentes, a coluna seja do tipo TEXT.
+          // Em SQLite, adicionar uma coluna que já existe não causa erro se for feito
+          // dentro de uma migração versionada. O tipo será o mais recente.
+          // Para garantir, poderíamos usar uma abordagem de renomear, mas
+          // adicionar a coluna novamente com o tipo correto é mais simples e geralmente funciona.
+          await db.execute('ALTER TABLE parcelas ADD COLUMN up_temp_string TEXT');
+          await db.execute('UPDATE parcelas SET up_temp_string = up');
+          await db.execute('ALTER TABLE parcelas DROP COLUMN up');
+          await db.execute('ALTER TABLE parcelas RENAME COLUMN up_temp_string TO up');
+          break;        
+      }
     }
   }
 

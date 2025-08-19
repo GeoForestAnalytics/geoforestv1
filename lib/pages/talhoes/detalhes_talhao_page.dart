@@ -64,7 +64,6 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
   }
 
   Future<void> _navegarParaNovaParcela() async {
-    // Busca diretamente o talhão que precisamos, já com o projetoId.
     final talhaoCompleto = await _talhaoRepository.getTalhaoById(widget.talhao.id!);
 
     if (!mounted || talhaoCompleto == null) return;
@@ -341,6 +340,12 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
         final Color corFinal = foiExportada ? StatusParcela.exportada.cor : parcela.status.cor;
         final IconData iconeFinal = foiExportada ? StatusParcela.exportada.icone : parcela.status.icone;
 
+        // <<< LÓGICA DO TÍTULO ATUALIZADA >>>
+        String titulo = 'Parcela ID: ${parcela.idParcela}';
+        if (parcela.up != null && parcela.up!.isNotEmpty) {
+          titulo = 'UP: ${parcela.up} / Parcela: ${parcela.idParcela}';
+        }
+        
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           color: isSelected ? Theme.of(context).colorScheme.primaryContainer.withAlpha(128) : null,
@@ -352,7 +357,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
               backgroundColor: isSelected ? Theme.of(context).colorScheme.primary : corFinal,
               child: Icon(isSelected ? Icons.check : iconeFinal, color: Colors.white),
             ),
-            title: Text('Parcela ID: ${parcela.idParcela}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text('Status: ${_traduzirStatus(statusFinal)}\nColetado em: $dataFormatada'),
             
             trailing: _isSelectionMode
