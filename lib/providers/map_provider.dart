@@ -1,4 +1,4 @@
-// lib/providers/map_provider.dart (VERSÃO FINAL E COMPLETA COM TUDO CORRIGIDO)
+// lib/providers/map_provider.dart (VERSÃO FINAL COM IMPORTAÇÃO COMPLETA DE ATRIBUTOS)
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -17,6 +17,8 @@ import 'package:geoforestv1/services/geojson_service.dart';
 import 'package:geoforestv1/services/sampling_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+
+
 
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
@@ -135,7 +137,7 @@ class MapProvider with ChangeNotifier {
       final nomeFazenda = dadosDoFormulario['nomeFazenda']!;
       final codigoFazenda = dadosDoFormulario['codigoFazenda']!;
       final nomeTalhao = dadosDoFormulario['nomeTalhao']!;
-      final up = dadosDoFormulario['up']!; // <<< LEITURA DO UP
+      final up = dadosDoFormulario['up']!;
       final hectaresPorAmostra = double.parse(dadosDoFormulario['hectares']!);
       final now = DateTime.now().toIso8601String();
   
@@ -175,7 +177,7 @@ class MapProvider with ChangeNotifier {
           'db_fazenda_nome': talhaoSalvo.fazendaNome,
           'fazenda_id': talhaoSalvo.fazendaId,
           'talhao_nome': talhaoSalvo.nome,
-          'up': up, // <<< SALVANDO O UP NAS PROPRIEDADES
+          'up': up,
           'municipio': 'N/I',
           'estado': 'N/I',
         },
@@ -204,7 +206,7 @@ class MapProvider with ChangeNotifier {
     final nomeFazendaController = TextEditingController();
     final codigoFazendaController = TextEditingController();
     final nomeTalhaoController = TextEditingController();
-    final upController = TextEditingController(); // <<< NOVO CONTROLADOR
+    final upController = TextEditingController();
     final hectaresController = TextEditingController();
   
     return showDialog<Map<String, String>>(
@@ -230,7 +232,7 @@ class MapProvider with ChangeNotifier {
                       controller: codigoFazendaController,
                       decoration: const InputDecoration(labelText: 'Código da Fazenda (Opcional)'),
                     ),
-                    TextFormField( // <<< NOVO CAMPO DE TEXTO
+                    TextFormField(
                       controller: upController,
                       decoration: const InputDecoration(labelText: 'UP / Unidade (Opcional)'),
                     ),
@@ -255,7 +257,7 @@ class MapProvider with ChangeNotifier {
               nomeFazendaController.dispose();
               codigoFazendaController.dispose();
               nomeTalhaoController.dispose();
-              upController.dispose(); // <<< DISPOSE
+              upController.dispose();
               hectaresController.dispose();
               Navigator.pop(context);
             }, child: const Text('Cancelar')),
@@ -266,13 +268,13 @@ class MapProvider with ChangeNotifier {
                     'nomeFazenda': nomeFazendaController.text.trim(),
                     'codigoFazenda': codigoFazendaController.text.trim(),
                     'nomeTalhao': nomeTalhaoController.text.trim(),
-                    'up': upController.text.trim(), // <<< ADICIONADO AO RESULTADO
+                    'up': upController.text.trim(),
                     'hectares': hectaresController.text.replaceAll(',', '.'),
                   };
                   nomeFazendaController.dispose();
                   codigoFazendaController.dispose();
                   nomeTalhaoController.dispose();
-                  upController.dispose(); // <<< DISPOSE
+                  upController.dispose();
                   hectaresController.dispose();
                   Navigator.pop(context, result);
                 }
@@ -367,7 +369,7 @@ class MapProvider with ChangeNotifier {
           nomeFazenda: props['db_fazenda_nome']?.toString(),
           idFazenda: props['fazenda_id']?.toString(),
           nomeTalhao: props['talhao_nome']?.toString(),
-          up: props['up']?.toString(), // <<< LEITURA DO UP
+          up: props['up']?.toString(),
           projetoId: idDoProjetoAtual,
           municipio: props['municipio']?.toString(),
           estado: props['estado']?.toString(),
@@ -395,6 +397,7 @@ class MapProvider with ChangeNotifier {
     }
   }
 
+  // ================== INÍCIO DA CORREÇÃO ==================
   Future<String> _processarPlanoDeAmostragemImportado(List<ImportedPointFeature> pontosImportados, BuildContext context) async {
     _importedPolygons = []; 
     _samplePoints = []; 
@@ -411,12 +414,15 @@ class MapProvider with ChangeNotifier {
     await db.transaction((txn) async {
       for (final ponto in pontosImportados) {
         final props = ponto.properties;
-        final fazendaId = (props['id_fazenda'] ?? props['fazenda_id'] ?? props['fazenda'])?.toString();
-        final nomeTalhao = (props['talhao'] ?? props['talhao_nome'])?.toString();
+        final fazendaId = (props['fazenda_id'] ?? props['id_fazenda'] ?? props['fazenda'])?.toString();
+        final nomeTalhao = (props['talhao_nome'] ?? props['talhao'])?.toString();
         
         if (fazendaId == null || nomeTalhao == null) continue;
 
+        // Tenta encontrar uma fazenda existente
         Fazenda? fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [fazendaId, _currentAtividade!.id!])).map((e) => Fazenda.fromMap(e)).firstOrNull;
+        
+        // Se não encontrar, cria uma nova com os dados do GeoJSON
         if (fazenda == null) {
           final nomeDaFazenda = props['fazenda_nome']?.toString() ?? props['fazenda']?.toString() ?? fazendaId;
           final municipio = props['municipio']?.toString() ?? 'N/I';
@@ -428,12 +434,19 @@ class MapProvider with ChangeNotifier {
           novasFazendas++;
         }
 
+        // Tenta encontrar um talhão existente
         Talhao? talhao = (await txn.query('talhoes', where: 'nome = ? AND fazendaId = ? AND fazendaAtividadeId = ?', whereArgs: [nomeTalhao, fazenda.id, fazenda.atividadeId])).map((e) => Talhao.fromMap(e)).firstOrNull;
+        
+        // Se não encontrar, cria um novo com os dados do GeoJSON
         if (talhao == null) {
           talhao = Talhao(
-            fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao,
-            especie: props['especie']?.toString(), areaHa: (props['area_ha'] as num?)?.toDouble(),
+            fazendaId: fazenda.id, 
+            fazendaAtividadeId: fazenda.atividadeId, 
+            nome: nomeTalhao,
+            especie: props['especie']?.toString(), 
+            areaHa: (props['area_ha'] as num?)?.toDouble() ?? (props['areatalhao'] as num?)?.toDouble(),
             espacamento: props['espacam']?.toString(),
+            // Adicione outros campos do talhão que você queira importar aqui
           );
           final map = talhao.toMap();
           map['lastModified'] = now;
@@ -453,7 +466,7 @@ class MapProvider with ChangeNotifier {
           nomeFazenda: fazenda.nome, 
           idFazenda: fazenda.id, 
           nomeTalhao: talhao.nome,
-          up: props['up']?.toString() ?? props['bloco']?.toString() ?? props['rf']?.toString(),
+          up: props['up']?.toString() ?? props['unidade_planejamento']?.toString() ?? props['unidade']?.toString(),
           projetoId: idDoProjetoAtual,
           municipio: fazenda.municipio,
           estado: fazenda.estado,
@@ -468,6 +481,7 @@ class MapProvider with ChangeNotifier {
 
     return "Plano importado: ${parcelasParaSalvar.length} amostras salvas. Novas Fazendas: $novasFazendas, Novos Talhões: $novosTalhoes.";
   }
+  // =================== FIM DA CORREÇÃO ====================
   
   void clearAllMapData() {
     _importedPolygons = [];

@@ -1,4 +1,4 @@
-// lib/pages/menu/relatorio_diario_page.dart (VERSÃO ATUALIZADA COM CALENDÁRIO)
+// lib/pages/menu/relatorio_diario_page.dart (VERSÃO ATUALIZADA COM FILTRO DE UP)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -21,7 +21,6 @@ import 'package:geoforestv1/services/export_service.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/data/repositories/diario_de_campo_repository.dart';
 
-// <<< 1. A ESTRUTURA DOS PASSOS FOI ALTERADA PARA UMA LÓGICA MAIS SIMPLES >>>
 enum RelatorioStep {
   selecionarFiltros,
   visualizarEPreencher,
@@ -40,6 +39,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   // Controladores
   final _liderController = TextEditingController();
   final _ajudantesController = TextEditingController();
+  final _upController = TextEditingController(); // <<< NOVO CONTROLADOR PARA UP
   final _kmInicialController = TextEditingController();
   final _kmFinalController = TextEditingController();
   final _destinoController = TextEditingController();
@@ -88,6 +88,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   void dispose() {
     _liderController.dispose();
     _ajudantesController.dispose();
+    _upController.dispose(); // <<< DISPOSE DO NOVO CONTROLADOR
     _kmInicialController.dispose();
     _kmFinalController.dispose();
     _destinoController.dispose();
@@ -112,7 +113,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       context: context,
       initialDate: _dataSelecionada,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 1)), // Permite selecionar até amanhã
+      lastDate: DateTime.now().add(const Duration(days: 1)),
     );
 
     if (dataEscolhida != null && dataEscolhida != _dataSelecionada) {
@@ -122,7 +123,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     }
   }
 
-  // <<< 3. LÓGICA PRINCIPAL ATUALIZADA >>>
   Future<void> _gerarRelatorio() async {
     if (_talhaoSelecionado == null || _liderController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -136,21 +136,22 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     final dataFormatada = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
     final lider = _liderController.text.trim();
     final talhaoId = _talhaoSelecionado!.id!;
+    final up = _upController.text.trim(); // <<< OBTÉM O VALOR DA UP
 
-    // Busca os dois tipos de dados em paralelo para mais performance
-    final results = await Future.wait([
-      _diarioRepo.getDiario(dataFormatada, lider, talhaoId),
-      _parcelaRepo.getParcelasDoDiaPorEquipeEFiltros(
-        nomeLider: lider,
-        dataSelecionada: _dataSelecionada,
-        talhaoId: talhaoId,
-      ),
-    ]);
+    // <<< FUNÇÃO DE BUSCA ATUALIZADA PARA INCLUIR A UP >>>
+    final parcelasEncontradas = await _parcelaRepo.getParcelasDoDiaPorEquipeEFiltros(
+      nomeLider: lider,
+      dataSelecionada: _dataSelecionada,
+      talhaoId: talhaoId,
+      up: up.isNotEmpty ? up : null, // Passa a UP para a busca, se ela foi preenchida
+    );
+    
+    // A busca do diário permanece a mesma, pois ele é por talhão
+    final diarioEncontrado = await _diarioRepo.getDiario(dataFormatada, lider, talhaoId);
 
-    _diarioAtual = results[0] as DiarioDeCampo?;
-    _parcelasDoRelatorio = results[1] as List<Parcela>;
+    _diarioAtual = diarioEncontrado;
+    _parcelasDoRelatorio = parcelasEncontradas;
 
-    // Preenche os controladores do diário de campo (seja com dados existentes ou vazios)
     _preencherControladoresDiario();
 
     setState(() {
@@ -251,8 +252,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
             children: [
               Text("Filtros do Relatório", style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 20),
-
-              // <<< 4. WIDGET DO CALENDÁRIO ADICIONADO >>>
+              
               ListTile(
                 title: const Text("Data da Atividade"),
                 subtitle: Text(DateFormat('dd/MM/yyyy').format(_dataSelecionada), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -265,14 +265,14 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
               ),
               const SizedBox(height: 16),
               
-              TextFormField(controller: _liderController, decoration: const InputDecoration(labelText: 'Líder da Equipe', border: OutlineInputBorder())),
+              TextFormField(controller: _liderController, decoration: const InputDecoration(labelText: 'Líder da Equipe *', border: OutlineInputBorder())),
               const SizedBox(height: 16),
               TextFormField(controller: _ajudantesController, decoration: const InputDecoration(labelText: 'Ajudantes', border: OutlineInputBorder())),
               const SizedBox(height: 16),
 
               DropdownButtonFormField<Projeto>(
                 value: _projetoSelecionado,
-                hint: const Text('Selecione o Projeto'),
+                hint: const Text('Selecione o Projeto *'),
                 items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome))).toList(),
                 onChanged: _onProjetoSelecionado,
                 decoration: const InputDecoration(border: OutlineInputBorder()),
@@ -281,7 +281,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<Atividade>(
                   value: _atividadeSelecionada,
-                  hint: const Text('Selecione a Atividade'),
+                  hint: const Text('Selecione a Atividade *'),
                   items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo))).toList(),
                   onChanged: _onAtividadeSelecionada,
                   decoration: const InputDecoration(border: OutlineInputBorder()),
@@ -291,7 +291,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<Fazenda>(
                   value: _fazendaSelecionada,
-                  hint: const Text('Selecione a Fazenda'),
+                  hint: const Text('Selecione a Fazenda *'),
                   items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome))).toList(),
                   onChanged: _onFazendaSelecionada,
                   decoration: const InputDecoration(border: OutlineInputBorder()),
@@ -301,12 +301,21 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<Talhao>(
                   value: _talhaoSelecionado,
-                  hint: const Text('Selecione o Talhão'),
+                  hint: const Text('Selecione o Talhão *'),
                   items: _talhoesDisponiveis.map((t) => DropdownMenuItem(value: t, child: Text(t.nome))).toList(),
                   onChanged: (t) => setState(() => _talhaoSelecionado = t),
                   decoration: const InputDecoration(border: OutlineInputBorder()),
                 ),
               ],
+              // <<< NOVO CAMPO PARA UP >>>
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _upController,
+                decoration: const InputDecoration(
+                  labelText: 'UP / Bloco / RF (Opcional)',
+                  border: OutlineInputBorder()
+                ),
+              ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
                 icon: const Icon(Icons.receipt_long),
@@ -320,8 +329,8 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
 
   Widget _buildVisualizarEPreencher() {
     if (_isLoading) return const Center(child: CircularProgressIndicator());    
-if (_diarioAtual == null && _parcelasDoRelatorio.isEmpty) {
-      return const Center(child: Text("Nenhum dado encontrado para o dia selecionado."));
+    if (_diarioAtual == null && _parcelasDoRelatorio.isEmpty) {
+      return const Center(child: Text("Nenhum dado encontrado para os filtros selecionados."));
     }
     
     return DefaultTabController(
@@ -336,29 +345,25 @@ if (_diarioAtual == null && _parcelasDoRelatorio.isEmpty) {
         body: TabBarView(
           children: [
             // Aba 1: Lista de Parcelas
-            Column(
-              children: [
-                 if (_parcelasDoRelatorio.isEmpty)
-                  const Expanded(child: Center(child: Text("Nenhuma parcela coletada neste dia.")))
-                else
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: _parcelasDoRelatorio.length,
-                      itemBuilder: (context, index) {
-                        final parcela = _parcelasDoRelatorio[index];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          child: ListTile(
-                            leading: Icon(parcela.status.icone, color: parcela.status.cor),
-                            title: Text("Parcela: ${parcela.idParcela}"),
-                            subtitle: Text("Status: ${parcela.status.name}"),
-                          ),
-                        );
-                      },
-                    ),
-                  )
-              ],
-            ),
+            _parcelasDoRelatorio.isEmpty
+              ? const Center(child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text("Nenhuma parcela coletada para os filtros selecionados.", textAlign: TextAlign.center),
+                ))
+              : ListView.builder(
+                  itemCount: _parcelasDoRelatorio.length,
+                  itemBuilder: (context, index) {
+                    final parcela = _parcelasDoRelatorio[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: ListTile(
+                        leading: Icon(parcela.status.icone, color: parcela.status.cor),
+                        title: Text("Parcela: ${parcela.idParcela}"),
+                        subtitle: Text("Status: ${parcela.status.name}"),
+                      ),
+                    );
+                  },
+                ),
             // Aba 2: Diário de Campo
             Form(
               child: ListView(
@@ -375,6 +380,8 @@ if (_diarioAtual == null && _parcelasDoRelatorio.isEmpty) {
                     const SizedBox(width: 12),
                     Expanded(child: TextFormField(controller: _kmFinalController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'KM Final', border: OutlineInputBorder()))),
                   ]),
+                   const SizedBox(height: 12),
+                  TextFormField(controller: _destinoController, decoration: const InputDecoration(labelText: 'Localização/Destino', border: OutlineInputBorder())),
                   const Divider(height: 24),
                   Text("Despesas", style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
@@ -444,7 +451,6 @@ if (_diarioAtual == null && _parcelasDoRelatorio.isEmpty) {
     );
   }
   
-  // Funções que não mudaram
   Future<void> _onProjetoSelecionado(Projeto? projeto) async {
     setState(() {
       _projetoSelecionado = projeto;

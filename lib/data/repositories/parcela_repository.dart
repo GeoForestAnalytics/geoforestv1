@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
-// <<< ADICIONE ESTE IMPORT >>>
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -19,15 +18,17 @@ class ParcelaRepository {
 
     await db.transaction((txn) async {
       int pId;
-      p.isSynced = false;
-      final pMap = p.toMap();
-      final d = p.dataColeta ?? DateTime.now();
+      // Corrigindo para criar uma nova instância modificável
+      Parcela parcelaModificavel = p.copyWith(isSynced: false);
+      
+      final pMap = parcelaModificavel.toMap();
+      final d = parcelaModificavel.dataColeta ?? DateTime.now();
       pMap['dataColeta'] = d.toIso8601String();
       pMap['lastModified'] = now;
 
       if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
         final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
-          SELECT T.projetoId FROM talhoes T
+          SELECT A.projetoId FROM talhoes T
           INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
           INNER JOIN atividades A ON F.atividadeId = A.id
           WHERE T.id = ? LIMIT 1
@@ -35,11 +36,11 @@ class ParcelaRepository {
 
         if (talhaoInfo.isNotEmpty) {
           pMap['projetoId'] = talhaoInfo.first['projetoId'];
-          p = p.copyWith(projetoId: talhaoInfo.first['projetoId'] as int?);
+          parcelaModificavel = parcelaModificavel.copyWith(projetoId: talhaoInfo.first['projetoId'] as int?);
         }
       }
-           // <<< FIM DA LÓGICA DE GERAÇÃO DO RG DA COLETA >>>
 
+      // <<< BLOCO DO RG DA COLETA FOI REMOVIDO DAQUI >>>
 
       final prefs = await SharedPreferences.getInstance();
       String? nomeDoResponsavel = prefs.getString('nome_lider');
@@ -53,13 +54,12 @@ class ParcelaRepository {
         pMap['nomeLider'] = nomeDoResponsavel;
       }
 
-      if (p.dbId == null) {
+      if (parcelaModificavel.dbId == null) {
         pMap.remove('id');
         pId = await txn.insert('parcelas', pMap);
-        p.dbId = pId;
-        p.dataColeta = d;
+        parcelaModificavel = parcelaModificavel.copyWith(dbId: pId, dataColeta: d);
       } else {
-        pId = p.dbId!;
+        pId = parcelaModificavel.dbId!;
         await txn.update('parcelas', pMap, where: 'id = ?', whereArgs: [pId]);
       }
       await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [pId]);
@@ -69,6 +69,8 @@ class ParcelaRepository {
         aMap['lastModified'] = now;
         await txn.insert('arvores', aMap);
       }
+      // Atribui a versão final modificável de volta para o objeto original
+      p = parcelaModificavel; 
     });
     return p;
   }
@@ -296,21 +298,34 @@ class ParcelaRepository {
     }
     return null;
   }
-
-  // <<< MÉTODO NOVO PARA O DIÁRIO DE CAMPO >>>
+  
   Future<List<Parcela>> getParcelasDoDiaPorEquipeEFiltros({
     required String nomeLider,
     required DateTime dataSelecionada,
     required int talhaoId,
+    String? up,
   }) async {
     final db = await _dbHelper.database;
     
     final dataFormatadaParaQuery = DateFormat('yyyy-MM-dd').format(dataSelecionada);
 
+    String whereClause = 'nomeLider = ? AND DATE(dataColeta) = ?';
+    List<dynamic> whereArgs = [nomeLider, dataFormatadaParaQuery];
+
+    if (talhaoId != 0) {
+      whereClause += ' AND talhaoId = ?';
+      whereArgs.add(talhaoId);
+    }
+    
+    if (up != null && up.isNotEmpty) {
+      whereClause += ' AND up = ?';
+      whereArgs.add(up);
+    }
+
     final List<Map<String, dynamic>> maps = await db.query(
       'parcelas',
-      where: 'talhaoId = ? AND nomeLider = ? AND DATE(dataColeta) = ?',
-      whereArgs: [talhaoId, nomeLider, dataFormatadaParaQuery],
+      where: whereClause,
+      whereArgs: whereArgs,
       orderBy: 'dataColeta DESC',
     );
 
