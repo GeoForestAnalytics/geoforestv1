@@ -1,4 +1,4 @@
-// lib/providers/map_provider.dart (VERSÃO FINAL E COMPLETA COM TUDO CORRIGIDO)
+// lib/providers/map_provider.dart (VERSÃO FINAL E CORRIGIDA)
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -17,6 +17,7 @@ import 'package:geoforestv1/services/geojson_service.dart';
 import 'package:geoforestv1/services/sampling_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+
 
 
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
@@ -198,6 +199,9 @@ class MapProvider with ChangeNotifier {
     }
   }
 
+  // ===================================================================
+  // ==================== INÍCIO DA CORREÇÃO =========================
+  // ===================================================================
   Future<Map<String, String>?> _showDadosAmostragemDialog(BuildContext context) {
     final formKey = GlobalKey<FormState>();
     final nomeFazendaController = TextEditingController();
@@ -211,33 +215,38 @@ class MapProvider with ChangeNotifier {
       builder: (context) {
         return AlertDialog(
           title: const Text('Dados da Amostragem'),
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: nomeFazendaController,
-                    decoration: const InputDecoration(labelText: 'Nome da Fazenda'),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'Campo obrigatório' : null,
-                  ),
-                  TextFormField(
-                    controller: codigoFazendaController,
-                    decoration: const InputDecoration(labelText: 'Código da Fazenda (Opcional)'),
-                  ),
-                  TextFormField(
-                    controller: nomeTalhaoController,
-                    decoration: const InputDecoration(labelText: 'Nome do Talhão'),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'Campo obrigatório' : null,
-                  ),
-                  TextFormField(
-                    controller: hectaresController,
-                    decoration: const InputDecoration(labelText: 'Hectares por amostra', suffixText: 'ha'),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'Campo obrigatório' : null,
-                  ),
-                ],
+          content: SizedBox( // <<< ETAPA 1: ENVOLVER COM SIZEDBOX >>>
+            width: double.maxFinite,
+            // Você pode ajustar a altura conforme necessário
+            height: 320, 
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView( // <<< ETAPA 2: AGORA ELE TEM UM LIMITE PARA ROLAR >>>
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: nomeFazendaController,
+                      decoration: const InputDecoration(labelText: 'Nome da Fazenda'),
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Campo obrigatório' : null,
+                    ),
+                    TextFormField(
+                      controller: codigoFazendaController,
+                      decoration: const InputDecoration(labelText: 'Código da Fazenda (Opcional)'),
+                    ),
+                    TextFormField(
+                      controller: nomeTalhaoController,
+                      decoration: const InputDecoration(labelText: 'Nome do Talhão'),
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Campo obrigatório' : null,
+                    ),
+                    TextFormField(
+                      controller: hectaresController,
+                      decoration: const InputDecoration(labelText: 'Hectares por amostra', suffixText: 'ha'),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Campo obrigatório' : null,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -272,6 +281,9 @@ class MapProvider with ChangeNotifier {
       },
     );
   }
+  // ===================================================================
+  // ===================== FIM DA CORREÇÃO ===========================
+  // ===================================================================
   
   Future<String?> showDensityDialogAndGenerateSamples(BuildContext context) async {
     final density = await _showDensityDialog(context);
