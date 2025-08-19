@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO CORRIGIDA)
+// lib/services/export_service.dart (VERSÃO COMPLETA E CORRIGIDA PARA SHAPEFILE)
 
 import 'dart:io';
 import 'dart:convert';
@@ -32,6 +32,7 @@ import 'package:geoforestv1/widgets/manager_export_dialog.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
+// ... (As classes _CsvPayload e as funções Isolate não precisam de alteração e permanecem aqui) ...
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
