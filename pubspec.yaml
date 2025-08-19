@@ -29,7 +29,6 @@ dependencies:
   # Banco de Dados Local
   sqflite: ^2.3.2 # SQLite para Flutter
   sqflite_common_ffi: ^2.3.3 # SQLite com FFI para desktop
-  sqlite3_flutter_libs: ^0.5.21 # <-- ADICIONE ESTA LINHA
 
   # Utilitários e Interface de Usuário
   cupertino_icons: ^1.0.8 # Ícones do iOS

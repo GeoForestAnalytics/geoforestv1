@@ -11,7 +11,6 @@ class Projeto {
   final DateTime dataCriacao;
   final String status;
   final String? delegadoPorLicenseId;
-  final String? referenciaRf;
   final DateTime? lastModified;
 
   Projeto({
@@ -23,7 +22,6 @@ class Projeto {
     required this.dataCriacao,
     this.status = 'ativo',
     this.delegadoPorLicenseId,
-    this.referenciaRf,
     this.lastModified,
   });
 
@@ -36,7 +34,6 @@ class Projeto {
     DateTime? dataCriacao,
     String? status,
     String? delegadoPorLicenseId,
-    String? referenciaRf,
     DateTime? lastModified,
   }) {
     return Projeto(
@@ -48,7 +45,6 @@ class Projeto {
       dataCriacao: dataCriacao ?? this.dataCriacao,
       status: status ?? this.status,
       delegadoPorLicenseId: delegadoPorLicenseId ?? this.delegadoPorLicenseId,
-      referenciaRf: referenciaRf ?? this.referenciaRf,
       lastModified: lastModified ?? this.lastModified,
     );
   }
@@ -63,7 +59,6 @@ class Projeto {
       'dataCriacao': dataCriacao.toIso8601String(),
       'status': status,
       'delegado_por_license_id': delegadoPorLicenseId,
-      'referencia_rf': referenciaRf,
       'lastModified': lastModified?.toIso8601String(),
     };
   }
@@ -83,7 +78,6 @@ class Projeto {
     final dataCriacao = parseDate(map['dataCriacao']);
     if (dataCriacao == null) {
       throw FormatException("Formato de data inválido para 'dataCriacao' no Projeto ${map['id']}");
-      
     }
 
     return Projeto(
@@ -95,7 +89,6 @@ class Projeto {
       dataCriacao: dataCriacao,
       status: map['status'] ?? 'ativo',
       delegadoPorLicenseId: map['delegado_por_license_id'],
-      referenciaRf: map['referencia_rf'],
       lastModified: parseDate(map['lastModified']),
     );
   }

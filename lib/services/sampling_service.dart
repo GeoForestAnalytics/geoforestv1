@@ -1,8 +1,10 @@
-// lib/services/sampling_service.dart (VERSÃO FINAL COM IMPORTS CORRIGIDOS)
+// lib/services/sampling_service.dart (VERSÃO CORRIGIDA)
 
 import 'dart:math';
-import 'package:flutter_map/flutter_map.dart'; // <<< IMPORT NECESSÁRIO
+import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+
+// <<< 1. IMPORTA O NOVO MODELO CENTRALIZADO EM VEZ DO 'geojson_service' >>>
 import 'package:geoforestv1/models/imported_feature_model.dart';
 
 // Classe auxiliar para transportar o ponto gerado e as propriedades do talhão.
@@ -15,7 +17,7 @@ class GeneratedPoint {
 
 class SamplingService {
   
-  // A lógica principal não muda.
+  // Método principal refatorado para o novo fluxo de múltiplos talhões.
   List<GeneratedPoint> generateMultiTalhaoSamplePoints({
     required List<ImportedPolygonFeature> importedFeatures,
     required double hectaresPerSample,
@@ -25,7 +27,6 @@ class SamplingService {
     final allPoints = importedFeatures.expand((f) => f.polygon.points).toList();
     if (allPoints.isEmpty) return [];
     
-    // Agora o LatLngBounds será reconhecido
     final bounds = LatLngBounds.fromPoints(allPoints);
     final double minLat = bounds.south;
     final double maxLat = bounds.north;

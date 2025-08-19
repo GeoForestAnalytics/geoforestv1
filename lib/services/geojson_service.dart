@@ -1,15 +1,16 @@
-// lib/services/geojson_service.dart (VERSÃO COMPLETA, CORRIGIDA E FINAL)
+// lib/services/geojson_service.dart (VERSÃO COMPLETA E CORRIGIDA)
 
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'; // Import necessário para TextStyle
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geoforestv1/models/imported_feature_model.dart';
 
+// Classe de exceção personalizada para nos dar erros claros.
 class GeoJsonParseException implements Exception {
   final String message;
   GeoJsonParseException(this.message);
@@ -20,17 +21,21 @@ class GeoJsonParseException implements Exception {
 
 class GeoJsonService {
 
+  // Função para selecionar o arquivo, agora com permissões robustas.
   Future<File?> _pickFile() async {
     if (Platform.isAndroid) {
+      // Para Android 11+, precisamos da permissão para gerenciar todos os arquivos.
       var status = await Permission.manageExternalStorage.status;
       if (!status.isGranted) {
         status = await Permission.manageExternalStorage.request();
       }
       if (!status.isGranted) {
-        throw GeoJsonParseException("Permissão de acesso aos arquivos foi negada. Conceda a permissão nas configurações do aplicativo.");
+        // Se a permissão for negada, lançamos um erro claro.
+        throw GeoJsonParseException("Permissão de acesso aos arquivos foi negada. Por favor, conceda a permissão nas configurações do aplicativo.");
       }
     }
 
+    // Usar FileType.any é mais confiável para evitar problemas com tipos customizados.
     FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
 
     if (result == null || result.files.single.path == null) {
@@ -38,6 +43,7 @@ class GeoJsonService {
       return null;
     }
     
+    // Validação da extensão para garantir que o usuário selecionou o tipo correto.
     final filePath = result.files.single.path!;
     if (!filePath.toLowerCase().endsWith('.json') && !filePath.toLowerCase().endsWith('.geojson')) {
         throw GeoJsonParseException("Arquivo inválido. Por favor, selecione um arquivo .json ou .geojson.");
@@ -46,29 +52,7 @@ class GeoJsonService {
     return File(filePath);
   }
 
-  /// Apenas seleciona um arquivo .json/.geojson e retorna seu conteúdo como uma String.
-  /// Lança exceções em caso de erro.
-  Future<String?> importFileContent() async {
-    final file = await _pickFile();
-    if (file == null) return null;
-
-    try {
-      final fileContent = await file.readAsString();
-      if (fileContent.isEmpty) {
-        throw GeoJsonParseException("O arquivo selecionado está vazio.");
-      }
-      // Validação básica para ver se é um JSON válido.
-      json.decode(fileContent); 
-      return fileContent;
-    } on FormatException {
-      throw GeoJsonParseException("O arquivo não é um JSON válido. Verifique a estrutura.");
-    } catch (e) {
-      debugPrint("ERRO ao ler o conteúdo do arquivo: $e");
-      rethrow;
-    }
-  }
-  
-  /// Função para importar POLÍGONOS.
+  // Função para importar POLÍGONOS.
   Future<List<ImportedPolygonFeature>> importPolygons() async {
     final file = await _pickFile();
     if (file == null) return [];
@@ -119,12 +103,13 @@ class GeoJsonService {
       }
       return importedPolygons;
     } catch (e) {
+      // Lança a exceção com detalhes, em vez de falhar silenciosamente.
       debugPrint("ERRO ao importar polígonos GeoJSON: $e");
       throw GeoJsonParseException('Falha ao processar o arquivo. Verifique o formato do GeoJSON. Detalhe: ${e.toString()}');
     }
   }
   
-  /// Função para importar PONTOS.
+  // Função para importar PONTOS.
   Future<List<ImportedPointFeature>> importPoints() async {
     final file = await _pickFile();
     if (file == null) return [];
@@ -152,18 +137,21 @@ class GeoJsonService {
       }
       return importedPoints;
     } catch (e) {
+       // Lança a exceção com detalhes.
       debugPrint("ERRO ao importar pontos GeoJSON: $e");
       throw GeoJsonParseException('Falha ao processar o arquivo. Verifique o formato do GeoJSON. Detalhe: ${e.toString()}');
     }
   }
 
-  Polygon _createPolygon(List<LatLng> points, Map<String, dynamic> properties) {
+  // Função auxiliar para criar os polígonos no mapa.
+    Polygon _createPolygon(List<LatLng> points, Map<String, dynamic> properties) {
     final label = (properties['talhao_nome'] ?? properties['talhao_id'] ?? properties['talhao'])?.toString();
     return Polygon(
       points: points,
-      color: const Color(0xFF617359).withAlpha(100),
+      color: const Color(0xFF617359).withAlpha(100), // A presença desta cor já garante o preenchimento
       borderColor: const Color(0xFF1D4433),
       borderStrokeWidth: 1.5,
+      // isFilled: true, // <<< ESTA LINHA FOI REMOVIDA
       label: label,
       labelStyle: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10),
     );

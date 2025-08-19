@@ -1,4 +1,4 @@
-// lib/data/repositories/import_repository.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/data/repositories/import_repository.dart (VERSÃO FINAL E COMPLETA)
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
@@ -38,7 +38,7 @@ class ImportRepository {
     int parcelasCriadas = 0, arvoresCriadas = 0, cubagensCriadas = 0, secoesCriadas = 0;
     int parcelasAtualizadas = 0, cubagensAtualizadas = 0;
 
-    Projeto? projeto = await _projetoRepository.getProjetoById(projetoIdAlvo);
+    final Projeto? projeto = await _projetoRepository.getProjetoById(projetoIdAlvo);
     if (projeto == null) return "Erro Crítico: O projeto de destino não foi encontrado.";
     if (csvContent.isEmpty) return "Erro: O arquivo CSV está vazio.";
     
@@ -78,9 +78,6 @@ class ImportRepository {
       await db.transaction((txn) async {
         final now = DateTime.now().toIso8601String();
         
-        // Otimização: A RF do projeto é lida uma vez e usada como um fallback (plano B)
-        String? referenciaRfDoProjeto = projeto.referenciaRf;
-
         for (final row in dataRows) {
           linhasProcessadas++;
           
@@ -99,7 +96,7 @@ class ImportRepository {
 
           final nomeFazenda = getValue(row, ['fazenda', 'nome_fazenda']);
           if (nomeFazenda == null) continue;
-          final idFazenda = getValue(row, ['codigo_fazenda', 'id_fazenda', 'fazenda_id']) ?? nomeFazenda;
+          final idFazenda = getValue(row, ['codigo_fazenda', 'id_fazenda']) ?? nomeFazenda;
           Fazenda? fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [idFazenda, atividade.id!])).map(Fazenda.fromMap).firstOrNull;
           if (fazenda == null) {
               fazenda = Fazenda(id: idFazenda, atividadeId: atividade.id!, nome: nomeFazenda, municipio: getValue(row, ['municipio']) ?? 'N/I', estado: getValue(row, ['estado']) ?? 'N/I');
@@ -119,7 +116,7 @@ class ImportRepository {
                 fazendaAtividadeId: fazenda.atividadeId, 
                 nome: nomeTalhao, 
                 projetoId: projeto.id,
-                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_ha'])?.replaceAll(',', '.') ?? ''),
+                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_talhão'])?.replaceAll(',', '.') ?? ''),
                 especie: getValue(row, ['especie']),
                 espacamento: getValue(row, ['espacamento', 'espacame']),
                 idadeAnos: double.tryParse(getValue(row, ['idade_anos', 'idade'])?.replaceAll(',', '.') ?? ''),
@@ -131,7 +128,7 @@ class ImportRepository {
               talhoesCriados++;
           } else {
               final talhaoAtualizado = talhao.copyWith(
-                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_ha'])?.replaceAll(',', '.') ?? talhao.areaHa?.toString() ?? ''),
+                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_talhão'])?.replaceAll(',', '.') ?? talhao.areaHa?.toString() ?? ''),
                 especie: getValue(row, ['especie']) ?? talhao.especie,
                 espacamento: getValue(row, ['espacamento', 'espacame']) ?? talhao.espacamento,
                 idadeAnos: double.tryParse(getValue(row, ['idade_anos', 'idade'])?.replaceAll(',', '.') ?? talhao.idadeAnos?.toString() ?? ''),
@@ -144,30 +141,10 @@ class ImportRepository {
           final tipoLinha = ['IPC', 'IFC', 'AUD', 'IFS', 'BIO', 'IFQ'].any((e) => tipoAtividadeStr.contains(e)) ? TipoImportacao.inventario : (tipoAtividadeStr.contains('CUB') ? TipoImportacao.cubagem : TipoImportacao.desconhecido);
 
           if (tipoLinha == TipoImportacao.inventario) {
-              final idParcelaColeta = getValue(row, ['id_coleta_parcela', 'id_parcela', 'amostra']);
+              final idParcelaColeta = getValue(row, ['id_coleta_parcela', 'id_parcela']);
               if (idParcelaColeta == null) continue;
               
-              // Lógica de Geração do ID Único
-              final referenciaDaLinha = getValue(row, ['referencia_rf', 'rf', 'referencia']);
-              final referenciaFinal = referenciaDaLinha ?? referenciaRfDoProjeto;
-              String? idUnicoAmostra;
-              if (referenciaFinal != null && referenciaFinal.isNotEmpty) {
-                idUnicoAmostra = '${referenciaFinal.trim()}-${talhao.nome.trim()}-${idParcelaColeta.trim()}';
-              }
-
-              Parcela? parcela;
-              if (idUnicoAmostra != null) {
-                  final List<Map<String, dynamic>> result = await txn.query('parcelas', where: 'id_unico_amostra = ?', whereArgs: [idUnicoAmostra]);
-                  if (result.isNotEmpty) {
-                      parcela = Parcela.fromMap(result.first);
-                  }
-              } else {
-                  final List<Map<String, dynamic>> result = await txn.query('parcelas', where: 'idParcela = ? AND talhaoId = ?', whereArgs: [idParcelaColeta, talhao.id!]);
-                   if (result.isNotEmpty) {
-                      parcela = Parcela.fromMap(result.first);
-                  }
-              }
-
+              Parcela? parcela = (await txn.query('parcelas', where: 'idParcela = ? AND talhaoId = ?', whereArgs: [idParcelaColeta, talhao.id!])).map(Parcela.fromMap).firstOrNull;
               int parcelaDbId;
 
               if(parcela == null) {
@@ -199,7 +176,6 @@ class ImportRepository {
                   final novaParcela = Parcela(
                       talhaoId: talhao.id!, 
                       idParcela: idParcelaColeta,
-                      idUnicoAmostra: idUnicoAmostra,
                       areaMetrosQuadrados: double.tryParse(getValue(row, ['area_m2'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0,
                       status: StatusParcela.values.firstWhere((e) => e.name == statusStr, orElse: ()=> StatusParcela.pendente), 
                       dataColeta: DateTime.tryParse(getValue(row, ['data_coleta']) ?? ''),
@@ -258,6 +234,7 @@ class ImportRepository {
               }
           } 
           else if (tipoLinha == TipoImportacao.cubagem) {
+              
               final idArvore = getValue(row, ['identificador_arvore', 'id_db_arvore']);
               if (idArvore == null) continue;
 

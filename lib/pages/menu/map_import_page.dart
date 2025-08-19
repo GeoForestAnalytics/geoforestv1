@@ -1,4 +1,4 @@
-// lib/pages/menu/map_import_page.dart (VERSÃO FINAL COM NAVEGAÇÃO CORRETA)
+// lib/pages/menu/map_import_page.dart (VERSÃO FINAL E CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +11,7 @@ import 'package:geoforestv1/services/activity_optimizer_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import 'package:geoforestv1/data/repositories/parcela_repository.dart'; // <<< IMPORT NECESSÁRIO AQUI
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 
 class MapImportPage extends StatefulWidget {
   const MapImportPage({super.key});
@@ -22,8 +22,6 @@ class MapImportPage extends StatefulWidget {
 
 class _MapImportPageState extends State<MapImportPage> with RouteAware {
   final _mapController = MapController();
-  // <<< INSTÂNCIA DO REPOSITÓRIO AQUI >>>
-  final _parcelaRepository = ParcelaRepository();
 
   @override
   void didChangeDependencies() {
@@ -43,6 +41,7 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
     MapProvider.routeObserver.unsubscribe(this);
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
 
+    // Otimiza a atividade ao sair da tela para limpar talhões vazios
     final atividadeId = mapProvider.currentAtividade?.id;
     if (atividadeId != null) {
       ActivityOptimizerService(dbHelper: DatabaseHelper.instance).otimizarAtividade(atividadeId);
@@ -261,7 +260,7 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
                           return;
                         }
                         
-                        final parcela = await _parcelaRepository.getParcelaById(dbId);
+                        final parcela = await ParcelaRepository().getParcelaById(dbId);
                         
                         if (!mounted || parcela == null) return;
 

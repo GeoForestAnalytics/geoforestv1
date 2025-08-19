@@ -1,9 +1,10 @@
+// lib/data/repositories/parcela_repository.dart (VERSÃO ATUALIZADA COM lastModified)
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -22,7 +23,7 @@ class ParcelaRepository {
       pMap['dataColeta'] = d.toIso8601String();
       pMap['lastModified'] = now; // <<< 2. CARIMBA A PARCELA
 
-      // Lógica para buscar projetoId (continua igual)
+      // ... (o resto da sua lógica para buscar projetoId e nome do líder continua igual)
       if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
         final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
           SELECT A.projetoId FROM talhoes T
@@ -37,37 +38,6 @@ class ParcelaRepository {
         }
       }
 
-      // <<< INÍCIO DA LÓGICA ADICIONADA >>>
-      if (p.idUnicoAmostra == null || p.idUnicoAmostra!.isEmpty) {
-        if (p.projetoId != null) {
-          // Precisamos buscar o nome do talhão se não estiver no objeto p
-          if (p.nomeTalhao == null || p.nomeTalhao!.isEmpty) {
-             final List<Map<String, dynamic>> talhaoNomeInfo = await txn.query(
-               'talhoes',
-                columns: ['nome'],
-                where: 'id = ?',
-                whereArgs: [p.talhaoId]
-             );
-             if (talhaoNomeInfo.isNotEmpty) {
-                p = p.copyWith(nomeTalhao: talhaoNomeInfo.first['nome'] as String?);
-             }
-          }
-
-          final projetoInfo = await txn.query('projetos', where: 'id = ?', whereArgs: [p.projetoId]);
-          if (projetoInfo.isNotEmpty) {
-            final referenciaRf = projetoInfo.first['referencia_rf'] as String?;
-            if (referenciaRf != null && referenciaRf.isNotEmpty && p.nomeTalhao != null) {
-              // Concatenação: RF + NOME_TALHAO + ID_PARCELA
-              final idUnico = '${referenciaRf.trim()}-${p.nomeTalhao?.trim()}-${p.idParcela.trim()}';
-              p = p.copyWith(idUnicoAmostra: idUnico);
-              pMap['idUnicoAmostra'] = idUnico;
-            }
-          }
-        }
-      }
-      // <<< FIM DA LÓGICA ADICIONADA >>>
-
-
       final prefs = await SharedPreferences.getInstance();
       String? nomeDoResponsavel = prefs.getString('nome_lider');
       if (nomeDoResponsavel == null || nomeDoResponsavel.isEmpty) {
@@ -79,6 +49,7 @@ class ParcelaRepository {
       if (nomeDoResponsavel != null) {
         pMap['nomeLider'] = nomeDoResponsavel;
       }
+      // ... (fim da lógica existente)
 
       if (p.dbId == null) {
         pMap.remove('id');
@@ -99,7 +70,6 @@ class ParcelaRepository {
     });
     return p;
   }
-
 
   Future<void> saveBatchParcelas(List<Parcela> parcelas) async {
     final db = await _dbHelper.database;
@@ -325,29 +295,5 @@ class ParcelaRepository {
       return Parcela.fromMap(maps.first);
     }
     return null;
-  }
-
-Future<List<Parcela>> getParcelasDoDiaPorEquipeEFiltros({
-    required String nomeLider,
-    required DateTime dataSelecionada,
-    required int talhaoId,
-  }) async {
-    final db = await _dbHelper.database;
-    
-    // A data precisa estar no formato 'YYYY-MM-DD' para a função DATE do SQLite funcionar.
-    final dataFormatadaParaQuery = DateFormat('yyyy-MM-dd').format(dataSelecionada);
-
-    final List<Map<String, dynamic>> maps = await db.query(
-      'parcelas',
-      // Usamos a função DATE() do SQLite para comparar apenas a parte da data, ignorando a hora.
-      where: 'talhaoId = ? AND nomeLider = ? AND DATE(dataColeta) = ?',
-      whereArgs: [talhaoId, nomeLider, dataFormatadaParaQuery],
-      orderBy: 'dataColeta DESC', // Ordena as mais recentes primeiro
-    );
-
-    if (maps.isNotEmpty) {
-      return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
-    }
-    return [];
   }
 }

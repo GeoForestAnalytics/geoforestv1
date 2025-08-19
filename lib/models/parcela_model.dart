@@ -46,7 +46,6 @@ class Parcela {
   final double? raio;
   
   List<String> photoPaths;
-  String? idUnicoAmostra;
   List<Arvore> arvores;
   final DateTime? lastModified;
 
@@ -75,7 +74,6 @@ class Parcela {
     this.estado,
     this.atividadeTipo,
     this.photoPaths = const [],
-    this.idUnicoAmostra,
     this.arvores = const [],
     this.lastModified,
   }) : uuid = uuid ?? const Uuid().v4();
@@ -105,7 +103,6 @@ class Parcela {
     String? estado,
     String? atividadeTipo,
     List<String>? photoPaths,
-    String? idUnicoAmostra,
     List<Arvore>? arvores,
     DateTime? lastModified,
   }) {
@@ -134,7 +131,6 @@ class Parcela {
       estado: estado ?? this.estado,
       atividadeTipo: atividadeTipo ?? this.atividadeTipo,
       photoPaths: photoPaths ?? this.photoPaths,
-      idUnicoAmostra: idUnicoAmostra ?? this.idUnicoAmostra,
       arvores: arvores ?? this.arvores,
       lastModified: lastModified ?? this.lastModified,
     );
@@ -164,8 +160,6 @@ class Parcela {
       'projetoId': projetoId,
       'municipio': municipio,
       'estado': estado,
-      'atividadeTipo': atividadeTipo,
-      'idUnicoAmostra': idUnicoAmostra,
       'photoPaths': jsonEncode(photoPaths),
       'lastModified': lastModified?.toIso8601String()
     };
@@ -213,7 +207,6 @@ class Parcela {
       nomeLider: map['nomeLider'],
       projetoId: map['projetoId'],
       atividadeTipo: map['atividadeTipo'],
-      idUnicoAmostra: map['idUnicoAmostra'],
       photoPaths: paths,
       lastModified: parseDate(map['lastModified']),
     );

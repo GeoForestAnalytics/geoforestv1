@@ -1,16 +1,10 @@
-// lib/providers/map_provider.dart (VERSÃO CORRIGIDA COM INICIALIZAÇÃO DE BD NOS ISOLATES)
+// lib/providers/map_provider.dart (VERSÃO FINAL E COMPLETA COM TUDO CORRIGIDO)
 
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart';
-import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
-import 'package:geoforestv1/data/repositories/parcela_repository.dart';
-import 'package:geoforestv1/data/repositories/projeto_repository.dart';
-import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/imported_feature_model.dart';
@@ -23,252 +17,26 @@ import 'package:geoforestv1/services/geojson_service.dart';
 import 'package:geoforestv1/services/sampling_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
-// --- PACOTES DE DADOS PARA ISOLATES ---
-
-class _PlanoImportPayload {
-  final String geoJsonContent;
-  final int atividadeId;
-  final int projetoId;
-  final String? referenciaRfDoProjeto;
-
-  _PlanoImportPayload({
-    required this.geoJsonContent,
-    required this.atividadeId,
-    required this.projetoId,
-    this.referenciaRfDoProjeto,
-  });
-}
-
-class _GerarAmostrasPayload {
-    final List<Map<String, dynamic>> poligonosData;
-    final double hectaresPerSample;
-    final int atividadeId;
-    final int projetoId;
-    final String? referenciaRf;
-
-    _GerarAmostrasPayload({
-        required this.poligonosData,
-        required this.hectaresPerSample,
-        required this.atividadeId,
-        required this.projetoId,
-        this.referenciaRf,
-    });
-}
-
-// --- FUNÇÃO DE INICIALIZAÇÃO PARA ISOLATES ---
-// <<< CORREÇÃO PRINCIPAL AQUI >>>
-void _initializeDatabaseForIsolate() {
-  // Como estamos em um Isolate, não podemos usar a implementação padrão do 
-  // sqflite que depende de Platform Channels (usada no Android/iOS).
-  // Portanto, inicializamos a implementação FFI, que funciona em todas 
-  // as plataformas (Desktop, Android, iOS) sem essa dependência.
-  sqfliteFfiInit();
-  databaseFactory = databaseFactoryFfi;
-}
 
 
-// --- FUNÇÕES GLOBAIS PARA ISOLATES ---
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
+import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 
-Future<String> _processarPlanoDeAmostragemInIsolate(_PlanoImportPayload payload) async {
-  _initializeDatabaseForIsolate();
-  final db = await DatabaseHelper.instance.database;
-  final List<Parcela> parcelasParaSalvar = [];
-  int novasFazendas = 0;
-  int novosTalhoes = 0;
-  final now = DateTime.now().toIso8601String();
-
-  final Map<String, Fazenda> fazendaCache = {};
-  final Map<String, Talhao> talhaoCache = {};
-
-  try {
-    final geoJsonData = json.decode(payload.geoJsonContent);
-    final List features = geoJsonData['features'];
-
-    for (final feature in features) {
-      final props = feature['properties'] as Map<String, dynamic>? ?? {};
-      final geometry = feature['geometry'];
-      
-      if (geometry == null || geometry['type'] != 'Point') continue;
-
-      final fazendaId = (props['id_fazenda'] ?? props['fazenda_id'] ?? props['fazenda'])?.toString();
-      final nomeTalhao = (props['talhao'] ?? props['talhao_nome'])?.toString();
-      
-      if (fazendaId == null || nomeTalhao == null) continue;
-
-      final fazendaKey = '${fazendaId}_${payload.atividadeId}';
-      Fazenda? fazenda = fazendaCache[fazendaKey];
-      if (fazenda == null) {
-        final List<Map<String, dynamic>> fazendaResult = await db.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [fazendaId, payload.atividadeId]);
-        if (fazendaResult.isNotEmpty) {
-          fazenda = Fazenda.fromMap(fazendaResult.first);
-        } else {
-          final nomeDaFazenda = props['fazenda_nome']?.toString() ?? props['fazenda']?.toString() ?? fazendaId;
-          final municipio = props['municipio']?.toString() ?? 'N/I';
-          final estado = props['estado']?.toString() ?? 'N/I';
-          fazenda = Fazenda(id: fazendaId, atividadeId: payload.atividadeId, nome: nomeDaFazenda, municipio: municipio, estado: estado);
-          final map = fazenda.toMap();
-          map['lastModified'] = now;
-          await db.insert('fazendas', map);
-          novasFazendas++;
-        }
-        fazendaCache[fazendaKey] = fazenda;
-      }
-
-      final talhaoKey = '${nomeTalhao}_${fazenda.id}_${fazenda.atividadeId}';
-      Talhao? talhao = talhaoCache[talhaoKey];
-      if (talhao == null) {
-        final List<Map<String, dynamic>> talhaoResult = await db.query('talhoes', where: 'nome = ? AND fazendaId = ? AND fazendaAtividadeId = ?', whereArgs: [nomeTalhao, fazenda.id, fazenda.atividadeId]);
-        if (talhaoResult.isNotEmpty) {
-          talhao = Talhao.fromMap(talhaoResult.first);
-        } else {
-          talhao = Talhao(
-            fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao,
-            projetoId: payload.projetoId, // <<< MELHORIA DE CONSISTÊNCIA
-            especie: props['especie']?.toString(), areaHa: (props['area_ha'] as num?)?.toDouble(),
-            espacamento: props['espacam']?.toString(),
-          );
-          final map = talhao.toMap();
-          map['lastModified'] = now;
-          final talhaoId = await db.insert('talhoes', map);
-          talhao = talhao.copyWith(id: talhaoId);
-          novosTalhoes++;
-        }
-        talhaoCache[talhaoKey] = talhao;
-      }
-      
-      final idParcela = props['parcela_id_plano']?.toString() ?? props['amostra']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString();
-      final rfDaFeature = props['referencia']?.toString() ?? props['referencia_rf']?.toString();
-      final referenciaFinal = rfDaFeature ?? payload.referenciaRfDoProjeto;
-
-      String? idUnicoAmostra;
-      if (referenciaFinal != null && referenciaFinal.isNotEmpty) {
-        idUnicoAmostra = '${referenciaFinal.trim()}-${talhao.nome.trim()}-${idParcela.trim()}';
-      }
-
-      final coordinates = geometry['coordinates'];
-      final position = LatLng(coordinates[1].toDouble(), coordinates[0].toDouble());
-
-      parcelasParaSalvar.add(Parcela(
-        talhaoId: talhao.id,
-        idParcela: idParcela,
-        idUnicoAmostra: idUnicoAmostra,
-        areaMetrosQuadrados: (props['area_m2'] as num?)?.toDouble() ?? 0.0,
-        latitude: position.latitude, 
-        longitude: position.longitude,
-        status: StatusParcela.pendente,
-        dataColeta: DateTime.now(),
-        nomeFazenda: fazenda.nome, 
-        idFazenda: fazenda.id, 
-        nomeTalhao: talhao.nome,
-        projetoId: payload.projetoId,
-        municipio: fazenda.municipio,
-        estado: fazenda.estado,
-      ));
-    }
-    
-    if (parcelasParaSalvar.isNotEmpty) {
-      final batch = db.batch();
-      for (final p in parcelasParaSalvar) {
-        batch.insert('parcelas', p.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-      await batch.commit(noResult: true);
-    }
-
-    return "Plano importado com sucesso!\n${parcelasParaSalvar.length} amostras salvas.\n$novasFazendas novas fazendas criadas.\n$novosTalhoes novos talhões criados.";
-  } catch (e, s) {
-    debugPrint("Erro dentro do Isolate: $e\n$s");
-    return "Erro ao processar arquivo: ${e.toString()}";
-  }
-}
-
-Future<String> _gerarAmostrasInIsolate(_GerarAmostrasPayload payload) async {
-    _initializeDatabaseForIsolate();
-    final db = await DatabaseHelper.instance.database;
-    final samplingService = SamplingService();
-
-    final poligonos = payload.poligonosData.map((data) {
-        final points = (data['points'] as List).map((p) => LatLng(p[0], p[1])).toList();
-        return ImportedPolygonFeature(
-            polygon: Polygon(points: points),
-            properties: data['properties'],
-        );
-    }).toList();
-
-    final pontosGerados = samplingService.generateMultiTalhaoSamplePoints(
-      importedFeatures: poligonos,
-      hectaresPerSample: payload.hectaresPerSample,
-    );
-
-    if (pontosGerados.isEmpty) {
-      return "Nenhum ponto de amostra pôde ser gerado.";
-    }
-
-    final List<Parcela> parcelasParaSalvar = [];
-    int pointIdCounter = 1;
-    
-    for (final ponto in pontosGerados) {
-      final props = ponto.properties;
-      final talhaoIdSalvo = props['db_talhao_id'] as int?;
-      if (talhaoIdSalvo != null) {
-        final idParcela = pointIdCounter.toString();
-        final nomeTalhao = props['talhao_nome']?.toString() ?? 'TALHAO_S_NOME';
-
-        String? idUnicoAmostra;
-        if (payload.referenciaRf != null && payload.referenciaRf!.isNotEmpty) {
-          idUnicoAmostra = '${payload.referenciaRf!.trim()}-${nomeTalhao.trim()}-${idParcela.trim()}';
-        }
-
-        parcelasParaSalvar.add(Parcela(
-          talhaoId: talhaoIdSalvo,
-          idParcela: idParcela, 
-          idUnicoAmostra: idUnicoAmostra,
-          areaMetrosQuadrados: 0,
-          latitude: ponto.position.latitude, 
-          longitude: ponto.position.longitude,
-          status: StatusParcela.pendente, 
-          dataColeta: DateTime.now(),
-          nomeFazenda: props['db_fazenda_nome']?.toString(),
-          idFazenda: props['fazenda_id']?.toString(),
-          nomeTalhao: nomeTalhao,
-          projetoId: payload.projetoId,
-          municipio: props['municipio']?.toString(),
-          estado: props['estado']?.toString(),
-        ));
-        pointIdCounter++;
-      }
-    }
-
-    if (parcelasParaSalvar.isNotEmpty) {
-      final batch = db.batch();
-      for (final p in parcelasParaSalvar) {
-        batch.insert('parcelas', p.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-      await batch.commit(noResult: true);
-    }
-    
-    final optimizerService = ActivityOptimizerService(dbHelper: DatabaseHelper.instance);
-    final talhoesRemovidos = await optimizerService.otimizarAtividade(payload.atividadeId);
-    
-    String mensagemFinal = "${parcelasParaSalvar.length} amostras foram geradas e salvas.";
-    if (talhoesRemovidos > 0) {
-      mensagemFinal += " $talhoesRemovidos talhões vazios foram otimizados.";
-    }
-    return mensagemFinal;
-}
+import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 enum MapLayerType { ruas, satelite, sateliteMapbox }
 
 class MapProvider with ChangeNotifier {
   final _geoJsonService = GeoJsonService();
+  final _dbHelper = DatabaseHelper.instance;
+  final _samplingService = SamplingService();
+  late final ActivityOptimizerService _optimizerService;
   final _exportService = ExportService();
   
   final _parcelaRepository = ParcelaRepository();
   final _fazendaRepository = FazendaRepository();
   final _talhaoRepository = TalhaoRepository();
-  final _projetoRepository = ProjetoRepository();
   
   static final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
@@ -283,8 +51,11 @@ class MapProvider with ChangeNotifier {
   bool _isDrawing = false;
   final List<LatLng> _drawnPoints = [];
 
-  MapProvider();
+  MapProvider() {
+    _optimizerService = ActivityOptimizerService(dbHelper: _dbHelper);
+  }
 
+  // Getters
   bool get isDrawing => _isDrawing;
   List<LatLng> get drawnPoints => _drawnPoints;
   List<Polygon> get polygons => _importedPolygons.map((f) => f.polygon).toList();
@@ -368,7 +139,7 @@ class MapProvider with ChangeNotifier {
       final hectaresPorAmostra = double.parse(dadosDoFormulario['hectares']!);
       final now = DateTime.now().toIso8601String();
   
-      final talhaoSalvo = await DatabaseHelper.instance.database.then((db) async {
+      final talhaoSalvo = await _dbHelper.database.then((db) async {
         return await db.transaction((txn) async {
           final idFazenda = codigoFazenda.isNotEmpty ? codigoFazenda : nomeFazenda;
   
@@ -383,7 +154,6 @@ class MapProvider with ChangeNotifier {
           final novoTalhao = Talhao(
             fazendaId: fazenda.id,
             fazendaAtividadeId: fazenda.atividadeId,
-            projetoId: _currentAtividade!.projetoId, // <<< MELHORIA DE CONSISTÊNCIA
             nome: nomeTalhao,
           );
           final map = novoTalhao.toMap();
@@ -555,26 +325,147 @@ class MapProvider with ChangeNotifier {
 
     _setLoading(true);
 
-    final projeto = await _projetoRepository.getProjetoById(_currentAtividade!.projetoId);
-    
-    final poligonosData = poligonos.map((f) => {
-      'points': f.polygon.points.map((p) => [p.latitude, p.longitude]).toList(),
-      'properties': f.properties,
-    }).toList();
-
-    final payload = _GerarAmostrasPayload(
-        poligonosData: poligonosData,
-        hectaresPerSample: hectaresPerSample,
-        atividadeId: _currentAtividade!.id!,
-        projetoId: _currentAtividade!.projetoId,
-        referenciaRf: projeto?.referenciaRf,
+    final pontosGerados = _samplingService.generateMultiTalhaoSamplePoints(
+      importedFeatures: poligonos,
+      hectaresPerSample: hectaresPerSample,
     );
-    
-    final resultMessage = await compute(_gerarAmostrasInIsolate, payload);
 
-    await loadSamplesParaAtividade();
-    _setLoading(false);
-    return resultMessage;
+    if (pontosGerados.isEmpty) {
+      _setLoading(false);
+      return "Nenhum ponto de amostra pôde ser gerado.";
+    }
+
+    final List<Parcela> parcelasParaSalvar = [];
+    int pointIdCounter = 1;
+    
+    final int? idDoProjetoAtual = _currentAtividade?.projetoId;
+
+    for (final ponto in pontosGerados) {
+      final props = ponto.properties;
+      final talhaoIdSalvo = props['db_talhao_id'] as int?;
+      if (talhaoIdSalvo != null) {
+         parcelasParaSalvar.add(Parcela(
+          talhaoId: talhaoIdSalvo,
+          idParcela: pointIdCounter.toString(), 
+          areaMetrosQuadrados: 0,
+          latitude: ponto.position.latitude, 
+          longitude: ponto.position.longitude,
+          status: StatusParcela.pendente, 
+          dataColeta: DateTime.now(),
+          nomeFazenda: props['db_fazenda_nome']?.toString(),
+          idFazenda: props['fazenda_id']?.toString(),
+          nomeTalhao: props['talhao_nome']?.toString(),
+          projetoId: idDoProjetoAtual,
+          municipio: props['municipio']?.toString(),
+          estado: props['estado']?.toString(),
+        ));
+        pointIdCounter++;
+      }
+    }
+
+    if (parcelasParaSalvar.isNotEmpty) {
+      await _parcelaRepository.saveBatchParcelas(parcelasParaSalvar);
+      await loadSamplesParaAtividade();
+    }
+    
+    if (featuresParaProcessar == null) {
+      final int talhoesRemovidos = await _optimizerService.otimizarAtividade(_currentAtividade!.id!);
+      _setLoading(false);
+      String mensagemFinal = "${parcelasParaSalvar.length} amostras foram geradas e salvas.";
+      if (talhoesRemovidos > 0) {
+        mensagemFinal += " $talhoesRemovidos talhões vazios foram otimizados.";
+      }
+      return mensagemFinal;
+    } else {
+      _setLoading(false);
+      return "${parcelasParaSalvar.length} amostras foram geradas e salvas para o novo talhão.";
+    }
+  }
+
+  Future<String> _processarPlanoDeAmostragemImportado(List<ImportedPointFeature> pontosImportados, BuildContext context) async {
+    _importedPolygons = []; 
+    _samplePoints = []; 
+    notifyListeners();
+
+    final db = await _dbHelper.database;
+    final List<Parcela> parcelasParaSalvar = [];
+    int novasFazendas = 0;
+    int novosTalhoes = 0;
+    
+    final int? idDoProjetoAtual = _currentAtividade?.projetoId;
+    final now = DateTime.now().toIso8601String();
+    
+    await db.transaction((txn) async {
+      for (final ponto in pontosImportados) {
+        final props = ponto.properties;
+        final fazendaId = (props['id_fazenda'] ?? props['fazenda_id'] ?? props['fazenda'])?.toString();
+        final nomeTalhao = (props['talhao'] ?? props['talhao_nome'])?.toString();
+        
+        if (fazendaId == null || nomeTalhao == null) continue;
+
+        Fazenda? fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [fazendaId, _currentAtividade!.id!])).map((e) => Fazenda.fromMap(e)).firstOrNull;
+        if (fazenda == null) {
+          final nomeDaFazenda = props['fazenda_nome']?.toString() ?? props['fazenda']?.toString() ?? fazendaId;
+          final municipio = props['municipio']?.toString() ?? 'N/I';
+          final estado = props['estado']?.toString() ?? 'N/I';
+          fazenda = Fazenda(id: fazendaId, atividadeId: _currentAtividade!.id!, nome: nomeDaFazenda, municipio: municipio, estado: estado);
+          final map = fazenda.toMap();
+          map['lastModified'] = now;
+          await txn.insert('fazendas', map);
+          novasFazendas++;
+        }
+
+        Talhao? talhao = (await txn.query('talhoes', where: 'nome = ? AND fazendaId = ? AND fazendaAtividadeId = ?', whereArgs: [nomeTalhao, fazenda.id, fazenda.atividadeId])).map((e) => Talhao.fromMap(e)).firstOrNull;
+        if (talhao == null) {
+          talhao = Talhao(
+            fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao,
+            especie: props['especie']?.toString(), areaHa: (props['area_ha'] as num?)?.toDouble(),
+            espacamento: props['espacam']?.toString(),
+          );
+          final map = talhao.toMap();
+          map['lastModified'] = now;
+          final talhaoId = await txn.insert('talhoes', map);
+          talhao = talhao.copyWith(id: talhaoId);
+          novosTalhoes++;
+        }
+        
+        parcelasParaSalvar.add(Parcela(
+          talhaoId: talhao.id,
+          idParcela: props['parcela_id_plano']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+          areaMetrosQuadrados: (props['area_m2'] as num?)?.toDouble() ?? 0.0,
+          latitude: ponto.position.latitude, 
+          longitude: ponto.position.longitude,
+          status: StatusParcela.pendente,
+          dataColeta: DateTime.now(),
+          nomeFazenda: fazenda.nome, 
+          idFazenda: fazenda.id, 
+          nomeTalhao: talhao.nome,
+          projetoId: idDoProjetoAtual,
+          municipio: fazenda.municipio,
+          estado: fazenda.estado,
+        ));
+      }
+    });
+    
+    if (parcelasParaSalvar.isNotEmpty) {
+      await _parcelaRepository.saveBatchParcelas(parcelasParaSalvar);
+      await loadSamplesParaAtividade();
+    }
+
+    return "Plano importado: ${parcelasParaSalvar.length} amostras salvas. Novas Fazendas: $novasFazendas, Novos Talhões: $novosTalhoes.";
+  }
+  
+  void clearAllMapData() {
+    _importedPolygons = [];
+    _samplePoints = [];
+    _currentAtividade = null;
+    if (_isFollowingUser) toggleFollowingUser();
+    if (_isDrawing) cancelDrawing();
+    notifyListeners();
+  }
+
+  void setCurrentAtividade(Atividade atividade) {
+    _currentAtividade = atividade;
   }
   
   Future<String> processarImportacaoDeArquivo({required bool isPlanoDeAmostragem, required BuildContext context}) async {
@@ -585,18 +476,9 @@ class MapProvider with ChangeNotifier {
 
     try {
       if (isPlanoDeAmostragem) {
-        final fileContent = await _geoJsonService.importFileContent();
-        if (fileContent != null && fileContent.isNotEmpty) {
-          final projeto = await _projetoRepository.getProjetoById(_currentAtividade!.projetoId);
-          final payload = _PlanoImportPayload(
-            geoJsonContent: fileContent,
-            atividadeId: _currentAtividade!.id!,
-            projetoId: _currentAtividade!.projetoId,
-            referenciaRfDoProjeto: projeto?.referenciaRf,
-          );
-          final resultMessage = await compute(_processarPlanoDeAmostragemInIsolate, payload);
-          await loadSamplesParaAtividade();
-          return resultMessage;
+        final pontosImportados = await _geoJsonService.importPoints();
+        if (pontosImportados.isNotEmpty) {
+          return await _processarPlanoDeAmostragemImportado(pontosImportados, context);
         }
       } else {
         final poligonosImportados = await _geoJsonService.importPolygons();
@@ -605,7 +487,7 @@ class MapProvider with ChangeNotifier {
         }
       }
       
-      return "Nenhum arquivo válido foi selecionado.";
+      return "Nenhum dado válido foi encontrado no arquivo selecionado.";
     
     } on GeoJsonParseException catch (e) {
       return e.toString();
@@ -625,7 +507,7 @@ class MapProvider with ChangeNotifier {
     int talhoesCriados = 0;
     final now = DateTime.now().toIso8601String();
     
-    await DatabaseHelper.instance.database.then((db) async => await db.transaction((txn) async {
+    await _dbHelper.database.then((db) async => await db.transaction((txn) async {
       for (final feature in features) {
         final props = feature.properties;
         final fazendaId = (props['id_fazenda'] ?? props['fazenda_id'] ?? props['fazenda_nome'] ?? props['fazenda'])?.toString();
@@ -649,7 +531,6 @@ class MapProvider with ChangeNotifier {
         if (talhao == null) {
           talhao = Talhao(
             fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao,
-            projetoId: _currentAtividade!.projetoId, // <<< MELHORIA DE CONSISTÊNCIA
             especie: props['especie']?.toString(), areaHa: (props['area_ha'] as num?)?.toDouble(),
           );
           final map = talhao.toMap();
@@ -705,19 +586,6 @@ class MapProvider with ChangeNotifier {
       }
     }
     _setLoading(false);
-  }
-
-  void clearAllMapData() {
-    _importedPolygons = [];
-    _samplePoints = [];
-    _currentAtividade = null;
-    if (_isFollowingUser) toggleFollowingUser();
-    if (_isDrawing) cancelDrawing();
-    notifyListeners();
-  }
-
-  void setCurrentAtividade(Atividade atividade) {
-    _currentAtividade = atividade;
   }
 
   void toggleFollowingUser() {
@@ -785,6 +653,7 @@ class MapProvider with ChangeNotifier {
   }
 }
 
+// O Widget LocationMarker não precisa de alterações, pode mantê-lo como está.
 class LocationMarker extends StatefulWidget {
   const LocationMarker({super.key});
   @override
