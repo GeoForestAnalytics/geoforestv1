@@ -33,15 +33,24 @@ import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 
 
 void initializeProj4Definitions() {
-  try {
-    proj4.Projection.get('EPSG:4326');
-  } catch (_) {
-    debugPrint("Inicializando definições Proj4 para o escopo global...");
-    proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
-    proj4Definitions.forEach((epsg, def) {
-      proj4.Projection.add('EPSG:$epsg', def);
-    });
+  // Uma função auxiliar para adicionar uma projeção apenas se ela não existir.
+  void addProjectionIfNotExists(String name, String definition) {
+    try {
+      proj4.Projection.get(name);
+    } catch (_) {
+      proj4.Projection.add(name, definition);
+    }
   }
+
+  // Garante que a projeção base sempre exista.
+  addProjectionIfNotExists('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+
+  // Itera e adiciona TODAS as definições UTM necessárias.
+  proj4Definitions.forEach((epsg, def) {
+    addProjectionIfNotExists('EPSG:$epsg', def);
+  });
+
+  debugPrint("Definições Proj4 inicializadas/verificadas.");
 }
 
 Future<void> main() async {

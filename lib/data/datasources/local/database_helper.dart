@@ -29,7 +29,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 39, // <<< VERSÃO INCREMENTADA PARA 39
+      version: 40, // <<< VERSÃO INCREMENTADA PARA 40
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -39,6 +39,7 @@ class DatabaseHelper {
   Future<void> _onConfigure(Database db) async => await db.execute('PRAGMA foreign_keys = ON');
 
   Future<void> _onCreate(Database db, int version) async {
+    // A criação da tabela projetos permanece a mesma
     await db.execute('''
       CREATE TABLE projetos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,6 +54,7 @@ class DatabaseHelper {
         lastModified TEXT NOT NULL 
       )
     ''');
+    // A criação da tabela atividades permanece a mesma
     await db.execute('''
       CREATE TABLE atividades (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,6 +67,7 @@ class DatabaseHelper {
         FOREIGN KEY (projetoId) REFERENCES projetos (id) ON DELETE CASCADE
       )
     ''');
+    // A criação da tabela fazendas permanece a mesma
     await db.execute('''
       CREATE TABLE fazendas (
         id TEXT NOT NULL,
@@ -78,6 +81,7 @@ class DatabaseHelper {
       )
     ''');
     
+    // A criação da tabela talhoes permanece a mesma
     await db.execute('''
       CREATE TABLE talhoes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,6 +98,7 @@ class DatabaseHelper {
       )
     ''');
 
+    // <<< TABELA PARCELAS ATUALIZADA >>>
     await db.execute('''
       CREATE TABLE parcelas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,9 +116,6 @@ class DatabaseHelper {
         exportada INTEGER DEFAULT 0 NOT NULL,
         isSynced INTEGER DEFAULT 0 NOT NULL,
         idFazenda TEXT,
-        largura REAL,
-        comprimento REAL,
-        raio REAL,
         photoPaths TEXT,
         nomeLider TEXT,
         projetoId INTEGER,
@@ -121,10 +123,19 @@ class DatabaseHelper {
         estado TEXT,
         id_unico_amostra TEXT,
         up TEXT,
+        referencia_rf TEXT,
+        ciclo TEXT,
+        rotacao INTEGER,
+        tipo_parcela TEXT,
+        forma_parcela TEXT,
+        lado1 REAL,
+        lado2 REAL,
         lastModified TEXT NOT NULL,
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
     ''');
+
+    // <<< TABELA ARVORES ATUALIZADA >>>
     await db.execute('''
       CREATE TABLE arvores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -137,6 +148,8 @@ class DatabaseHelper {
         dominante INTEGER NOT NULL,
         codigo TEXT NOT NULL,
         codigo2 TEXT,
+        codigo3 TEXT,
+        tora INTEGER,
         observacao TEXT,
         capAuditoria REAL,
         alturaAuditoria REAL,
@@ -145,6 +158,8 @@ class DatabaseHelper {
         FOREIGN KEY (parcelaId) REFERENCES parcelas (id) ON DELETE CASCADE
       )
     ''');
+    
+    // As tabelas restantes (cubagens, sortimentos, diario) permanecem as mesmas
     await db.execute('''
       CREATE TABLE cubagens_arvores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -219,6 +234,7 @@ class DatabaseHelper {
     for (var v = oldVersion + 1; v <= newVersion; v++) {
       debugPrint("Executando migração de banco de dados para a versão $v...");
       switch (v) {
+        // Migrações antigas permanecem aqui
         case 25:
           await db.execute('ALTER TABLE parcelas ADD COLUMN uuid TEXT');
           final parcelasSemUuid = await db.query('parcelas', where: 'uuid IS NULL');
@@ -302,22 +318,42 @@ class DatabaseHelper {
           ''');
           break;
         case 37:
-          await db.execute('ALTER TABLE arvores ADD COLUMN alturaDano REAL');
+           await db.execute('ALTER TABLE arvores ADD COLUMN alturaDano REAL');
           break;
-        case 38: // <<< NOVA MIGRAÇÃO
+        case 38:
           await db.execute('ALTER TABLE parcelas ADD COLUMN up TEXT');
           break;
-      case 39: // <<< NOVA MIGRAÇÃO
-          // Esta migração garante que, para usuários existentes, a coluna seja do tipo TEXT.
-          // Em SQLite, adicionar uma coluna que já existe não causa erro se for feito
-          // dentro de uma migração versionada. O tipo será o mais recente.
-          // Para garantir, poderíamos usar uma abordagem de renomear, mas
-          // adicionar a coluna novamente com o tipo correto é mais simples e geralmente funciona.
-          await db.execute('ALTER TABLE parcelas ADD COLUMN up_temp_string TEXT');
-          await db.execute('UPDATE parcelas SET up_temp_string = up');
-          await db.execute('ALTER TABLE parcelas DROP COLUMN up');
-          await db.execute('ALTER TABLE parcelas RENAME COLUMN up_temp_string TO up');
-          break;        
+        case 39:
+          // Esta migração não é mais necessária com a abordagem da v40, mas a mantemos por segurança
+          // caso alguém já tenha rodado a v38 com o tipo errado.
+          try {
+            await db.execute('ALTER TABLE parcelas ADD COLUMN up_temp_string TEXT');
+            await db.execute('UPDATE parcelas SET up_temp_string = up');
+            await db.execute('ALTER TABLE parcelas DROP COLUMN up');
+            await db.execute('ALTER TABLE parcelas RENAME COLUMN up_temp_string TO up');
+          } catch (e) {
+            debugPrint("Aviso na migração 39 (esperado se a coluna 'up' já era TEXT): $e");
+          }
+          break;
+        
+        // <<< NOVA MIGRAÇÃO PARA A VERSÃO 40 >>>
+        case 40:
+          // Remove colunas antigas da parcela
+          await db.execute('ALTER TABLE parcelas DROP COLUMN largura');
+          await db.execute('ALTER TABLE parcelas DROP COLUMN comprimento');
+          await db.execute('ALTER TABLE parcelas DROP COLUMN raio');
+          // Adiciona novas colunas na parcela
+          await db.execute('ALTER TABLE parcelas ADD COLUMN referencia_rf TEXT');
+          await db.execute('ALTER TABLE parcelas ADD COLUMN ciclo TEXT');
+          await db.execute('ALTER TABLE parcelas ADD COLUMN rotacao INTEGER');
+          await db.execute('ALTER TABLE parcelas ADD COLUMN tipo_parcela TEXT');
+          await db.execute('ALTER TABLE parcelas ADD COLUMN forma_parcela TEXT');
+          await db.execute('ALTER TABLE parcelas ADD COLUMN lado1 REAL');
+          await db.execute('ALTER TABLE parcelas ADD COLUMN lado2 REAL');
+          // Adiciona novas colunas na arvore
+          await db.execute('ALTER TABLE arvores ADD COLUMN codigo3 TEXT');
+          await db.execute('ALTER TABLE arvores ADD COLUMN tora INTEGER');
+          break;
       }
     }
   }

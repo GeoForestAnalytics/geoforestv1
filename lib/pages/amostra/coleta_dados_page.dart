@@ -1,4 +1,4 @@
-// lib/pages/amostra/coleta_dados_page.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/pages/amostra/coleta_dados_page.dart (VERSÃO COM NOVOS CAMPOS DE EXPORTAÇÃO)
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -42,14 +42,18 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   
   late Parcela _parcelaAtual;
 
+  // --- CONTROLADORES ATUALIZADOS ---
   final _nomeFazendaController = TextEditingController();
   final _idFazendaController = TextEditingController();
   final _talhaoParcelaController = TextEditingController();
   final _idParcelaController = TextEditingController();
   final _observacaoController = TextEditingController();
-  final _larguraController = TextEditingController();
-  final _comprimentoController = TextEditingController();
-  final _raioController = TextEditingController();
+  final _lado1Controller = TextEditingController();
+  final _lado2Controller = TextEditingController();
+  
+  // Novos controladores para campos visíveis
+  final _referenciaRfController = TextEditingController();
+  final _tipoParcelaController = TextEditingController(text: 'Instalação'); // Valor padrão
 
   Position? _posicaoAtualExibicao;
   bool _buscandoLocalizacao = false;
@@ -107,17 +111,23 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     _idFazendaController.text = p.idFazenda ?? '';
     _idParcelaController.text = p.idParcela;
     _observacaoController.text = p.observacao ?? '';
-    _larguraController.clear();
-    _comprimentoController.clear();
-    _raioController.clear();
-    if (p.raio != null && p.raio! > 0) {
-      _raioController.text = p.raio.toString().replaceAll('.', ',');
-      _formaDaParcela = FormaParcela.circular;
+
+    // Novos campos
+    _referenciaRfController.text = p.referenciaRf ?? '';
+    _tipoParcelaController.text = p.tipoParcela ?? 'Instalação';
+    
+    _lado1Controller.clear();
+    _lado2Controller.clear();
+    
+    // Lógica para Lado1/Lado2/Raio
+    _formaDaParcela = (p.formaParcela == 'Circular') ? FormaParcela.circular : FormaParcela.retangular;
+    if (_formaDaParcela == FormaParcela.circular) {
+      if (p.lado1 != null) _lado1Controller.text = p.lado1.toString().replaceAll('.', ',');
     } else {
-      _formaDaParcela = FormaParcela.retangular;
-      if (p.largura != null && p.largura! > 0) _larguraController.text = p.largura.toString().replaceAll('.', ',');
-      if (p.comprimento != null && p.comprimento! > 0) _comprimentoController.text = p.comprimento.toString().replaceAll('.', ',');
+      if (p.lado1 != null) _lado1Controller.text = p.lado1.toString().replaceAll('.', ',');
+      if (p.lado2 != null) _lado2Controller.text = p.lado2.toString().replaceAll('.', ',');
     }
+    
     if (p.latitude != null && p.longitude != null) {
       _posicaoAtualExibicao = Position(latitude: p.latitude!, longitude: p.longitude!, timestamp: DateTime.now(), accuracy: 0.0, altitude: 0.0, altitudeAccuracy: 0.0, heading: 0.0, headingAccuracy: 0.0, speed: 0.0, speedAccuracy: 0.0);
     }
@@ -130,26 +140,28 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     _talhaoParcelaController.dispose();
     _idParcelaController.dispose();
     _observacaoController.dispose();
-    _larguraController.dispose();
-    _comprimentoController.dispose();
-    _raioController.dispose();
+    _lado1Controller.dispose();
+    _lado2Controller.dispose();
+    _referenciaRfController.dispose();
+    _tipoParcelaController.dispose();
     super.dispose();
   }
   
+  // <<< FUNÇÃO PRINCIPAL ATUALIZADA >>>
   Parcela _construirObjetoParcelaParaSalvar() {
-    double? largura, comprimento, raio;
+    double? lado1, lado2;
     double area = 0.0;
+    
     if (_formaDaParcela == FormaParcela.retangular) {
-        largura = double.tryParse(_larguraController.text.replaceAll(',', '.'));
-        comprimento = double.tryParse(_comprimentoController.text.replaceAll(',', '.'));
-        area = (largura ?? 0) * (comprimento ?? 0);
-        raio = null;
+        lado1 = double.tryParse(_lado1Controller.text.replaceAll(',', '.'));
+        lado2 = double.tryParse(_lado2Controller.text.replaceAll(',', '.'));
+        area = (lado1 ?? 0) * (lado2 ?? 0);
     } else {
-        raio = double.tryParse(_raioController.text.replaceAll(',', '.'));
-        area = math.pi * math.pow(raio ?? 0, 2);
-        largura = null;
-        comprimento = null;
+        lado1 = double.tryParse(_lado1Controller.text.replaceAll(',', '.'));
+        lado2 = null;
+        area = math.pi * math.pow(lado1 ?? 0, 2);
     }
+
     return _parcelaAtual.copyWith(
       idParcela: _idParcelaController.text.trim(),
       nomeFazenda: _nomeFazendaController.text.trim(),
@@ -157,12 +169,19 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       nomeTalhao: _talhaoParcelaController.text.trim(),
       observacao: _observacaoController.text.trim(),
       areaMetrosQuadrados: area,
-      largura: largura,
-      comprimento: comprimento,
-      raio: raio,
+      
+      // Novos campos salvos
+      referenciaRf: _referenciaRfController.text.trim(),
+      tipoParcela: _tipoParcelaController.text.trim(),
+      formaParcela: _formaDaParcela.name, // Salva 'retangular' ou 'circular'
+      lado1: lado1,
+      lado2: lado2,
+      // Os campos que não estão na tela (ciclo, rotacao) serão salvos como null,
+      // a menos que você queira adicionar campos para eles também.
     );
   }
 
+  // A função _pickImage não precisa de alterações
   Future<void> _pickImage(ImageSource source) async {
     final XFile? pickedFile = await _picker.pickImage(source: source, imageQuality: 85, maxWidth: 1280);
     if (pickedFile == null || !mounted) return;
@@ -258,6 +277,10 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
   }
 
+  // O restante das funções (_reabrirParaEdicao, _salvarEIniciarColeta, etc.)
+  // não precisa de alterações, pois eles já usam a função `_construirObjetoParcelaParaSalvar`
+  // que acabamos de modificar.
+  
   Future<void> _reabrirParaEdicao() async {
     setState(() => _salvando = true);
     try {
@@ -373,9 +396,18 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    final area = (_formaDaParcela == FormaParcela.retangular)
-      ? (double.tryParse(_larguraController.text.replaceAll(',', '.')) ?? 0) * (double.tryParse(_comprimentoController.text.replaceAll(',', '.')) ?? 0)
-      : math.pi * math.pow(double.tryParse(_raioController.text.replaceAll(',', '.')) ?? 0, 2);
+    
+    // Lógica de área atualizada
+    double area = 0.0;
+    if (_formaDaParcela == FormaParcela.retangular) {
+      final lado1 = double.tryParse(_lado1Controller.text.replaceAll(',', '.')) ?? 0;
+      final lado2 = double.tryParse(_lado2Controller.text.replaceAll(',', '.')) ?? 0;
+      area = lado1 * lado2;
+    } else {
+      final raio = double.tryParse(_lado1Controller.text.replaceAll(',', '.')) ?? 0;
+      area = math.pi * math.pow(raio, 2);
+    }
+    
     if (area <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A área da parcela deve ser maior que zero.'), backgroundColor: Colors.orange));
       return;
@@ -447,13 +479,14 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   
   @override
   Widget build(BuildContext context) {
+    // Lógica de cálculo de área atualizada
     double area = 0.0;
     if (_formaDaParcela == FormaParcela.retangular) {
-      final largura = double.tryParse(_larguraController.text.replaceAll(',', '.')) ?? 0;
-      final comprimento = double.tryParse(_comprimentoController.text.replaceAll(',', '.')) ?? 0;
-      area = largura * comprimento;
+      final lado1 = double.tryParse(_lado1Controller.text.replaceAll(',', '.')) ?? 0;
+      final lado2 = double.tryParse(_lado2Controller.text.replaceAll(',', '.')) ?? 0;
+      area = lado1 * lado2;
     } else {
-      final raio = double.tryParse(_raioController.text.replaceAll(',', '.')) ?? 0;
+      final raio = double.tryParse(_lado1Controller.text.replaceAll(',', '.')) ?? 0;
       area = math.pi * math.pow(raio, 2);
     }
 
@@ -485,6 +518,18 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
                         ],
                       ),
                     ),
+                  
+                  // CAMPOS NOVOS ADICIONADOS
+                  Row(
+                    children: [
+                      Expanded(child: TextFormField(controller: _referenciaRfController, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'RF', border: OutlineInputBorder()))),
+                      const SizedBox(width: 16),
+                      Expanded(child: TextFormField(controller: _tipoParcelaController, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'Tipo', border: OutlineInputBorder()))),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // CAMPOS ANTIGOS
                   TextFormField(controller: _nomeFazendaController, enabled: false, decoration: const InputDecoration(labelText: 'Nome da Fazenda', border: OutlineInputBorder(), prefixIcon: Icon(Icons.business))),
                   const SizedBox(height: 16),
                   TextFormField(controller: _idFazendaController, enabled: false, decoration: const InputDecoration(labelText: 'Código da Fazenda', border: OutlineInputBorder(), prefixIcon: Icon(Icons.pin_outlined))),
@@ -509,6 +554,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     );
   }
 
+  // O restante dos widgets de build permanece o mesmo, mas a calculadora de área é atualizada
   Widget _buildActionButtons() {
     if (_isReadOnly) {
       return Column(
@@ -541,6 +587,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
   }
 
+  // <<< WIDGET ATUALIZADO PARA LADO1/LADO2 >>>
   Widget _buildCalculadoraArea(double area) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -558,12 +605,12 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
         const SizedBox(height: 16),
         if (_formaDaParcela == FormaParcela.retangular)
           Row(children: [
-            Expanded(child: TextFormField(controller: _larguraController, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'Largura (m)', border: OutlineInputBorder()), keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null)),
+            Expanded(child: TextFormField(controller: _lado1Controller, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'Lado 1 (m)', border: OutlineInputBorder()), keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null)),
             const SizedBox(width: 8), const Text('x', style: TextStyle(fontSize: 20)), const SizedBox(width: 8),
-            Expanded(child: TextFormField(controller: _comprimentoController, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'Comprimento (m)', border: OutlineInputBorder()), keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null)),
+            Expanded(child: TextFormField(controller: _lado2Controller, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'Lado 2 (m)', border: OutlineInputBorder()), keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null)),
           ])
         else
-          TextFormField(controller: _raioController, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'Raio (m)', border: OutlineInputBorder()), keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null),
+          TextFormField(controller: _lado1Controller, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'Raio (m)', border: OutlineInputBorder()), keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null),
         const SizedBox(height: 16),
         Container(
           width: double.infinity, padding: const EdgeInsets.all(12),

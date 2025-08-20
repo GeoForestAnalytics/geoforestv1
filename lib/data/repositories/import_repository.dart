@@ -1,4 +1,4 @@
-// lib/data/repositories/import_repository.dart (VERSÃO FINAL E COMPLETA)
+// lib/data/repositories/import_repository.dart (VERSÃO FINAL COM TODAS AS CORREÇÕES)
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:intl/intl.dart';
+import 'package:collection/collection.dart'; // <<< IMPORT NECESSÁRIO
 
 // Repositórios e Constantes
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -57,8 +59,14 @@ class ImportRepository {
 
     String? getValue(Map<String, dynamic> row, List<String> possibleKeys) {
       for (final key in possibleKeys) {
-        if (row.containsKey(key.toLowerCase())) {
-          final value = row[key.toLowerCase()]?.toString();
+        // Lógica aprimorada para encontrar a chave original mesmo com sanitização
+        final sanitizedKey = key.replaceAll(RegExp(r'[^a-z0-9]'), '');
+        final originalKey = row.keys.firstWhereOrNull(
+          (k) => k.toString().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') == sanitizedKey
+        );
+
+        if (originalKey != null) {
+          final value = row[originalKey]?.toString();
           return (value == null || value.toLowerCase() == 'null' || value.trim().isEmpty) ? null : value;
         }
       }
@@ -78,6 +86,9 @@ class ImportRepository {
       await db.transaction((txn) async {
         final now = DateTime.now().toIso8601String();
         
+        Parcela? parcelaCache;
+        int? parcelaCacheDbId;
+
         for (final row in dataRows) {
           linhasProcessadas++;
           
@@ -96,7 +107,9 @@ class ImportRepository {
 
           final nomeFazenda = getValue(row, ['fazenda', 'nome_fazenda']);
           if (nomeFazenda == null) continue;
-          final idFazenda = getValue(row, ['codigo_fazenda', 'id_fazenda']) ?? nomeFazenda;
+          
+          final idFazenda = getValue(row, ['fazenda_id', 'codigo_fazenda', 'id_fazenda']) ?? nomeFazenda;
+          
           Fazenda? fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [idFazenda, atividade.id!])).map(Fazenda.fromMap).firstOrNull;
           if (fazenda == null) {
               fazenda = Fazenda(id: idFazenda, atividadeId: atividade.id!, nome: nomeFazenda, municipio: getValue(row, ['municipio']) ?? 'N/I', estado: getValue(row, ['estado']) ?? 'N/I');
@@ -116,9 +129,9 @@ class ImportRepository {
                 fazendaAtividadeId: fazenda.atividadeId, 
                 nome: nomeTalhao, 
                 projetoId: projeto.id,
-                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_talhão'])?.replaceAll(',', '.') ?? ''),
-                especie: getValue(row, ['especie']),
-                espacamento: getValue(row, ['espacamento', 'espacame']),
+                areaHa: double.tryParse(getValue(row, ['area_ha', 'area_talhao_ha'])?.replaceAll(',', '.') ?? ''),
+                especie: getValue(row, ['especie', 'material']),
+                espacamento: getValue(row, ['espacamento', 'espacamen']),
                 idadeAnos: double.tryParse(getValue(row, ['idade_anos', 'idade'])?.replaceAll(',', '.') ?? ''),
               );
               final map = talhao.toMap();
@@ -127,10 +140,13 @@ class ImportRepository {
               talhao = talhao.copyWith(id: tId);
               talhoesCriados++;
           } else {
+              final areaHaStr = getValue(row, ['area_ha', 'area_talhao_ha']);
+              final areaHaFinal = areaHaStr != null ? double.tryParse(areaHaStr.replaceAll(',', '.')) : talhao.areaHa;
+              
               final talhaoAtualizado = talhao.copyWith(
-                areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_talhão'])?.replaceAll(',', '.') ?? talhao.areaHa?.toString() ?? ''),
-                especie: getValue(row, ['especie']) ?? talhao.especie,
-                espacamento: getValue(row, ['espacamento', 'espacame']) ?? talhao.espacamento,
+                areaHa: areaHaFinal,
+                especie: getValue(row, ['especie', 'material']) ?? talhao.especie,
+                espacamento: getValue(row, ['espacamento', 'espacamen']) ?? talhao.espacamento,
                 idadeAnos: double.tryParse(getValue(row, ['idade_anos', 'idade'])?.replaceAll(',', '.') ?? talhao.idadeAnos?.toString() ?? ''),
               );
               final map = talhaoAtualizado.toMap();
@@ -141,94 +157,125 @@ class ImportRepository {
           final tipoLinha = ['IPC', 'IFC', 'AUD', 'IFS', 'BIO', 'IFQ'].any((e) => tipoAtividadeStr.contains(e)) ? TipoImportacao.inventario : (tipoAtividadeStr.contains('CUB') ? TipoImportacao.cubagem : TipoImportacao.desconhecido);
 
           if (tipoLinha == TipoImportacao.inventario) {
-              final idParcelaColeta = getValue(row, ['id_coleta_parcela', 'id_parcela']);
+              final idParcelaColeta = getValue(row, ['parcela', 'id_parcela']);
               if (idParcelaColeta == null) continue;
               
-              Parcela? parcela = (await txn.query('parcelas', where: 'idParcela = ? AND talhaoId = ?', whereArgs: [idParcelaColeta, talhao.id!])).map(Parcela.fromMap).firstOrNull;
               int parcelaDbId;
 
-              if(parcela == null) {
-                  double? latitudeFinal, longitudeFinal;
-                  final latStr = getValue(row, ['latitude', 'lat']);
-                  final lonStr = getValue(row, ['longitude', 'lon', 'lng']);
-                  if (latStr != null && lonStr != null) {
-                      latitudeFinal = double.tryParse(latStr.replaceAll(',', '.'));
-                      longitudeFinal = double.tryParse(lonStr.replaceAll(',', '.'));
-                  } else {
-                      final eastingStr = getValue(row, ['easting', 'este']);
-                      final northingStr = getValue(row, ['northing', 'norte']);
-                      if (eastingStr != null && northingStr != null) {
-                          final easting = double.tryParse(eastingStr.replaceAll(',', '.'));
-                          final northing = double.tryParse(northingStr.replaceAll(',', '.'));
-                          if (easting != null && northing != null) {
-                              final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
-                              final codigoEpsg = zonasUtmSirgas2000[nomeZona] ?? 31982;
-                              final projUTM = proj4.Projection.get('EPSG:$codigoEpsg') ?? proj4.Projection.parse(proj4Definitions[codigoEpsg]!);
-                              final projWGS84 = proj4.Projection.get('EPSG:4326') ?? proj4.Projection.parse('+proj=longlat +datum=WGS84 +no_defs');
-                              var pontoWGS84 = projUTM.transform(projWGS84, proj4.Point(x: easting, y: northing));
-                              latitudeFinal = pontoWGS84.y;
-                              longitudeFinal = pontoWGS84.x;
-                          }
-                      }
-                  }
+              if (parcelaCache?.talhaoId != talhao.id! || parcelaCache?.idParcela != idParcelaColeta) {
+                Parcela? parcelaExistente = (await txn.query('parcelas', where: 'idParcela = ? AND talhaoId = ?', whereArgs: [idParcelaColeta, talhao.id!])).map(Parcela.fromMap).firstOrNull;
 
-                  final statusStr = getValue(row, ['status_parcela']) ?? 'pendente';
-                  final novaParcela = Parcela(
-                      talhaoId: talhao.id!, 
-                      idParcela: idParcelaColeta,
-                      areaMetrosQuadrados: double.tryParse(getValue(row, ['area_m2'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0,
-                      status: StatusParcela.values.firstWhere((e) => e.name == statusStr, orElse: ()=> StatusParcela.pendente), 
-                      dataColeta: DateTime.tryParse(getValue(row, ['data_coleta']) ?? ''),
-                      nomeFazenda: fazenda.nome, 
-                      nomeTalhao: talhao.nome, 
-                      isSynced: false, 
-                      projetoId: projeto.id,
-                      up: getValue(row, ['up', 'bloco', 'rf','unidade_planejamento', 'unidade']),
-                      latitude: latitudeFinal,
-                      longitude: longitudeFinal,
-                      largura: double.tryParse(getValue(row, ['largura_m'])?.replaceAll(',', '.') ?? ''),
-                      comprimento: double.tryParse(getValue(row, ['comprimento_m'])?.replaceAll(',', '.') ?? ''),
-                      raio: double.tryParse(getValue(row, ['raio_m'])?.replaceAll(',', '.') ?? ''),                      
-                      observacao: getValue(row, ['observacao_parcela']),
-                      nomeLider: getValue(row, ['lider_equipe']) ?? nomeDoResponsavel
-                  );
-                  final map = novaParcela.toMap();
-                  map['lastModified'] = now;
-                  parcelaDbId = await txn.insert('parcelas', map);
-                  parcelasCriadas++;
-              } else {
-                  final map = parcela.toMap();
-                  map['lastModified'] = now;
-                  await txn.update('parcelas', map, where: 'id = ?', whereArgs: [parcela.dbId!]);
-                  parcelaDbId = parcela.dbId!;
-                  parcelasAtualizadas++;
+                if (parcelaExistente == null) {
+                    double? latitudeFinal, longitudeFinal;
+                    final eastingStr = getValue(row, ['coord_x', 'easting']);
+                    final northingStr = getValue(row, ['coord_y', 'northing']);
+                    if (eastingStr != null && northingStr != null) {
+                        final easting = double.tryParse(eastingStr.replaceAll(',', '.'));
+                        final northing = double.tryParse(northingStr.replaceAll(',', '.'));
+                        if (easting != null && northing != null) {
+                            final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
+                            final codigoEpsg = zonasUtmSirgas2000[nomeZona] ?? 31982;
+                            final projUTM = proj4.Projection.get('EPSG:$codigoEpsg') ?? proj4.Projection.parse(proj4Definitions[codigoEpsg]!);
+                            final projWGS84 = proj4.Projection.get('EPSG:4326') ?? proj4.Projection.parse('+proj=longlat +datum=WGS84 +no_defs');
+                            var pontoWGS84 = projUTM.transform(projWGS84, proj4.Point(x: easting, y: northing));
+                            latitudeFinal = pontoWGS84.y;
+                            longitudeFinal = pontoWGS84.x;
+                        }
+                    }
+                    
+                    final dataColetaStr = getValue(row, ['data de medição', 'data_coleta']);
+                    DateTime dataColetaFinal;
+                    if (dataColetaStr != null && dataColetaStr.isNotEmpty) {
+                      try {
+                        dataColetaFinal = DateFormat('dd/MM/yyyy').parseStrict(dataColetaStr);
+                      } catch (e) {
+                        dataColetaFinal = DateTime.now();
+                      }
+                    } else {
+                      dataColetaFinal = DateTime.now();
+                    }
+                    
+                    final lado1 = double.tryParse(getValue(row, ['lado 1'])?.replaceAll(',', '.') ?? '0') ?? 0.0;
+                    final lado2 = double.tryParse(getValue(row, ['lado 2'])?.replaceAll(',', '.') ?? '0') ?? 0.0;
+
+                    final novaParcela = Parcela(
+                        talhaoId: talhao.id!, 
+                        idParcela: idParcelaColeta,
+                        idFazenda: fazenda.id,
+                        areaMetrosQuadrados: lado1 * lado2,
+                        status: StatusParcela.concluida, 
+                        dataColeta: dataColetaFinal,
+                        nomeFazenda: fazenda.nome, 
+                        nomeTalhao: talhao.nome, 
+                        isSynced: false, 
+                        projetoId: projeto.id,
+                        up: getValue(row, ['up', 'rf']),
+                        referenciaRf: getValue(row, ['rf']),
+                        ciclo: getValue(row, ['ciclo']),
+                        rotacao: int.tryParse(getValue(row, ['rotação']) ?? ''),
+                        tipoParcela: getValue(row, ['tipo']),
+                        formaParcela: getValue(row, ['forma']),
+                        lado1: lado1,
+                        lado2: lado2,
+                        latitude: latitudeFinal,
+                        longitude: longitudeFinal,
+                        observacao: getValue(row, ['obsparcela']),
+                        nomeLider: getValue(row, ['equipe']) ?? nomeDoResponsavel
+                    );
+                    final map = novaParcela.toMap();
+                    map['lastModified'] = now;
+                    parcelaDbId = await txn.insert('parcelas', map);
+                    parcelaCache = novaParcela.copyWith(dbId: parcelaDbId);
+                    parcelaCacheDbId = parcelaDbId;
+                    parcelasCriadas++;
+                } else {
+                    final parcelaAtualizada = parcelaExistente.copyWith(
+                      up: getValue(row, ['up', 'rf'])
+                    );
+                    final map = parcelaAtualizada.toMap();
+                    map['lastModified'] = now;
+                    await txn.update('parcelas', map, where: 'id = ?', whereArgs: [parcelaExistente.dbId!]);
+                    
+                    parcelaCache = parcelaAtualizada;
+                    parcelaCacheDbId = parcelaExistente.dbId!;
+                    parcelasAtualizadas++;
+                }
               }
+              
+              parcelaDbId = parcelaCacheDbId!;
 
-              final codigoStr = getValue(row, ['codigo_arvore', 'codigo']);
-              if (codigoStr != null) {
-                  final dominante = getValue(row, ['dominante'])?.toLowerCase() == 'sim' || getValue(row, ['dominante'])?.toLowerCase() == 'true';
-                  final codigo2Str = getValue(row, ['codigo_arvore_2']);
-                  
-                  Codigo2? finalCodigo2;
-                  if (codigo2Str != null) {
-                      final matchingCodes = Codigo2.values.where((e) => e.name.toLowerCase() == codigo2Str.toLowerCase());
-                      if (matchingCodes.isNotEmpty) {
-                          finalCodigo2 = matchingCodes.first;
-                      }
+              final capStr = getValue(row, ['cap']);
+              if (capStr != null) {
+                  Codigo _mapCodigo(String? cod) {
+                    if (cod == null) return Codigo.normal;
+                    switch(cod.toUpperCase()){
+                      case 'F': return Codigo.falha;
+                      case 'M': return Codigo.morta;
+                      case 'Q': return Codigo.quebrada;
+                      case 'B': return Codigo.bifurcada;
+                      case 'C': return Codigo.caida;
+                      case 'A': return Codigo.ataquemacaco;
+                      case 'R': return Codigo.regenaracao;
+                      case 'I': return Codigo.inclinada;
+                      default: return Codigo.normal;
+                    }
                   }
+
+                  final codigo1Str = getValue(row, ['cod_1']);
+                  final codigo2Str = getValue(row, ['cod_2']);
 
                   final novaArvore = Arvore(
-                    cap: double.tryParse(getValue(row, ['cap_cm'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0, 
-                    altura: double.tryParse(getValue(row, ['altura_m'])?.replaceAll(',', '.') ?? ''),
-                    alturaDano: double.tryParse(getValue(row, ['altura_dano_m', 'altura_dano'])?.replaceAll(',', '.') ?? ''),
+                    cap: (double.tryParse(capStr.replaceAll(',', '.')) ?? 0.0) / 10.0,
+                    altura: (double.tryParse(getValue(row, ['altura'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0) / 10.0,
                     linha: int.tryParse(getValue(row, ['linha']) ?? '0') ?? 0, 
-                    posicaoNaLinha: int.tryParse(getValue(row, ['posicao_na_linha']) ?? '0') ?? 0, 
-                    dominante: dominante, 
-                    codigo: Codigo.values.firstWhere((e) => e.name.toLowerCase() == codigoStr.toLowerCase(), orElse: () => Codigo.normal),
-                    codigo2: finalCodigo2,
+                    posicaoNaLinha: int.tryParse(getValue(row, ['arvore']) ?? '0') ?? 0, 
+                    dominante: getValue(row, ['dominante'])?.toLowerCase() == 'h', 
+                    codigo: _mapCodigo(codigo1Str),
+                    codigo2: codigo2Str != null ? Codigo2.values.firstWhereOrNull((e) => e.name.toUpperCase().startsWith(codigo2Str.toUpperCase())) : null,
+                    codigo3: getValue(row, ['cod_3']),
+                    tora: int.tryParse(getValue(row, ['tora']) ?? '1'),
                     fimDeLinha: false
                   );
-
                   final arvoreMap = novaArvore.toMap();
                   arvoreMap['parcelaId'] = parcelaDbId;
                   arvoreMap['lastModified'] = now;
@@ -237,7 +284,6 @@ class ImportRepository {
               }
           } 
           else if (tipoLinha == TipoImportacao.cubagem) {
-              
               final idArvore = getValue(row, ['identificador_arvore', 'id_db_arvore']);
               if (idArvore == null) continue;
 

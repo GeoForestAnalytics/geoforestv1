@@ -1,4 +1,4 @@
-// lib/pages/amostra/form_parcela_page.dart (VERSÃO CORRIGIDA E FUNCIONAL)
+// lib/pages/amostra/form_parcela_page.dart (VERSÃO ATUALIZADA PARA EXPORTAÇÃO)
 
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
@@ -6,10 +6,7 @@ import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/pages/amostra/inventario_page.dart';
 import 'package:geolocator/geolocator.dart';
-
-// --- NOVO IMPORT DO REPOSITÓRIO ---
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
-// ------------------------------------
 
 enum FormaParcela { retangular, circular }
 
@@ -24,15 +21,15 @@ class FormParcelaPage extends StatefulWidget {
 
 class _FormParcelaPageState extends State<FormParcelaPage> {
   final _formKey = GlobalKey<FormState>();
-  
-  // --- INSTÂNCIA DO REPOSITÓRIO ---
   final _parcelaRepository = ParcelaRepository();
 
+  // --- CONTROLADORES ATUALIZADOS ---
   final _idParcelaController = TextEditingController();
   final _observacaoController = TextEditingController();
-  final _larguraController = TextEditingController();
-  final _comprimentoController = TextEditingController();
-  final _raioController = TextEditingController();
+  final _lado1Controller = TextEditingController();
+  final _lado2Controller = TextEditingController();
+  final _referenciaRfController = TextEditingController();
+  final _tipoParcelaController = TextEditingController(text: 'Instalação');
 
   bool _isSaving = false;
   bool _isGettingLocation = false;
@@ -45,30 +42,30 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
   @override
   void initState() {
     super.initState();
-    _larguraController.addListener(_calcularArea);
-    _comprimentoController.addListener(_calcularArea);
-    _raioController.addListener(_calcularArea);
+    _lado1Controller.addListener(_calcularArea);
+    _lado2Controller.addListener(_calcularArea);
   }
 
   @override
   void dispose() {
     _idParcelaController.dispose();
     _observacaoController.dispose();
-    _larguraController.dispose();
-    _comprimentoController.dispose();
-    _raioController.dispose();
+    _lado1Controller.dispose();
+    _lado2Controller.dispose();
+    _referenciaRfController.dispose();
+    _tipoParcelaController.dispose();
     super.dispose();
   }
 
   void _calcularArea() {
     double area = 0.0;
     if (_formaDaParcela == FormaParcela.retangular) {
-      final largura = double.tryParse(_larguraController.text.replaceAll(',', '.')) ?? 0;
-      final comprimento = double.tryParse(_comprimentoController.text.replaceAll(',', '.')) ?? 0;
-      area = largura * comprimento;
+      final lado1 = double.tryParse(_lado1Controller.text.replaceAll(',', '.')) ?? 0;
+      final lado2 = double.tryParse(_lado2Controller.text.replaceAll(',', '.')) ?? 0;
+      area = lado1 * lado2;
     } else {
-      final raio = double.tryParse(_raioController.text.replaceAll(',', '.')) ?? 0;
-      area = math.pi * raio * raio;
+      final raio = double.tryParse(_lado1Controller.text.replaceAll(',', '.')) ?? 0;
+      area = math.pi * math.pow(raio, 2);
     }
     setState(() => _areaCalculada = area);
   }
@@ -111,7 +108,7 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
     }
   }
 
-  // <<< FUNÇÃO DE SALVAR COMPLETAMENTE CORRIGIDA >>>
+  // <<< FUNÇÃO DE SALVAR ATUALIZADA >>>
   Future<void> _salvarEIniciarColeta() async {
     if (!_formKey.currentState!.validate()) return;
     
@@ -127,7 +124,6 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
 
     setState(() => _isSaving = true);
 
-    // 1. Usa a função correta para verificar se a parcela já existe
     final parcelaExistente = await _parcelaRepository.getParcelaPorIdParcela(widget.talhao.id!, _idParcelaController.text.trim());
     if (parcelaExistente != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Este ID de Parcela já existe neste talhão.'), backgroundColor: Colors.red));
@@ -142,9 +138,11 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
       observacao: _observacaoController.text.trim(),
       dataColeta: DateTime.now(),
       status: StatusParcela.emAndamento,
-      largura: _formaDaParcela == FormaParcela.retangular ? double.tryParse(_larguraController.text.replaceAll(',', '.')) : null,
-      comprimento: _formaDaParcela == FormaParcela.retangular ? double.tryParse(_comprimentoController.text.replaceAll(',', '.')) : null,
-      raio: _formaDaParcela == FormaParcela.circular ? double.tryParse(_raioController.text.replaceAll(',', '.')) : null,
+      formaParcela: _formaDaParcela.name,
+      lado1: double.tryParse(_lado1Controller.text.replaceAll(',', '.')),
+      lado2: _formaDaParcela == FormaParcela.retangular ? double.tryParse(_lado2Controller.text.replaceAll(',', '.')) : null,
+      referenciaRf: _referenciaRfController.text.trim(),
+      tipoParcela: _tipoParcelaController.text.trim(),
       nomeFazenda: widget.talhao.fazendaNome, 
       nomeTalhao: widget.talhao.nome,
       latitude: _latitude,
@@ -153,10 +151,8 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
     );
 
     try {
-      // 2. Usa a função de salvamento completa (que também salva o nome do líder)
       final parcelaSalva = await _parcelaRepository.saveFullColeta(novaParcela, []);
       if (mounted) {
-        // 3. Substitui a tela atual pela de inventário para um fluxo de navegação limpo
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => InventarioPage(parcela: parcelaSalva)),
@@ -186,6 +182,11 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
                 controller: _idParcelaController,
                 decoration: const InputDecoration(labelText: 'ID da Parcela (Ex: P01, A05)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.tag)),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Campo obrigatório' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _referenciaRfController,
+                decoration: const InputDecoration(labelText: 'Referência (RF)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.flag_outlined)),
               ),
               const SizedBox(height: 16),
               _buildCalculadoraArea(),
@@ -257,6 +258,7 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
     );
   }
 
+  // <<< WIDGET ATUALIZADO PARA LADO1/LADO2 >>>
   Widget _buildCalculadoraArea() {
     return Card(
       elevation: 0,
@@ -288,8 +290,8 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
                 children: [
                   Expanded(
                     child: TextFormField(
-                      controller: _larguraController,
-                      decoration: const InputDecoration(labelText: 'Largura (m)', border: OutlineInputBorder()),
+                      controller: _lado1Controller,
+                      decoration: const InputDecoration(labelText: 'Lado 1 (m)', border: OutlineInputBorder()),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Obrigatório' : null,
                     ),
@@ -297,8 +299,8 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: TextFormField(
-                      controller: _comprimentoController,
-                      decoration: const InputDecoration(labelText: 'Comprimento (m)', border: OutlineInputBorder()),
+                      controller: _lado2Controller,
+                      decoration: const InputDecoration(labelText: 'Lado 2 (m)', border: OutlineInputBorder()),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Obrigatório' : null,
                     ),
@@ -307,7 +309,7 @@ class _FormParcelaPageState extends State<FormParcelaPage> {
               )
             else
               TextFormField(
-                controller: _raioController,
+                controller: _lado1Controller,
                 decoration: const InputDecoration(labelText: 'Raio (m)', border: OutlineInputBorder()),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Obrigatório' : null,

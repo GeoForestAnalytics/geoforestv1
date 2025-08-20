@@ -50,9 +50,14 @@ class AtividadeRepository {
     }
     final db = await _dbHelper.database;
     await db.transaction((txn) async {
-      // Esta função é apenas para criar, então o uso de insert aqui está correto.
-      final atividadeId = await txn.insert('atividades', novaAtividade.toMap());
-      final firstPlaceholder = placeholders.first;
+  // Prepara o mapa e ADICIONA O TIMESTAMP
+  final atividadeMap = novaAtividade.toMap();
+  atividadeMap['lastModified'] = DateTime.now().toIso8601String();
+  
+  // Insere o mapa corrigido
+  final atividadeId = await txn.insert('atividades', atividadeMap);
+  
+  final firstPlaceholder = placeholders.first;
       final fazendaDoPlano = Fazenda(id: firstPlaceholder.idFazenda!, atividadeId: atividadeId, nome: firstPlaceholder.nomeFazenda, municipio: 'N/I', estado: 'N/I');
       await txn.insert('fazendas', fazendaDoPlano.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
       final talhaoDoPlano = Talhao(fazendaId: fazendaDoPlano.id, fazendaAtividadeId: fazendaDoPlano.atividadeId, nome: firstPlaceholder.nomeTalhao);

@@ -1,4 +1,4 @@
-// lib/models/parcela_model.dart (VERSÃO ATUALIZADA E CORRIGIDA)
+// lib/models/parcela_model.dart (VERSÃO ATUALIZADA PARA EXPORTAÇÃO)
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -32,7 +32,17 @@ class Parcela {
   final String? municipio;
   final String? estado;
   final String? atividadeTipo;
-  final String? up; // <<< CAMPO ADICIONADO
+  final String? up;
+  
+  // <<< CAMPOS NOVOS PARA EXPORTAÇÃO >>>
+  final String? referenciaRf;
+  final String? ciclo;
+  final int? rotacao;
+  final String? tipoParcela; // Ex: "Instalação"
+  final String? formaParcela; // Ex: "Retangular"
+  final double? lado1; // Largura ou Raio
+  final double? lado2; // Comprimento
+
   final String idParcela;
   final double areaMetrosQuadrados;
   final String? observacao;
@@ -41,9 +51,6 @@ class Parcela {
   StatusParcela status;
   bool exportada;
   bool isSynced;
-  final double? largura;
-  final double? comprimento;
-  final double? raio;
   
   List<String> photoPaths;
   List<Arvore> arvores;
@@ -65,15 +72,19 @@ class Parcela {
     this.status = StatusParcela.pendente,
     this.exportada = false,
     this.isSynced = false,
-    this.largura,
-    this.comprimento,
-    this.raio,
     this.nomeLider,
     this.projetoId,
     this.municipio,
     this.estado,
     this.atividadeTipo,
-    this.up, // <<< CAMPO ADICIONADO
+    this.up,
+    this.referenciaRf,
+    this.ciclo,
+    this.rotacao,
+    this.tipoParcela,
+    this.formaParcela,
+    this.lado1,
+    this.lado2,
     this.photoPaths = const [],
     this.arvores = const [],
     this.lastModified,
@@ -95,15 +106,19 @@ class Parcela {
     StatusParcela? status,
     bool? exportada,
     bool? isSynced,
-    double? largura,
-    double? comprimento,
-    double? raio,
     String? nomeLider,
     int? projetoId,
     String? municipio,
     String? estado,
     String? atividadeTipo,
-    String? up, // <<< CAMPO ADICIONADO
+    String? up,
+    String? referenciaRf,
+    String? ciclo,
+    int? rotacao,
+    String? tipoParcela,
+    String? formaParcela,
+    double? lado1,
+    double? lado2,
     List<String>? photoPaths,
     List<Arvore>? arvores,
     DateTime? lastModified,
@@ -124,15 +139,19 @@ class Parcela {
       status: status ?? this.status,
       exportada: exportada ?? this.exportada,
       isSynced: isSynced ?? this.isSynced,
-      largura: largura ?? this.largura,
-      comprimento: comprimento ?? this.comprimento,
-      raio: raio ?? this.raio,
       nomeLider: nomeLider ?? this.nomeLider,
       projetoId: projetoId ?? this.projetoId,
       municipio: municipio ?? this.municipio,
       estado: estado ?? this.estado,
       atividadeTipo: atividadeTipo ?? this.atividadeTipo,
-      up: up ?? this.up, // <<< CAMPO ADICIONADO
+      up: up ?? this.up,
+      referenciaRf: referenciaRf ?? this.referenciaRf,
+      ciclo: ciclo ?? this.ciclo,
+      rotacao: rotacao ?? this.rotacao,
+      tipoParcela: tipoParcela ?? this.tipoParcela,
+      formaParcela: formaParcela ?? this.formaParcela,
+      lado1: lado1 ?? this.lado1,
+      lado2: lado2 ?? this.lado2,
       photoPaths: photoPaths ?? this.photoPaths,
       arvores: arvores ?? this.arvores,
       lastModified: lastModified ?? this.lastModified,
@@ -156,14 +175,18 @@ class Parcela {
       'status': status.name,
       'exportada': exportada ? 1 : 0,
       'isSynced': isSynced ? 1 : 0,
-      'largura': largura,
-      'comprimento': comprimento,
-      'raio': raio,
       'nomeLider': nomeLider,
       'projetoId': projetoId,
       'municipio': municipio,
       'estado': estado,
-      'up': up, // <<< CAMPO ADICIONADO
+      'up': up,
+      'referencia_rf': referenciaRf,
+      'ciclo': ciclo,
+      'rotacao': rotacao,
+      'tipo_parcela': tipoParcela,
+      'forma_parcela': formaParcela,
+      'lado1': lado1,
+      'lado2': lado2,
       'photoPaths': jsonEncode(photoPaths),
       'lastModified': lastModified?.toIso8601String()
     };
@@ -204,13 +227,17 @@ class Parcela {
       ),
       exportada: map['exportada'] == 1,
       isSynced: map['isSynced'] == 1,
-      largura: (map['largura'] as num?)?.toDouble(),
-      comprimento: (map['comprimento'] as num?)?.toDouble(),
-      raio: (map['raio'] as num?)?.toDouble(),
       nomeLider: map['nomeLider'],
       projetoId: map['projetoId'],
       atividadeTipo: map['atividadeTipo'],
-      up: map['up'], // <<< CAMPO ADICIONADO
+      up: map['up'],
+      referenciaRf: map['referencia_rf'],
+      ciclo: map['ciclo'],
+      rotacao: map['rotacao'],
+      tipoParcela: map['tipo_parcela'],
+      formaParcela: map['forma_parcela'],
+      lado1: (map['lado1'] as num?)?.toDouble(),
+      lado2: (map['lado2'] as num?)?.toDouble(),
       photoPaths: paths,
       lastModified: parseDate(map['lastModified']),
     );

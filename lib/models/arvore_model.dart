@@ -1,6 +1,7 @@
-// lib/models/arvore_model.dart (VERSÃO ATUALIZADA E CORRIGIDA)
+// lib/models/arvore_model.dart (VERSÃO ATUALIZADA PARA EXPORTAÇÃO)
 
-import 'package:cloud_firestore/cloud_firestore.dart'; // <<< PASSO 1: IMPORTAR CLOUD_FIRESTORE
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 
 enum Codigo {
   normal, falha, bifurcada, multipla, quebrada, morta, caida,
@@ -22,11 +23,13 @@ class Arvore {
   bool dominante;
   final Codigo codigo;
   final Codigo2? codigo2;
+  final String? codigo3; // <<< CAMPO NOVO
+  final int? tora;       // <<< CAMPO NOVO
   final double? capAuditoria;
   final double? alturaAuditoria;
   double? volume;
   final DateTime? lastModified;
-  final double? alturaDano; // <<< CAMPO ADICIONADO
+  final double? alturaDano;
 
   Arvore({
     this.id,
@@ -38,11 +41,13 @@ class Arvore {
     this.dominante = false,
     required this.codigo,
     this.codigo2,
+    this.codigo3, // <<< CAMPO NOVO
+    this.tora,    // <<< CAMPO NOVO
     this.capAuditoria,
     this.alturaAuditoria,
     this.volume,
     this.lastModified,
-    this.alturaDano, // <<< CAMPO ADICIONADO
+    this.alturaDano,
   });
 
   Arvore copyWith({
@@ -55,11 +60,13 @@ class Arvore {
     bool? dominante,
     Codigo? codigo,
     Codigo2? codigo2,
+    String? codigo3, // <<< CAMPO NOVO
+    int? tora,       // <<< CAMPO NOVO
     double? capAuditoria,
     double? alturaAuditoria,
     double? volume,
     DateTime? lastModified,
-    double? alturaDano, // <<< CAMPO ADICIONADO
+    double? alturaDano,
   }) {
     return Arvore(
       id: id ?? this.id,
@@ -71,11 +78,13 @@ class Arvore {
       dominante: dominante ?? this.dominante,
       codigo: codigo ?? this.codigo,
       codigo2: codigo2 ?? this.codigo2,
+      codigo3: codigo3 ?? this.codigo3, // <<< CAMPO NOVO
+      tora: tora ?? this.tora,          // <<< CAMPO NOVO
       capAuditoria: capAuditoria ?? this.capAuditoria,
       alturaAuditoria: alturaAuditoria ?? this.alturaAuditoria,
       volume: volume ?? this.volume,
       lastModified: lastModified ?? this.lastModified,
-      alturaDano: alturaDano ?? this.alturaDano, // <<< CAMPO ADICIONADO
+      alturaDano: alturaDano ?? this.alturaDano,
     );
   }
 
@@ -90,15 +99,16 @@ class Arvore {
       'dominante': dominante ? 1 : 0,
       'codigo': codigo.name,
       'codigo2': codigo2?.name,
+      'codigo3': codigo3, // <<< CAMPO NOVO
+      'tora': tora,       // <<< CAMPO NOVO
       'capAuditoria': capAuditoria,
       'alturaAuditoria': alturaAuditoria,
+      'alturaDano': alturaDano,
       'lastModified': lastModified?.toIso8601String(),
-      'alturaDano': alturaDano, // <<< CAMPO ADICIONADO
     };
   }
 
   factory Arvore.fromMap(Map<String, dynamic> map) {
-    // <<< PASSO 2: ADICIONAR FUNÇÃO AUXILIAR PARA PARSE DE DATAS >>>
     DateTime? parseDate(dynamic value) {
       if (value is Timestamp) {
         return value.toDate();
@@ -117,12 +127,13 @@ class Arvore {
       fimDeLinha: map['fimDeLinha'] == 1,
       dominante: map['dominante'] == 1,
       codigo: Codigo.values.firstWhere((e) => e.name == map['codigo'], orElse: () => Codigo.normal),
-      codigo2: map['codigo2'] != null ? Codigo2.values.firstWhere((e) => e.name == map['codigo2']) : null,
+      codigo2: Codigo2.values.asNameMap()[map['codigo2'] as String?],
+      codigo3: map['codigo3'], // <<< CAMPO NOVO
+      tora: map['tora'],       // <<< CAMPO NOVO
       capAuditoria: map['capAuditoria']?.toDouble(),
       alturaAuditoria: map['alturaAuditoria']?.toDouble(),
-      // <<< PASSO 3: USAR A FUNÇÃO AUXILIAR NO CAMPO 'lastModified' >>>
+      alturaDano: map['alturaDano']?.toDouble(),
       lastModified: parseDate(map['lastModified']),
-      alturaDano: map['alturaDano']?.toDouble(), // <<< CAMPO ADICIONADO
     );
   }
 }
