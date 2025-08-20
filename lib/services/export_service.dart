@@ -96,7 +96,7 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
   }
 
   List<List<dynamic>> rows = [];
-  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'UP', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_m2', 'Largura_m', 'Comprimento_m', 'Raio_m', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Altura_Dano_m', 'Dominante']);
+  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'UP', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_m2', 'Lado1', 'Lado2', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Altura_Dano_m', 'Dominante']);
   
   for (var pMap in payload.parcelasMap) {
     final p = Parcela.fromMap(pMap);
@@ -114,13 +114,13 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 
     final liderDaColeta = p.nomeLider ?? payload.nomeLider;
     if (arvores.isEmpty) {
-      rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null, null]);
+      rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.lado1, p.lado2, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null, null]);
     } else {
       Map<String, int> fusteCounter = {};
       for (final a in arvores) {
         String key = '${a.linha}-${a.posicaoNaLinha}';
         fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
-        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.largura, p.comprimento, p.raio, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.alturaDano, a.dominante ? 'Sim' : 'Não']);
+        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.lado1, p.lado2, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.alturaDano, a.dominante ? 'Sim' : 'Não']);
       }
     }
   }
@@ -167,7 +167,7 @@ Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
   rows.add([
     'Projeto', 'Atividade', 'Fazenda', 'Talhao', 'ID_Amostra_Coleta', 'Area_Talhao_ha',
     'Situacao', 'Data_Alteracao', 'Responsavel', 'Coord_X_UTM', 'Coord_Y_UTM',
-    'Area_Parcela_m2', 'Largura_m', 'Comprimento_m', 'Observacao_Parcela',
+    'Area_Parcela_m2', 'Lado1_m', 'Lado2_m', 'Observacao_Parcela',
     'Total_Fustes', 'Total_Covas', 'Total_Falhas', 'Total_Codigos_Especiais',
     'Classe Arvore - Cubagem', 'CAP Arvore - Cubagem', 'Altura Cubagem'
   ]);
@@ -195,8 +195,8 @@ Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
       easting,
       northing,
       rowData['parcela_area_m2'],
-      rowData['parcela_largura_m'],
-      rowData['parcela_comprimento_m'],
+      rowData['parcela_lado1_m'],
+      rowData['parcela_lado2_m'],
       rowData['parcela_observacao'],
       rowData['total_fustes'],
       rowData['total_covas'],
@@ -357,8 +357,8 @@ class ExportService {
           'latitude': parcela.latitude,
           'longitude': parcela.longitude,
           'parcela_area_m2': parcela.areaMetrosQuadrados,
-          'parcela_largura_m': parcela.largura,
-          'parcela_comprimento_m': parcela.comprimento,
+          'parcela_lado1_m': parcela.lado1,
+          'parcela_lado2_m': parcela.lado2,
           'parcela_observacao': parcela.observacao,
           'total_fustes': fustes,
           'total_covas': covas.length,
@@ -394,8 +394,8 @@ class ExportService {
           'responsavel': cubagem.nomeLider,
           'latitude': null, 'longitude': null,
           'parcela_area_m2': null,
-          'parcela_largura_m': null,
-          'parcela_comprimento_m': null,
+          'parcela_lado1_m': null,
+          'parcela_lado2_m': null,
           'parcela_observacao': null,
           'total_fustes': 1,
           'total_covas': 1,
