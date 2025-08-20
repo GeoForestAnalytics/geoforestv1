@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/services/export_service.dart (VERSÃO FINAL COM PAYLOAD DE CUBAGEM CORRIGIDO)
 
 import 'dart:io';
 import 'dart:convert';
@@ -53,12 +53,15 @@ class _CsvParcelaPayload {
   });
 }
 
+// <<< CORREÇÃO 1: ADICIONAR OS CAMPOS FALTANTES AQUI >>>
 class _CsvCubagemPayload {
   final List<Map<String, dynamic>> cubagensMap;
   final Map<int, List<Map<String, dynamic>>> secoesPorCubagemMap;
   final Map<int, Map<String, dynamic>> talhoesMap;
   final String nomeLider;
   final String nomesAjudantes;
+  final String nomeZona;
+  final Map<int, String> proj4Defs;
 
   _CsvCubagemPayload({
     required this.cubagensMap,
@@ -66,6 +69,8 @@ class _CsvCubagemPayload {
     required this.talhoesMap,
     required this.nomeLider,
     required this.nomesAjudantes,
+    required this.nomeZona,
+    required this.proj4Defs,
   });
 }
 
@@ -128,21 +133,60 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 }
 
 Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) async {
+  proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+  payload.proj4Defs.forEach((epsg, def) {
+    proj4.Projection.add('EPSG:$epsg', def);
+  });
+  
+  final codigoEpsg = zonasUtmSirgas2000[payload.nomeZona] ?? 31982;
+  final projWGS84 = proj4.Projection.get('EPSG:4326');
+  final projUTM = proj4.Projection.get('EPSG:$codigoEpsg');
+
+  if (projWGS84 == null || projUTM == null) {
+      return 'ERRO,"Não foi possível inicializar o sistema de projeção de coordenadas."';
+  }
+
   List<List<dynamic>> rows = [];
-  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'id_db_arvore', 'id_fazenda', 'fazenda', 'talhao', 'area_talhao_ha', 'especie', 'espacamento', 'idade_anos', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm']);
+  rows.add([
+    'Atividade', 'Lider_Equipe', 'Ajudantes', 'id_db_arvore', 'id_fazenda', 'fazenda', 'UP', 'talhao', 'area_talhao_ha', 'especie', 'espacamento', 'idade_anos', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'Easting_Cubagem', 'Northing_Cubagem', 'Observacao_Cubagem', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm'
+  ]);
+
   for (var cMap in payload.cubagensMap) {
     final arvore = CubagemArvore.fromMap(cMap);
     final talhaoData = payload.talhoesMap[arvore.talhaoId] ?? {};
 
+    final rf = talhaoData['up'] ?? 'N/A';
+    String easting = '', northing = '';
+    if (arvore.latitude != null && arvore.longitude != null) {
+      var pUtm = projWGS84.transform(projUTM, proj4.Point(x: arvore.longitude!, y: arvore.latitude!));
+      easting = pUtm.x.toStringAsFixed(2);
+      northing = pUtm.y.toStringAsFixed(2);
+    }
+    
     final secoesMap = payload.secoesPorCubagemMap[arvore.id] ?? [];
     final secoes = secoesMap.map((sMap) => CubagemSecao.fromMap(sMap)).toList();
     
     final liderDaColeta = arvore.nomeLider ?? payload.nomeLider;
     if (secoes.isEmpty) {
-      rows.add(['CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, arvore.valorCAP, arvore.alturaBase, null, null, null, null, null]);
+      rows.add([
+        'CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, 
+        arvore.nomeFazenda, rf, arvore.nomeTalhao, talhaoData['areaHa'], 
+        talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], 
+        arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, 
+        arvore.valorCAP, arvore.alturaBase, easting, northing, arvore.observacao,
+        null, null, null, null, null
+      ]);
     } else {
       for (var secao in secoes) {
-        rows.add(['CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, arvore.nomeFazenda, arvore.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, arvore.valorCAP, arvore.alturaBase, secao.alturaMedicao, secao.circunferencia, secao.casca1_mm, secao.casca2_mm, secao.diametroSemCasca.toStringAsFixed(2)]);
+        rows.add([
+          'CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, 
+          arvore.nomeFazenda, rf, arvore.nomeTalhao, talhaoData['areaHa'], 
+          talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], 
+          arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, 
+          arvore.valorCAP, arvore.alturaBase, easting, northing, arvore.observacao,
+          secao.alturaMedicao, secao.circunferencia, secao.casca1_mm, 
+          secao.casca2_mm, secao.diametroSemCasca.toStringAsFixed(2)
+        ]);
       }
     }
   }
@@ -681,12 +725,16 @@ Future<void> exportarTodasCubagensBackup(BuildContext context) async {
     }
     
     final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+    // <<< CORREÇÃO 2: LER AS PREFERÊNCIAS E PASSAR PARA O PAYLOAD >>>
+    final prefs = await SharedPreferences.getInstance();
     final payload = _CsvCubagemPayload(
       cubagensMap: cubagens.map((c) => c.toMap()).toList(),
       secoesPorCubagemMap: secoesPorCubagemMap,
       talhoesMap: talhoesMapParaIsolate,
       nomeLider: teamProvider.lider ?? 'N/A',
       nomesAjudantes: teamProvider.ajudantes ?? 'N/A',
+      nomeZona: prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S',
+      proj4Defs: proj4Definitions,
     );
     final String csvData = await compute(_generateCsvCubagemDataInIsolate, payload);
     

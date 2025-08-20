@@ -1,13 +1,12 @@
-// lib/pages/cubagem/cubagem_dados_page.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/pages/cubagem/cubagem_dados_page.dart (VERSÃO COMPLETA E FUNCIONAL)
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../models/cubagem_arvore_model.dart';
 import '../../models/cubagem_secao_model.dart';
 import '../../widgets/cubagem_secao_dialog.dart';
 
-// --- NOVO IMPORT DO REPOSITÓRIO ---
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
-// ------------------------------------
 
 class CubagemResult {
   final CubagemArvore arvore;
@@ -35,22 +34,23 @@ class CubagemDadosPage extends StatefulWidget {
 
 class _CubagemDadosPageState extends State<CubagemDadosPage> {
   final _formKey = GlobalKey<FormState>();
-  
-  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
   final _cubagemRepository = CubagemRepository();
-  // ---------------------------------------
 
   late TextEditingController _idFazendaController;
   late TextEditingController _fazendaController;
   late TextEditingController _talhaoController;
-
   late TextEditingController _identificadorController;
   late TextEditingController _alturaTotalController;
   late TextEditingController _valorCAPController;
   late TextEditingController _alturaBaseController;
   late TextEditingController _classeController;
-  String _tipoMedidaCAP = 'fita'; 
+  late TextEditingController _observacaoController;
 
+  Position? _posicaoAtualExibicao;
+  bool _buscandoLocalizacao = false;
+  String? _erroLocalizacao;
+  
+  String _tipoMedidaCAP = 'fita'; 
   List<CubagemSecao> _secoes = [];
   bool _isLoading = false;
 
@@ -62,13 +62,19 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     _idFazendaController = TextEditingController(text: arvore?.idFazenda ?? '');
     _fazendaController = TextEditingController(text: arvore?.nomeFazenda ?? '');
     _talhaoController = TextEditingController(text: arvore?.nomeTalhao ?? '');
-
     _identificadorController = TextEditingController(text: arvore?.identificador ?? '');
     _alturaTotalController = TextEditingController(text: (arvore?.alturaTotal ?? 0) > 0 ? arvore!.alturaTotal.toString() : '');
     _valorCAPController = TextEditingController(text: (arvore?.valorCAP ?? 0) > 0 ? arvore!.valorCAP.toString() : '');
     _alturaBaseController = TextEditingController(text: (arvore?.alturaBase ?? 0) > 0 ? arvore!.alturaBase.toString() : '');
     _classeController = TextEditingController(text: arvore?.classe ?? '');
     _tipoMedidaCAP = arvore?.tipoMedidaCAP ?? 'fita';
+    _observacaoController = TextEditingController(text: arvore?.observacao ?? '');
+    if (arvore?.latitude != null && arvore?.longitude != null) {
+      _posicaoAtualExibicao = Position(
+        latitude: arvore!.latitude!, longitude: arvore.longitude!,
+        timestamp: DateTime.now(), accuracy: 0, altitude: 0, altitudeAccuracy: 0, heading: 0, headingAccuracy: 0, speed: 0, speedAccuracy: 0
+      );
+    }
 
     final arvoreId = arvore?.id;
     if (arvoreId != null) {
@@ -81,15 +87,41 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     _idFazendaController.dispose();
     _fazendaController.dispose();
     _talhaoController.dispose();
-
     _identificadorController.dispose();
     _alturaTotalController.dispose();
     _valorCAPController.dispose();
     _alturaBaseController.dispose();
     _classeController.dispose();
+    _observacaoController.dispose();
     super.dispose();
   }
 
+  Future<void> _obterLocalizacaoAtual() async {
+    setState(() { _buscandoLocalizacao = true; _erroLocalizacao = null; });
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) throw 'Serviço de GPS desabilitado.';
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) throw 'Permissão negada.';
+      }
+      if (permission == LocationPermission.deniedForever) throw 'Permissão negada permanentemente.';
+      
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high, timeLimit: const Duration(seconds: 20));
+      
+      setState(() {
+        _posicaoAtualExibicao = position;
+      });
+
+    } catch (e) {
+      setState(() => _erroLocalizacao = e.toString());
+    } finally {
+      if (mounted) setState(() => _buscandoLocalizacao = false);
+    }
+  }
+
+  // <<< FUNÇÃO RESTAURADA >>>
   void _carregarSecoes(int arvoreId) async {
     setState(() => _isLoading = true);
     final secoesDoBanco = await _cubagemRepository.getSecoesPorArvoreId(arvoreId);
@@ -101,16 +133,19 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     }
   }
 
+  // <<< FUNÇÃO RESTAURADA E CORRIGIDA >>>
   void _gerarSecoesAutomaticas() {
-    if (!_formKey.currentState!.validate()) {
+    final alturaTotalStr = _alturaTotalController.text.replaceAll(',', '.');
+    final double? alturaTotal = double.tryParse(alturaTotalStr);
+
+    if (alturaTotal == null || alturaTotal <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Preencha os dados da árvore primeiro, especialmente a Altura Total.'),
+        content: Text('Por favor, preencha a Altura Total (m) para gerar as seções.'),
         backgroundColor: Colors.orange,
       ));
       return;
     }
     
-    final alturaTotal = double.parse(_alturaTotalController.text.replaceAll(',', '.'));
     List<double> alturasDeMedicao = [];
 
     if (widget.metodo == 'Relativas') {
@@ -130,6 +165,7 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     });
   }
   
+  // <<< FUNÇÃO RESTAURADA >>>
   void _editarDiametrosSecao(int startIndex) async {
     int currentIndex = startIndex;
     bool continuarEditando = true;
@@ -183,6 +219,9 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
       valorCAP: valorCAP,
       alturaBase: alturaBase,
       classe: _classeController.text.isNotEmpty ? _classeController.text : null,
+      observacao: _observacaoController.text.trim().isNotEmpty ? _observacaoController.text.trim() : null,
+      latitude: _posicaoAtualExibicao?.latitude,
+      longitude: _posicaoAtualExibicao?.longitude,
     );
       
     try {
@@ -201,6 +240,40 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
   String? _validadorObrigatorio(String? v) {
     if (v == null || v.trim().isEmpty) return 'Campo obrigatório';
     return null;
+  }
+
+  Widget _buildColetorCoordenadas() {
+    final latExibicao = _posicaoAtualExibicao?.latitude;
+    final lonExibicao = _posicaoAtualExibicao?.longitude;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Coordenadas da Árvore (Opcional)', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)),
+          child: Row(children: [
+            Expanded(
+              child: _buscandoLocalizacao
+                ? const Row(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Buscando...')])
+                : _erroLocalizacao != null
+                  ? Text('Erro: $_erroLocalizacao', style: const TextStyle(color: Colors.red))
+                  : (latExibicao == null)
+                    ? const Text('Nenhuma localização obtida.')
+                    : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Lat: ${latExibicao.toStringAsFixed(6)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text('Lon: ${lonExibicao!.toStringAsFixed(6)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        if (_posicaoAtualExibicao != null && _posicaoAtualExibicao!.accuracy > 0)
+                          Text('Precisão: ±${_posicaoAtualExibicao!.accuracy.toStringAsFixed(1)}m', style: TextStyle(color: Colors.grey[700])),
+                      ]),
+            ),
+            IconButton(icon: const Icon(Icons.my_location, color: Color(0xFF1D4433)), onPressed: _buscandoLocalizacao ? null : _obterLocalizacaoAtual, tooltip: 'Obter localização'),
+          ]),
+        ),
+      ],
+    );
   }
 
   @override
@@ -254,6 +327,19 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
               ),
               const SizedBox(height: 16),
               TextFormField(controller: _valorCAPController, decoration: const InputDecoration(labelText: 'Valor Medido (cm)', border: OutlineInputBorder()), keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: _validadorObrigatorio),
+              const SizedBox(height: 16),
+              _buildColetorCoordenadas(),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _observacaoController,
+                decoration: const InputDecoration(
+                  labelText: 'Observações da Cubagem', 
+                  border: OutlineInputBorder(), 
+                  prefixIcon: Icon(Icons.comment_outlined)
+                ), 
+                maxLines: 3,
+              ),
+
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,

@@ -1,4 +1,4 @@
-// lib/data/datasources/local/database_helper.dart (VERSÃO FINAL COMPLETA E ROBUSTA)
+// lib/data/datasources/local/database_helper.dart (VERSÃO ATUALIZADA COM CAMPOS DE CUBAGEM)
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
@@ -29,7 +29,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 41, // <<< VERSÃO INCREMENTADA PARA 41
+      // <<< PASSO 1: INCREMENTAR A VERSÃO DO BANCO PARA 42 >>>
+      version: 42,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -78,7 +79,6 @@ class DatabaseHelper {
       )
     ''');
     
-    // <<< CORREÇÃO: Tabela TALHOES criada com todos os novos campos >>>
     await db.execute('''
       CREATE TABLE talhoes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,7 +99,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // <<< CORREÇÃO: Tabela PARCELAS criada com todos os novos campos e sem os antigos >>>
     await db.execute('''
       CREATE TABLE parcelas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,7 +135,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // <<< CORREÇÃO: Tabela ARVORES criada com todos os novos campos >>>
     await db.execute('''
       CREATE TABLE arvores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -160,6 +158,7 @@ class DatabaseHelper {
       )
     ''');
     
+    // <<< PASSO 2: ADICIONAR AS NOVAS COLUNAS NA CRIAÇÃO DA TABELA >>>
     await db.execute('''
       CREATE TABLE cubagens_arvores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -173,6 +172,9 @@ class DatabaseHelper {
         valorCAP REAL NOT NULL,
         alturaBase REAL NOT NULL,
         classe TEXT,
+        observacao TEXT,          -- <<< NOVA COLUNA DE OBSERVAÇÃO
+        latitude REAL,            -- <<< NOVA COLUNA DE LATITUDE
+        longitude REAL,           -- <<< NOVA COLUNA DE LONGITUDE
         exportada INTEGER DEFAULT 0 NOT NULL,
         isSynced INTEGER DEFAULT 0 NOT NULL,
         nomeLider TEXT,
@@ -180,6 +182,7 @@ class DatabaseHelper {
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
     ''');
+    
     await db.execute('''
       CREATE TABLE cubagens_secoes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -288,7 +291,6 @@ class DatabaseHelper {
           break;
         case 35:
           await db.execute('ALTER TABLE projetos ADD COLUMN referencia_rf TEXT');
-          // id_unico_amostra foi removido do modelo, então não criamos mais a coluna
           break;
         case 36:
           await db.execute('''
@@ -310,16 +312,13 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE parcelas ADD COLUMN up TEXT');
           break;
         case 39:
-          // Ação preventiva para garantir que a coluna 'up' seja do tipo TEXT.
           try {
-            // Esta operação falhará se a coluna já for TEXT, o que está OK.
             await db.execute('ALTER TABLE parcelas ADD COLUMN up_temp_string TEXT');
             await db.execute('UPDATE parcelas SET up_temp_string = up');
             await db.execute('ALTER TABLE parcelas DROP COLUMN up');
             await db.execute('ALTER TABLE parcelas RENAME COLUMN up_temp_string TO up');
           } catch (e) {
             debugPrint("Aviso na migração 39 (esperado se a coluna 'up' já era TEXT): $e");
-            // Se a coluna 'up' já não existir (foi removida na v40), precisamos recriá-la
             if (!await _columnExists(db, 'parcelas', 'up')) {
               await db.execute('ALTER TABLE parcelas ADD COLUMN up TEXT');
             }
@@ -327,7 +326,6 @@ class DatabaseHelper {
           break;
         
         case 40:
-          // Lógica da v40 foi movida para v41 para ser mais robusta
           debugPrint("Migração v40 pulada, lógica incorporada na v41.");
           break;
 
@@ -349,7 +347,6 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE parcelas ADD COLUMN lado1 REAL');
           await db.execute('ALTER TABLE parcelas ADD COLUMN lado2 REAL');
           
-          // Transfere dados de colunas antigas (se existirem)
           if(await _columnExists(db, 'parcelas', 'raio')) {
             await db.execute('UPDATE parcelas SET lado1 = raio WHERE raio IS NOT NULL');
           }
@@ -360,7 +357,6 @@ class DatabaseHelper {
             await db.execute('UPDATE parcelas SET lado2 = comprimento WHERE comprimento IS NOT NULL');
           }
 
-          // Remove as colunas antigas de forma segura
           await db.transaction((txn) async {
               await txn.execute('''
                 CREATE TABLE parcelas_temp AS SELECT 
@@ -373,6 +369,13 @@ class DatabaseHelper {
               await txn.execute('DROP TABLE parcelas');
               await txn.execute('ALTER TABLE parcelas_temp RENAME TO parcelas');
           });
+          break;
+        
+        // <<< PASSO 3: ADICIONAR A LÓGICA DE MIGRAÇÃO PARA A NOVA VERSÃO >>>
+        case 42:
+          await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN observacao TEXT');
+          await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN latitude REAL');
+          await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN longitude REAL');
           break;
       }
     }

@@ -1,5 +1,5 @@
-// lib/models/cubagem_arvore_model.dart (VERSÃO ATUALIZADA E CORRIGIDA)
-import 'package:cloud_firestore/cloud_firestore.dart'; // <<< PASSO 1: IMPORTAR CLOUD_FIRESTORE
+// lib/models/cubagem_arvore_model.dart (VERSÃO ATUALIZADA COM NOVOS CAMPOS)
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CubagemArvore {
   int? id;
@@ -16,6 +16,12 @@ class CubagemArvore {
   String tipoMedidaCAP;
   double valorCAP;
   double alturaBase;
+  
+  // <<< PASSO 1: ADICIONAR AS NOVAS PROPRIEDADES >>>
+  final String? observacao;
+  final double? latitude;
+  final double? longitude;
+  
   final DateTime? lastModified;
 
   CubagemArvore({
@@ -33,6 +39,9 @@ class CubagemArvore {
     this.tipoMedidaCAP = 'fita',
     this.valorCAP = 0,
     this.alturaBase = 0,
+    this.observacao, // <<< Adicionar ao construtor
+    this.latitude,   // <<< Adicionar ao construtor
+    this.longitude,  // <<< Adicionar ao construtor
     this.lastModified,
   });
 
@@ -51,6 +60,9 @@ class CubagemArvore {
     String? tipoMedidaCAP,
     double? valorCAP,
     double? alturaBase,
+    String? observacao, // <<< Adicionar ao copyWith
+    double? latitude,   // <<< Adicionar ao copyWith
+    double? longitude,  // <<< Adicionar ao copyWith
     DateTime? lastModified,
   }) {
     return CubagemArvore(
@@ -68,6 +80,9 @@ class CubagemArvore {
       tipoMedidaCAP: tipoMedidaCAP ?? this.tipoMedidaCAP,
       valorCAP: valorCAP ?? this.valorCAP,
       alturaBase: alturaBase ?? this.alturaBase,
+      observacao: observacao ?? this.observacao,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
       lastModified: lastModified ?? this.lastModified,
     );
   }
@@ -85,6 +100,10 @@ class CubagemArvore {
       'tipoMedidaCAP': tipoMedidaCAP,
       'valorCAP': valorCAP,
       'alturaBase': alturaBase,
+      // <<< PASSO 2: ADICIONAR OS CAMPOS AO MAPA PARA SALVAR NO BANCO >>>
+      'observacao': observacao,
+      'latitude': latitude,
+      'longitude': longitude,
       'exportada': exportada ? 1 : 0,
       'isSynced': isSynced ? 1 : 0,
       'nomeLider': nomeLider,
@@ -93,7 +112,6 @@ class CubagemArvore {
   }
 
   factory CubagemArvore.fromMap(Map<String, dynamic> map) {
-    // <<< PASSO 2: ADICIONAR FUNÇÃO AUXILIAR PARA PARSE DE DATAS >>>
     DateTime? parseDate(dynamic value) {
       if (value is Timestamp) {
         return value.toDate();
@@ -111,6 +129,10 @@ class CubagemArvore {
       nomeTalhao: map['nome_talhao'] ?? '',
       identificador: map['identificador'],
       classe: map['classe'],
+      // <<< PASSO 3: LER OS CAMPOS DO MAPA AO CRIAR O OBJETO >>>
+      observacao: map['observacao'],
+      latitude: (map['latitude'] as num?)?.toDouble(),
+      longitude: (map['longitude'] as num?)?.toDouble(),
       exportada: map['exportada'] == 1,
       isSynced: map['isSynced'] == 1,
       nomeLider: map['nomeLider'],
@@ -118,7 +140,6 @@ class CubagemArvore {
       tipoMedidaCAP: map['tipoMedidaCAP'] ?? 'fita',
       valorCAP: map['valorCAP']?.toDouble() ?? 0,
       alturaBase: map['alturaBase']?.toDouble() ?? 0,
-      // <<< PASSO 3: USAR A FUNÇÃO AUXILIAR NO CAMPO 'lastModified' >>>
       lastModified: parseDate(map['lastModified']),
     );
   }
