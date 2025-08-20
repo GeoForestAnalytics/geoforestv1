@@ -1,4 +1,4 @@
-// lib/pages/amostra/coleta_dados_page.dart (VERSÃO COM NOVOS CAMPOS DE EXPORTAÇÃO)
+// lib/pages/amostra/coleta_dados_page.dart (VERSÃO FINAL COM LÓGICA DE TIPO CORRIGIDA)
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -42,7 +42,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   
   late Parcela _parcelaAtual;
 
-  // --- CONTROLADORES ATUALIZADOS ---
   final _nomeFazendaController = TextEditingController();
   final _idFazendaController = TextEditingController();
   final _talhaoParcelaController = TextEditingController();
@@ -50,10 +49,8 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   final _observacaoController = TextEditingController();
   final _lado1Controller = TextEditingController();
   final _lado2Controller = TextEditingController();
-  
-  // Novos controladores para campos visíveis
   final _referenciaRfController = TextEditingController();
-  final _tipoParcelaController = TextEditingController(text: 'Instalação'); // Valor padrão
+  String _tipoParcelaSelecionado = 'Instalação';
 
   Position? _posicaoAtualExibicao;
   bool _buscandoLocalizacao = false;
@@ -73,35 +70,43 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
   Future<void> _setupInitialData() async {
     setState(() { _salvando = true; });
-    if (widget.parcelaParaEditar != null) {
-      _isModoEdicao = true;
-      final parcelaDoBanco = await _parcelaRepository.getParcelaById(widget.parcelaParaEditar!.dbId!);
-      _parcelaAtual = parcelaDoBanco ?? widget.parcelaParaEditar!;
-      if(parcelaDoBanco != null) {
-        _parcelaAtual.arvores = await _parcelaRepository.getArvoresDaParcela(_parcelaAtual.dbId!);
+    try {
+      if (widget.parcelaParaEditar != null) {
+        _isModoEdicao = true;
+        final parcelaDoBanco = await _parcelaRepository.getParcelaById(widget.parcelaParaEditar!.dbId!);
+        _parcelaAtual = parcelaDoBanco ?? widget.parcelaParaEditar!;
+        if(parcelaDoBanco != null) {
+          _parcelaAtual.arvores = await _parcelaRepository.getArvoresDaParcela(_parcelaAtual.dbId!);
+        }
+        
+        if (_parcelaAtual.status == StatusParcela.concluida || _parcelaAtual.status == StatusParcela.exportada) {
+          _isReadOnly = true;
+        }
+      } else {
+        _isModoEdicao = false;
+        _isReadOnly = false;
+        _parcelaAtual = Parcela(
+          talhaoId: widget.talhao!.id,
+          idParcela: '',
+          areaMetrosQuadrados: 0,
+          dataColeta: DateTime.now(),
+          nomeFazenda: widget.talhao!.fazendaNome,
+          nomeTalhao: widget.talhao!.nome,
+          idFazenda: widget.talhao!.fazendaId,
+          projetoId: widget.talhao!.projetoId,
+          municipio: widget.talhao!.municipio, 
+          estado: widget.talhao!.estado,       
+        );
       }
-      
-      if (_parcelaAtual.status == StatusParcela.concluida || _parcelaAtual.status == StatusParcela.exportada) {
-        _isReadOnly = true;
+      _preencherControllersComDadosAtuais();
+    } catch (e) {
+      debugPrint("Erro em _setupInitialData: $e");
+      rethrow;
+    } finally {
+      if (mounted) {
+        setState(() { _salvando = false; });
       }
-    } else {
-      _isModoEdicao = false;
-      _isReadOnly = false;
-      _parcelaAtual = Parcela(
-        talhaoId: widget.talhao!.id,
-        idParcela: '',
-        areaMetrosQuadrados: 0,
-        dataColeta: DateTime.now(),
-        nomeFazenda: widget.talhao!.fazendaNome,
-        nomeTalhao: widget.talhao!.nome,
-        idFazenda: widget.talhao!.fazendaId,
-        projetoId: widget.talhao!.projetoId,
-        municipio: widget.talhao!.municipio, 
-        estado: widget.talhao!.estado,       
-      );
     }
-    _preencherControllersComDadosAtuais();
-    setState(() { _salvando = false; });
   }
 
   void _preencherControllersComDadosAtuais() {
@@ -111,16 +116,30 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     _idFazendaController.text = p.idFazenda ?? '';
     _idParcelaController.text = p.idParcela;
     _observacaoController.text = p.observacao ?? '';
-
-    // Novos campos
     _referenciaRfController.text = p.referenciaRf ?? '';
-    _tipoParcelaController.text = p.tipoParcela ?? 'Instalação';
+    
+    // <<< CORREÇÃO 1: Lógica robusta para traduzir o valor do banco para o dropdown >>>
+    if (p.tipoParcela != null) {
+      if (p.tipoParcela!.toUpperCase() == 'I') {
+        _tipoParcelaSelecionado = 'Instalação';
+      } else if (p.tipoParcela!.toUpperCase() == 'R') {
+        _tipoParcelaSelecionado = 'Remedição';
+      } else {
+        // Se o valor salvo já for o texto completo, usa ele. Senão, usa o padrão.
+        final opcoesValidas = ['Instalação', 'Remedição'];
+        _tipoParcelaSelecionado = opcoesValidas.contains(p.tipoParcela) ? p.tipoParcela! : 'Instalação';
+      }
+    } else {
+      _tipoParcelaSelecionado = 'Instalação';
+    }
     
     _lado1Controller.clear();
     _lado2Controller.clear();
     
-    // Lógica para Lado1/Lado2/Raio
-    _formaDaParcela = (p.formaParcela == 'Circular') ? FormaParcela.circular : FormaParcela.retangular;
+    _formaDaParcela = (p.formaParcela?.toLowerCase() == 'circular') 
+        ? FormaParcela.circular 
+        : FormaParcela.retangular;
+
     if (_formaDaParcela == FormaParcela.circular) {
       if (p.lado1 != null) _lado1Controller.text = p.lado1.toString().replaceAll('.', ',');
     } else {
@@ -143,11 +162,10 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     _lado1Controller.dispose();
     _lado2Controller.dispose();
     _referenciaRfController.dispose();
-    _tipoParcelaController.dispose();
+    // _tipoParcelaController não é mais necessário
     super.dispose();
   }
   
-  // <<< FUNÇÃO PRINCIPAL ATUALIZADA >>>
   Parcela _construirObjetoParcelaParaSalvar() {
     double? lado1, lado2;
     double area = 0.0;
@@ -169,19 +187,14 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       nomeTalhao: _talhaoParcelaController.text.trim(),
       observacao: _observacaoController.text.trim(),
       areaMetrosQuadrados: area,
-      
-      // Novos campos salvos
       referenciaRf: _referenciaRfController.text.trim(),
-      tipoParcela: _tipoParcelaController.text.trim(),
-      formaParcela: _formaDaParcela.name, // Salva 'retangular' ou 'circular'
+      tipoParcela: _tipoParcelaSelecionado, // Salva o valor completo (ex: "Instalação")
+      formaParcela: _formaDaParcela.name,
       lado1: lado1,
       lado2: lado2,
-      // Os campos que não estão na tela (ciclo, rotacao) serão salvos como null,
-      // a menos que você queira adicionar campos para eles também.
     );
   }
 
-  // A função _pickImage não precisa de alterações
   Future<void> _pickImage(ImageSource source) async {
     final XFile? pickedFile = await _picker.pickImage(source: source, imageQuality: 85, maxWidth: 1280);
     if (pickedFile == null || !mounted) return;
@@ -277,10 +290,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
   }
 
-  // O restante das funções (_reabrirParaEdicao, _salvarEIniciarColeta, etc.)
-  // não precisa de alterações, pois eles já usam a função `_construirObjetoParcelaParaSalvar`
-  // que acabamos de modificar.
-  
   Future<void> _reabrirParaEdicao() async {
     setState(() => _salvando = true);
     try {
@@ -397,7 +406,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       return;
     }
     
-    // Lógica de área atualizada
     double area = 0.0;
     if (_formaDaParcela == FormaParcela.retangular) {
       final lado1 = double.tryParse(_lado1Controller.text.replaceAll(',', '.')) ?? 0;
@@ -479,7 +487,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   
   @override
   Widget build(BuildContext context) {
-    // Lógica de cálculo de área atualizada
     double area = 0.0;
     if (_formaDaParcela == FormaParcela.retangular) {
       final lado1 = double.tryParse(_lado1Controller.text.replaceAll(',', '.')) ?? 0;
@@ -519,24 +526,40 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
                       ),
                     ),
                   
-                  // CAMPOS NOVOS ADICIONADOS
                   Row(
                     children: [
                       Expanded(child: TextFormField(controller: _referenciaRfController, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'RF', border: OutlineInputBorder()))),
                       const SizedBox(width: 16),
-                      Expanded(child: TextFormField(controller: _tipoParcelaController, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'Tipo', border: OutlineInputBorder()))),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: _tipoParcelaSelecionado,
+                          // <<< CORREÇÃO 3: Adicionando as novas opções ao dropdown >>>
+                          items: const [
+                            DropdownMenuItem(value: 'Instalação', child: Text('Instalação')),
+                            DropdownMenuItem(value: 'Remedição', child: Text('Remedição')),
+                          ],
+                          onChanged: _isReadOnly ? null : (value) {
+                            if (value != null) {
+                              setState(() => _tipoParcelaSelecionado = value);
+                            }
+                          },
+                          decoration: const InputDecoration(labelText: 'Tipo', border: OutlineInputBorder()),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
                   
-                  // CAMPOS ANTIGOS
                   TextFormField(controller: _nomeFazendaController, enabled: false, decoration: const InputDecoration(labelText: 'Nome da Fazenda', border: OutlineInputBorder(), prefixIcon: Icon(Icons.business))),
                   const SizedBox(height: 16),
                   TextFormField(controller: _idFazendaController, enabled: false, decoration: const InputDecoration(labelText: 'Código da Fazenda', border: OutlineInputBorder(), prefixIcon: Icon(Icons.pin_outlined))),
                   const SizedBox(height: 16),
                   TextFormField(controller: _talhaoParcelaController, enabled: false, decoration: const InputDecoration(labelText: 'Talhão', border: OutlineInputBorder(), prefixIcon: Icon(Icons.grid_on))),
                   const SizedBox(height: 16),
-                  TextFormField(controller: _idParcelaController, enabled: !_isReadOnly, decoration: const InputDecoration(labelText: 'ID da parcela', border: OutlineInputBorder(), prefixIcon: Icon(Icons.tag)), validator: (v) => v == null || v.trim().isEmpty ? 'Campo obrigatório' : null),
+                  TextFormField(controller: _idParcelaController,enabled: false,decoration: const InputDecoration(labelText: 'ID da parcela',border: OutlineInputBorder(),prefixIcon: Icon(Icons.tag),filled: true, fillColor: Colors.black12,
+                   ), 
+                   validator: (v) => v == null || v.trim().isEmpty ? 'Campo obrigatório' : null
+                  ),
                   const SizedBox(height: 16),
                   _buildCalculadoraArea(area),
                   const SizedBox(height: 16),
@@ -554,7 +577,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     );
   }
 
-  // O restante dos widgets de build permanece o mesmo, mas a calculadora de área é atualizada
   Widget _buildActionButtons() {
     if (_isReadOnly) {
       return Column(
@@ -587,7 +609,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
   }
 
-  // <<< WIDGET ATUALIZADO PARA LADO1/LADO2 >>>
   Widget _buildCalculadoraArea(double area) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

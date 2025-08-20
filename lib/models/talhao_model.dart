@@ -1,21 +1,56 @@
-// lib/models/talhao_model.dart (VERSÃO CORRIGIDA E FINAL)
+// lib/models/talhao_model.dart (VERSÃO ATUALIZADA PARA O.S. KLABIN)
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Representa uma área de manejo florestal, conhecida como talhão.
 class Talhao {
+  /// ID único do banco de dados local (gerado automaticamente).
   final int? id;
+  
+  /// ID da fazenda à qual o talhão pertence.
   final String fazendaId; 
+  
+  /// ID da atividade à qual o talhão está vinculado.
   final int fazendaAtividadeId;
+  
+  /// ID do projeto pai, obtido através de JOINs.
   final int? projetoId;
+  
+  /// Nome ou código identificador do talhão.
   final String nome;
+  
+  /// Área do talhão em hectares.
   final double? areaHa;
+  
+  /// Idade do plantio em anos.
   final double? idadeAnos;
+  
+  /// Espécie florestal plantada.
   final String? especie;
+  
+  /// Espaçamento de plantio (ex: "3x2").
   final String? espacamento;
+  
+  /// Nome da fazenda (geralmente obtido via JOIN).
   final String? fazendaNome;
+  
   final String? municipio;
   final String? estado;
+  
+  /// Volume total de madeira estimado para o talhão.
   double? volumeTotalTalhao;
+  
+  /// Data e hora da última modificação do registro.
   final DateTime? lastModified;
+
+  // <<< NOVOS CAMPOS DA O.S. KLABIN >>>
+  /// Bloco ao qual o talhão pertence.
+  final String? bloco;
+  /// Unidade de Produção (UP), vindo da coluna RF.
+  final String? up;
+  /// Material genético utilizado no plantio.
+  final String? materialGenetico;
+  /// Data do plantio.
+  final String? dataPlantio;
 
   Talhao({
     this.id,
@@ -32,23 +67,17 @@ class Talhao {
     this.estado,
     this.volumeTotalTalhao,
     this.lastModified,
+    this.bloco,
+    this.up,
+    this.materialGenetico,
+    this.dataPlantio,
   });
 
   Talhao copyWith({
-    int? id,
-    String? fazendaId,
-    int? fazendaAtividadeId,
-    int? projetoId,
-    String? nome,
-    double? areaHa,
-    double? idadeAnos,
-    String? especie,
-    String? espacamento,
-    String? fazendaNome,
-    String? municipio,
-    String? estado,
-    double? volumeTotalTalhao,
-    DateTime? lastModified,
+    int? id, String? fazendaId, int? fazendaAtividadeId, int? projetoId, String? nome,
+    double? areaHa, double? idadeAnos, String? especie, String? espacamento, String? fazendaNome,
+    String? municipio, String? estado, double? volumeTotalTalhao, DateTime? lastModified,
+    String? bloco, String? up, String? materialGenetico, String? dataPlantio,
   }) {
     return Talhao(
       id: id ?? this.id,
@@ -65,26 +94,34 @@ class Talhao {
       estado: estado ?? this.estado,
       volumeTotalTalhao: volumeTotalTalhao ?? this.volumeTotalTalhao,
       lastModified: lastModified ?? this.lastModified,
+      bloco: bloco ?? this.bloco,
+      up: up ?? this.up,
+      materialGenetico: materialGenetico ?? this.materialGenetico,
+      dataPlantio: dataPlantio ?? this.dataPlantio,
     );
   }
 
-  // toMap para o BANCO DE DADOS LOCAL. Ele precisa do projetoId.
+  /// Converte para um Map para o BANCO DE DADOS LOCAL.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'fazendaId': fazendaId,
       'fazendaAtividadeId': fazendaAtividadeId,
-      'projetoId': projetoId, // <<< CORREÇÃO CRÍTICA AQUI
+      'projetoId': projetoId,
       'nome': nome,
       'areaHa': areaHa,
       'idadeAnos': idadeAnos,
       'especie': especie,
       'espacamento': espacamento,
+      'bloco': bloco,
+      'up': up,
+      'material_genetico': materialGenetico,
+      'data_plantio': dataPlantio,
       'lastModified': lastModified?.toIso8601String(), 
     };
   }
 
-  // toMap para o FIRESTORE. Não deve ter o projetoId.
+  /// Converte para um Map para o FIRESTORE.
   Map<String, dynamic> toFirestoreMap() {
     return {
       'id': id,
@@ -95,6 +132,11 @@ class Talhao {
       'idadeAnos': idadeAnos,
       'especie': especie,
       'espacamento': espacamento,
+      'bloco': bloco,
+      'up': up,
+      'material_genetico': materialGenetico,
+      'data_plantio': dataPlantio,
+      // lastModified é gerenciado pelo servidor no Firestore
     };
   }
   
@@ -118,6 +160,10 @@ class Talhao {
       fazendaNome: map['fazendaNome'],
       municipio: map['municipio'],
       estado: map['estado'],
+      bloco: map['bloco'],
+      up: map['up'],
+      materialGenetico: map['material_genetico'],
+      dataPlantio: map['data_plantio'],
       lastModified: parseDate(map['lastModified']),
     );
   }

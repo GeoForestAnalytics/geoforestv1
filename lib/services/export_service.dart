@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO COMPLETA E CORRIGIDA PARA SHAPEFILE)
+// lib/services/export_service.dart (VERSÃO COMPLETA E CORRIGIDA)
 
 import 'dart:io';
 import 'dart:convert';
@@ -32,7 +32,7 @@ import 'package:geoforestv1/widgets/manager_export_dialog.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
-// ... (As classes _CsvPayload e as funções Isolate não precisam de alteração e permanecem aqui) ...
+
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
@@ -96,7 +96,7 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
   }
 
   List<List<dynamic>> rows = [];
-  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'UP', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_m2', 'Lado1', 'Lado2', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Altura_Dano_m', 'Dominante']);
+  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'UP', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_m2', 'Lado1_m', 'Lado2_m', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Altura_Dano_m', 'Dominante']);
   
   for (var pMap in payload.parcelasMap) {
     final p = Parcela.fromMap(pMap);
@@ -388,6 +388,7 @@ class ExportService {
           'fazenda_nome': cubagem.nomeFazenda,
           'talhao_nome': cubagem.nomeTalhao,
           'id_coleta': cubagem.identificador,
+          'id_unico_amostra': null,
           'talhao_area_ha': talhao.areaHa,
           'situacao': cubagem.exportada ? 'Exportada' : (cubagem.alturaTotal > 0 ? 'Concluida' : 'Pendente'),
           'data_alteracao': null, 
@@ -435,7 +436,7 @@ class ExportService {
       _handleExportError(context, 'gerar relatório de desenvolvimento', e, s);
     }
   }
-
+  
   Future<void> exportarDados(BuildContext context) async {
     try {
       if (!await _requestPermission(context)) return;
@@ -737,7 +738,6 @@ class ExportService {
     }
   }
   
-  // FUNÇÃO RESTAURADA
   Future<void> exportarPlanoDeAmostragem({
     required BuildContext context,
     required List<int> parcelaIds,
@@ -746,38 +746,75 @@ class ExportService {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum plano de amostragem para exportar.'), backgroundColor: Colors.orange));
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Preparando plano para exportação...')));
+    ProgressDialog.show(context, 'Gerando GeoJSON...');
     
     try {
       final List<Map<String, dynamic>> features = [];
-      String nomeProjeto = 'Plano';
+      String nomeProjetoFinal = 'PlanoAmostragem';
 
-      for (final id in parcelaIds) {
-        final parcela = await _parcelaRepository.getParcelaById(id);
-        if (parcela == null) continue;
-
-        final projeto = await _projetoRepository.getProjetoPelaParcela(parcela);
-        if (projeto != null && nomeProjeto == 'Plano') {
-          nomeProjeto = projeto.nome;
+      final allParcelas = (await Future.wait(parcelaIds.map((id) => _parcelaRepository.getParcelaById(id)))).whereType<Parcela>().toList();
+      final talhaoIds = allParcelas.map((p) => p.talhaoId).whereType<int>().toSet();
+      final allTalhoes = <int, Talhao>{};
+      for(final talhaoId in talhaoIds){
+        final talhao = await _talhaoRepository.getTalhaoById(talhaoId);
+        if(talhao != null){
+          allTalhoes[talhaoId] = talhao;
         }
+      }
+      if (allParcelas.isNotEmpty) {
+        final projeto = await _projetoRepository.getProjetoPelaParcela(allParcelas.first);
+        if(projeto != null) {
+          nomeProjetoFinal = projeto.nome;
+        }
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
+      final codigoEpsg = zonasUtmSirgas2000[nomeZona] ?? 31982;
+      final projWGS84 = proj4.Projection.get('EPSG:4326')!;
+      final projUTM = proj4.Projection.get('EPSG:$codigoEpsg') ?? proj4.Projection.parse(proj4Definitions[codigoEpsg]!);
+      
+      final zonaUtmStr = nomeZona.split(' ').last;
+
+      for (final parcela in allParcelas) {
+        final talhao = allTalhoes[parcela.talhaoId];
         
         if (parcela.latitude != null && parcela.longitude != null) {
+          
+          var pUtm = projWGS84.transform(projUTM, proj4.Point(x: parcela.longitude!, y: parcela.latitude!));
+
           features.add({
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [parcela.longitude, parcela.latitude]},
             'properties': {
-            // Nomes curtos (<= 10 caracteres) para compatibilidade com Shapefile
-            'up': parcela.up,
-            'talhao': parcela.nomeTalhao,
-            'fazenda': parcela.nomeFazenda,
-            'empresa': projeto?.empresa,
-            'municipio': 'N/I', // O nome "municipio" tem 9 caracteres, está OK.
-            'area_m2': parcela.areaMetrosQuadrados,
-            'projeto': projeto?.nome,
-            'respons': projeto?.responsavel, // Corrigido de "responsavel"
-            'fazenda_id': parcela.idFazenda,
-              'parcela_id': parcela.idParcela,
-           }
+              'Atividade': parcela.atividadeTipo ?? 'N/A',
+              'Bloco': talhao?.bloco,
+              'Fazenda': parcela.nomeFazenda,
+              'RF': parcela.up,
+              'Talhão': parcela.nomeTalhao,
+              'Parcela': parcela.idParcela,
+              'AreaTalhao': talhao?.areaHa,
+              'Espécie': talhao?.especie,
+              'Material': talhao?.materialGenetico,
+              'Espaçament': talhao?.espacamento,
+              'Plantio': talhao?.dataPlantio,
+              'Regime': null,
+              'Lado 1': parcela.lado1,
+              'Lado 2': parcela.lado2,
+              'ÁreaParcela': parcela.areaMetrosQuadrados,
+              'Tipo': parcela.tipoParcela,
+              'Ciclo': parcela.ciclo,
+              'Rotação': parcela.rotacao,
+              'Situação': null,
+              'Medir ?': 'SIM',
+              'Status': parcela.status.name,
+              'Data Realização': parcela.status == StatusParcela.concluida ? DateFormat('dd/MM/yyyy').format(parcela.dataColeta!) : null,
+              'Observação': parcela.observacao,
+              'ZonaUTM': zonaUtmStr,
+              'LONG (X)': pUtm.x.toStringAsFixed(0),
+              'LAT (Y)': pUtm.y.toStringAsFixed(0),
+              'ALT (Z)': parcela.altitude,
+            }
           });
         }
       }
@@ -786,18 +823,20 @@ class ExportService {
       const jsonEncoder = JsonEncoder.withIndent('  ');
       final jsonString = jsonEncoder.convert(geoJson);
 
-      final directory = await getApplicationDocumentsDirectory();
       final hoje = DateTime.now();
-      final fName = 'Plano_Amostragem_${nomeProjeto.replaceAll(' ', '_')}_${DateFormat('yyyyMMdd_HHmm').format(hoje)}.json';
-      final path = '${directory.path}/$fName';
-      await File(path).writeAsString(jsonString);
+      final fName = 'Plano_Amostragem_${nomeProjetoFinal.replaceAll(' ', '_')}_${DateFormat('yyyyMMdd_HHmm').format(hoje)}.json';
+      
+      await _salvarECompartilhar(
+        context: context, 
+        fileContent: jsonString, 
+        fileName: fName, 
+        subject: 'Plano de Amostragem GeoForest'
+      );
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        await Share.shareXFiles([XFile(path, name: fName)], subject: 'Plano de Amostragem GeoForest');
-      }
     } catch (e, s) {
       _handleExportError(context, 'exportar plano de amostragem', e, s);
+    } finally {
+      ProgressDialog.hide(context);
     }
   }
 
@@ -884,20 +923,34 @@ class ExportService {
     }
   }
 
-  Future<String> _salvarEObterCaminho(String csvData, String fileName) async {
+  Future<String> _salvarEObterCaminho(String fileContent, String fileName) async {
     final dir = await getApplicationDocumentsDirectory();
     final path = '${dir.path}/$fileName';
     final bom = [0xEF, 0xBB, 0xBF]; 
-    final bytes = utf8.encode(csvData);
-    await File(path).writeAsBytes([...bom, ...bytes]);
+    final bytes = utf8.encode(fileContent);
+    await File(path).writeAsBytes(fileName.endsWith('.csv') ? [...bom, ...bytes] : bytes);
     return path;
+  }
+  
+  Future<void> _salvarECompartilhar({
+    required BuildContext context,
+    required String fileContent,
+    required String fileName,
+    required String subject,
+  }) async {
+      final path = await _salvarEObterCaminho(fileContent, fileName);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        await Share.shareXFiles([XFile(path, name: fileName)], subject: subject);
+      }
   }
 
   Future<void> _salvarECompartilharCsv(BuildContext context, String csvData, String fileName, String subject) async {
-    final path = await _salvarEObterCaminho(csvData, fileName);
-     if (context.mounted) {
-      ScaffoldMessenger.of(context).removeCurrentSnackBar();
-      await Share.shareXFiles([XFile(path)], subject: subject);
-    }
+    await _salvarECompartilhar(
+      context: context, 
+      fileContent: csvData, 
+      fileName: fileName, 
+      subject: subject
+    );
   }
 }
