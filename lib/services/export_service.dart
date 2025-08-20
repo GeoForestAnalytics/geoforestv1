@@ -613,28 +613,48 @@ class ExportService {
   }
   
   Future<void> exportarNovasCubagens(BuildContext context) async {
-    try {
-      if (!await _requestPermission(context)) return;
-      final cubagens = await _cubagemRepository.getUnexportedCubagens();
-      final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
-      final nomeArquivo = 'geoforest_export_cubagens_$hoje.csv';
-      await _gerarCsvCubagem(context, cubagens, nomeArquivo, true);
-    } catch (e, s) {
-      _handleExportError(context, 'exportar cubagens', e, s);
-    }
+  try {
+    if (!await _requestPermission(context)) return;
+    
+    // Pega todas as cubagens não exportadas
+    final cubagens = await _cubagemRepository.getUnexportedCubagens();
+    
+    // <<< CORREÇÃO APLICADA AQUI >>>
+    // Filtra a lista para incluir apenas as que foram preenchidas (altura > 0)
+    final cubagensConcluidas = cubagens.where((c) => c.alturaTotal > 0).toList();
+    
+    final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
+    final nomeArquivo = 'geoforest_export_cubagens_$hoje.csv';
+    
+    // Passa a lista filtrada para a função que gera o CSV
+    await _gerarCsvCubagem(context, cubagensConcluidas, nomeArquivo, true);
+    
+  } catch (e, s) {
+    _handleExportError(context, 'exportar cubagens', e, s);
   }
+}
 
-  Future<void> exportarTodasCubagensBackup(BuildContext context) async {
-    try {
-      if (!await _requestPermission(context)) return;
-      final cubagens = await _cubagemRepository.getTodasCubagensParaBackup();
-      final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
-      final nomeArquivo = 'geoforest_BACKUP_CUBAGENS_$hoje.csv';
-      await _gerarCsvCubagem(context, cubagens, nomeArquivo, false);
-    } catch (e, s) {
-      _handleExportError(context, 'backup de cubagens', e, s);
-    }
+Future<void> exportarTodasCubagensBackup(BuildContext context) async {
+  try {
+    if (!await _requestPermission(context)) return;
+    
+    // Pega todas as cubagens para o backup
+    final cubagens = await _cubagemRepository.getTodasCubagensParaBackup();
+    
+    // <<< CORREÇÃO APLICADA AQUI TAMBÉM >>>
+    // Aplica o mesmo filtro para o backup, garantindo que só dados reais sejam salvos
+    final cubagensConcluidas = cubagens.where((c) => c.alturaTotal > 0).toList();
+    
+    final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
+    final nomeArquivo = 'geoforest_BACKUP_CUBAGENS_$hoje.csv';
+    
+    // Passa a lista filtrada
+    await _gerarCsvCubagem(context, cubagensConcluidas, nomeArquivo, false);
+    
+  } catch (e, s) {
+    _handleExportError(context, 'backup de cubagens', e, s);
   }
+}
 
   Future<void> _gerarCsvCubagem(BuildContext context, List<CubagemArvore> cubagens, String nomeArquivoOuCaminhoCompleto, bool marcarComoExportado) async {
     if (cubagens.isEmpty) {
@@ -777,47 +797,49 @@ class ExportService {
       final zonaUtmStr = nomeZona.split(' ').last;
 
       for (final parcela in allParcelas) {
-        final talhao = allTalhoes[parcela.talhaoId];
-        
-        if (parcela.latitude != null && parcela.longitude != null) {
-          
-          var pUtm = projWGS84.transform(projUTM, proj4.Point(x: parcela.longitude!, y: parcela.latitude!));
+    final talhao = allTalhoes[parcela.talhaoId];
+    
+    if (parcela.latitude != null && parcela.longitude != null) {
+      
+      var pUtm = projWGS84.transform(projUTM, proj4.Point(x: parcela.longitude!, y: parcela.latitude!));
 
-          features.add({
-            'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [parcela.longitude, parcela.latitude]},
-            'properties': {
-              'Atividade': parcela.atividadeTipo ?? 'N/A',
-              'Bloco': talhao?.bloco,
-              'Fazenda': parcela.nomeFazenda,
-              'RF': parcela.up,
-              'Talhão': parcela.nomeTalhao,
-              'Parcela': parcela.idParcela,
-              'AreaTalhao': talhao?.areaHa,
-              'Espécie': talhao?.especie,
-              'Material': talhao?.materialGenetico,
-              'Espaçament': talhao?.espacamento,
-              'Plantio': talhao?.dataPlantio,
-              'Regime': null,
-              'Lado 1': parcela.lado1,
-              'Lado 2': parcela.lado2,
-              'ÁreaParcela': parcela.areaMetrosQuadrados,
-              'Tipo': parcela.tipoParcela,
-              'Ciclo': parcela.ciclo,
-              'Rotação': parcela.rotacao,
-              'Situação': null,
-              'Medir ?': 'SIM',
-              'Status': parcela.status.name,
-              'Data Realização': parcela.status == StatusParcela.concluida ? DateFormat('dd/MM/yyyy').format(parcela.dataColeta!) : null,
-              'Observação': parcela.observacao,
-              'ZonaUTM': zonaUtmStr,
-              'LONG (X)': pUtm.x.toStringAsFixed(0),
-              'LAT (Y)': pUtm.y.toStringAsFixed(0),
-              'ALT (Z)': parcela.altitude,
-            }
-          });
+      features.add({
+        'type': 'Feature',
+        'geometry': {'type': 'Point', 'coordinates': [parcela.longitude, parcela.latitude]},
+        // <<< CORREÇÃO PRINCIPAL AQUI >>>
+        'properties': {
+          'atividade': parcela.atividadeTipo ?? 'N/A', // Chave padronizada
+          'bloco': talhao?.bloco,
+          'fazenda_nome': parcela.nomeFazenda,         // Chave padronizada
+          'fazenda_id': parcela.idFazenda,           // Chave padronizada
+          'rf': parcela.up,
+          'talhao_nome': parcela.nomeTalhao,          // Chave padronizada
+          'parcela': parcela.idParcela,
+          'area_talhao_ha': talhao?.areaHa,           // Chave padronizada
+          'especie': talhao?.especie,
+          'material': talhao?.materialGenetico,
+          'espacamento': talhao?.espacamento,
+          'plantio': talhao?.dataPlantio,
+          'regime': null,
+          'lado1': parcela.lado1,
+          'lado2': parcela.lado2,
+          'area_parcela_m2': parcela.areaMetrosQuadrados, // Chave padronizada
+          'tipo': parcela.tipoParcela,
+          'ciclo': parcela.ciclo,
+          'rotacao': parcela.rotacao,
+          'situacao': null,
+          'medir_?': 'SIM',                             // Chave padronizada
+          'status': parcela.status.name,
+          'data_realizacao': parcela.status == StatusParcela.concluida ? DateFormat('dd/MM/yyyy').format(parcela.dataColeta!) : null,
+          'observacao': parcela.observacao,
+          'zona_utm': zonaUtmStr,                        // Chave padronizada
+          'long_x': pUtm.x.toStringAsFixed(0),          // Chave padronizada
+          'lat_y': pUtm.y.toStringAsFixed(0),           // Chave padronizada
+          'alt_z': parcela.altitude,                    // Chave padronizada
         }
-      }
+      });
+    }
+  }
 
       final Map<String, dynamic> geoJson = {'type': 'FeatureCollection', 'features': features};
       const jsonEncoder = JsonEncoder.withIndent('  ');

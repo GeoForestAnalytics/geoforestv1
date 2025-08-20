@@ -10,8 +10,6 @@ import 'package:geoforestv1/pages/talhoes/detalhes_talhao_page.dart';
 import 'package:geoforestv1/utils/navigation_helper.dart';
 
 // <<< IMPORTS ADICIONAIS NECESSÁRIOS >>>
-import 'package:geoforestv1/data/repositories/parcela_repository.dart';
-import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 
 class DetalhesFazendaPage extends StatefulWidget {
@@ -31,8 +29,7 @@ class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
   
   final _talhaoRepository = TalhaoRepository();
   // <<< NOVAS INSTÂNCIAS DOS REPOSITÓRIOS NECESSÁRIOS PARA A VERIFICAÇÃO >>>
-  final _parcelaRepository = ParcelaRepository();
-  final _cubagemRepository = CubagemRepository();
+  
 
   bool _isSelectionMode = false;
   final Set<int> _selectedTalhoes = {};
@@ -44,46 +41,30 @@ class _DetalhesFazendaPageState extends State<DetalhesFazendaPage> {
   }
 
   // <<< LÓGICA DE CARREGAMENTO COMPLETAMENTE REESCRITA >>>
-  void _carregarTalhoes() async {
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _isSelectionMode = false;
-        _selectedTalhoes.clear();
-      });
-    }
-    
-    // 1. Busca todos os talhões associados a esta fazenda nesta atividade.
-    final todosOsTalhoesDaFazenda = await _talhaoRepository.getTalhoesDaFazenda(
-        widget.fazenda.id, widget.fazenda.atividadeId);
+// Dentro da classe _DetalhesFazendaPageState
 
-    final List<Talhao> talhoesComDados = [];
-
-    // 2. Para cada talhão encontrado, verifica se ele tem dados (parcelas OU cubagens).
-    for (final talhao in todosOsTalhoesDaFazenda) {
-        // Roda as duas verificações em paralelo para ser mais rápido
-        final results = await Future.wait([
-            _parcelaRepository.getParcelasDoTalhao(talhao.id!),
-            _cubagemRepository.getTodasCubagensDoTalhao(talhao.id!),
-        ]);
-
-        final parcelas = results[0] as List;
-        final cubagens = results[1] as List;
-
-        // 3. Se o talhão tiver qualquer um dos dois tipos de dado, ele é adicionado à lista para exibição.
-        if (parcelas.isNotEmpty || cubagens.isNotEmpty) {
-            talhoesComDados.add(talhao);
-        }
-    }
-
-    if (mounted) {
-      setState(() {
-        _talhoes = talhoesComDados;
-        _isLoading = false;
-      });
-    }
+// <<< SUBSTITUA A FUNÇÃO INTEIRA POR ESTA >>>
+void _carregarTalhoes() async {
+  if (mounted) {
+    setState(() {
+      _isLoading = true;
+      _isSelectionMode = false;
+      _selectedTalhoes.clear();
+    });
   }
+  
+  // A única lógica aqui é buscar TODOS os talhões da fazenda e atividade.
+  // Sem filtros de parcelas ou cubagens.
+  final todosOsTalhoesDaFazenda = await _talhaoRepository.getTalhoesDaFazenda(
+      widget.fazenda.id, widget.fazenda.atividadeId);
 
+  if (mounted) {
+    setState(() {
+      _talhoes = todosOsTalhoesDaFazenda;
+      _isLoading = false;
+    });
+  }
+}
   void _toggleSelectionMode(int? talhaoId) {
     setState(() {
       _isSelectionMode = !_isSelectionMode;

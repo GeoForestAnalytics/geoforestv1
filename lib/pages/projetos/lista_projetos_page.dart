@@ -1,4 +1,4 @@
-// lib/pages/projetos/lista_projetos_page.dart (VERSÃO COM SOFT DELETE)
+// lib/pages/projetos/lista_projetos_page.dart (VERSÃO COM SOFT DELETE E CORREÇÃO DE IMPORTAÇÃO)
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -307,7 +307,11 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       final file = File(result.files.single.path!);
       final csvContent = await file.readAsString();
       
-      final message = await _importRepository.importarCsvUniversal(csvContent, projetoIdAlvo: projeto.id!);
+      // <<< CORREÇÃO APLICADA AQUI >>>
+      final message = await _importRepository.importarCsvUniversal(
+        csvContent: csvContent, 
+        projetoIdAlvo: projeto.id!
+      );
       
       if (mounted) {
         Navigator.of(context).pop();

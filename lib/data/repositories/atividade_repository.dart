@@ -44,31 +44,72 @@ class AtividadeRepository {
     await db.delete('atividades', where: 'id = ?', whereArgs: [id]);
   }
   
-  Future<void> criarAtividadeComPlanoDeCubagem(Atividade novaAtividade, List<CubagemArvore> placeholders) async {
-    if (placeholders.isEmpty) {
-      throw Exception("A lista de árvores para cubagem (placeholders) não pode estar vazia.");
-    }
-    final db = await _dbHelper.database;
-    await db.transaction((txn) async {
-  // Prepara o mapa e ADICIONA O TIMESTAMP
-  final atividadeMap = novaAtividade.toMap();
-  atividadeMap['lastModified'] = DateTime.now().toIso8601String();
-  
-  // Insere o mapa corrigido
-  final atividadeId = await txn.insert('atividades', atividadeMap);
-  
-  final firstPlaceholder = placeholders.first;
-      final fazendaDoPlano = Fazenda(id: firstPlaceholder.idFazenda!, atividadeId: atividadeId, nome: firstPlaceholder.nomeFazenda, municipio: 'N/I', estado: 'N/I');
-      await txn.insert('fazendas', fazendaDoPlano.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-      final talhaoDoPlano = Talhao(fazendaId: fazendaDoPlano.id, fazendaAtividadeId: fazendaDoPlano.atividadeId, nome: firstPlaceholder.nomeTalhao);
-      final talhaoId = await txn.insert('talhoes', talhaoDoPlano.toMap());
-      for (final placeholder in placeholders) {
-        final map = placeholder.toMap();
-        map['talhaoId'] = talhaoId;
-        map.remove('id');
-        await txn.insert('cubagens_arvores', map);
-      }
-    });
-    debugPrint('Atividade de cubagem e ${placeholders.length} placeholders criados com sucesso!');
+
+Future<void> criarAtividadeComPlanoDeCubagem(Atividade novaAtividade, List<CubagemArvore> placeholders) async {
+  if (placeholders.isEmpty) {
+    throw Exception("A lista de árvores para cubagem (placeholders) não pode estar vazia.");
   }
+  final db = await _dbHelper.database;
+  
+  await db.transaction((txn) async {
+    final atividadeMap = novaAtividade.toMap();
+    atividadeMap['lastModified'] = DateTime.now().toIso8601String();
+    
+    final atividadeId = await txn.insert('atividades', atividadeMap);
+    
+    final firstPlaceholder = placeholders.first;
+    final fazendaDoPlano = Fazenda(
+      id: firstPlaceholder.idFazenda!, 
+      atividadeId: atividadeId, 
+      nome: firstPlaceholder.nomeFazenda, 
+      municipio: 'N/I', 
+      estado: 'N/I'
+    );
+    
+    final fazendaMap = fazendaDoPlano.toMap();
+    fazendaMap['lastModified'] = DateTime.now().toIso8601String();
+    await txn.insert('fazendas', fazendaMap, conflictAlgorithm: ConflictAlgorithm.replace);
+    
+    // <<< INÍCIO DA CORREÇÃO >>>
+    // 1. Busca o talhão original (da atividade de inventário) para obter todos os seus dados.
+    // Usamos o nome e o ID da fazenda (da atividade original) para encontrá-lo.
+    final talhaoOriginal = await txn.query(
+      'talhoes', 
+      where: 'nome = ? AND fazendaId = ?', 
+      whereArgs: [firstPlaceholder.nomeTalhao, firstPlaceholder.idFazenda],
+      limit: 1
+    ).then((maps) => maps.isNotEmpty ? Talhao.fromMap(maps.first) : null);
+    
+    // 2. Cria o novo talhão para a atividade de cubagem,
+    // copiando os dados do talhão original.
+    final talhaoDoPlano = Talhao(
+      fazendaId: fazendaDoPlano.id, 
+      fazendaAtividadeId: atividadeId, // USA O ID DA NOVA ATIVIDADE
+      nome: firstPlaceholder.nomeTalhao,
+      // Copia os dados do talhão original, se ele foi encontrado
+      areaHa: talhaoOriginal?.areaHa,
+      especie: talhaoOriginal?.especie,
+      espacamento: talhaoOriginal?.espacamento,
+      idadeAnos: talhaoOriginal?.idadeAnos,
+      bloco: talhaoOriginal?.bloco,
+      up: talhaoOriginal?.up,
+      materialGenetico: talhaoOriginal?.materialGenetico,
+      dataPlantio: talhaoOriginal?.dataPlantio,
+    );
+    // <<< FIM DA CORREÇÃO >>>
+
+    final talhaoMap = talhaoDoPlano.toMap();
+    talhaoMap['lastModified'] = DateTime.now().toIso8601String();
+    final talhaoId = await txn.insert('talhoes', talhaoMap);
+
+    for (final placeholder in placeholders) {
+      final map = placeholder.toMap();
+      map['talhaoId'] = talhaoId;
+      map.remove('id');
+      map['lastModified'] = DateTime.now().toIso8601String();
+      await txn.insert('cubagens_arvores', map);
+    }
+  });
+  debugPrint('Atividade de cubagem e ${placeholders.length} placeholders criados com sucesso!');
+}
 }
