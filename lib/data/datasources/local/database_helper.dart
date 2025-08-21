@@ -1,4 +1,4 @@
-// lib/data/datasources/local/database_helper.dart (VERSÃO ATUALIZADA COM RF E MÉTODO)
+// lib/data/datasources/local/database_helper.dart (VERSÃO AJUSTADA PARA DIÁRIO CONSOLIDADO)
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
@@ -29,8 +29,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      // <<< VERSÃO DO BANCO INCREMENTADA PARA 44 >>>
-      version: 44,
+      // <<< VERSÃO DO BANCO INCREMENTADA PARA 46 >>>
+      version: 46,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -164,7 +164,7 @@ class DatabaseHelper {
       )
     ''');
     
-    // <<< ADICIONADAS AS DUAS NOVAS COLUNAS NA CRIAÇÃO DA TABELA >>>
+    // <<< ADICIONADA A COLUNA dataColeta >>>
     await db.execute('''
       CREATE TABLE cubagens_arvores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,6 +183,7 @@ class DatabaseHelper {
         longitude REAL,
         metodoCubagem TEXT,
         rf TEXT,
+        dataColeta TEXT,
         exportada INTEGER DEFAULT 0 NOT NULL,
         isSynced INTEGER DEFAULT 0 NOT NULL,
         nomeLider TEXT,
@@ -214,13 +215,14 @@ class DatabaseHelper {
       )
     ''');
     
+    // <<< UNIQUE ALTERADO E TALHAO_ID NÃO É MAIS OBRIGATÓRIO >>>
     await db.execute('''
       CREATE TABLE diario_de_campo (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         data_relatorio TEXT NOT NULL,
         nome_lider TEXT NOT NULL,
         projeto_id INTEGER NOT NULL,
-        talhao_id INTEGER NOT NULL,
+        talhao_id INTEGER,
         km_inicial REAL,
         km_final REAL,
         localizacao_destino TEXT,
@@ -233,7 +235,7 @@ class DatabaseHelper {
         veiculo_modelo TEXT,
         equipe_no_carro TEXT,
         lastModified TEXT NOT NULL,
-        UNIQUE(data_relatorio, nome_lider, talhao_id)
+        UNIQUE(data_relatorio, nome_lider)
       )
     ''');
     
@@ -246,6 +248,7 @@ class DatabaseHelper {
     for (var v = oldVersion + 1; v <= newVersion; v++) {
       debugPrint("Executando migração de banco de dados para a versão $v...");
       switch (v) {
+        // ... (casos de 25 a 44 permanecem os mesmos)
         case 25:
           await db.execute('ALTER TABLE parcelas ADD COLUMN uuid TEXT');
           final parcelasSemUuid = await db.query('parcelas', where: 'uuid IS NULL');
@@ -387,12 +390,47 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN longitude REAL');
           break;
 
-        // <<< ADICIONADA A LÓGICA DE MIGRAÇÃO PARA AS DUAS NOVAS VERSÕES >>>
         case 43:
           await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN metodoCubagem TEXT');
           break;
         case 44:
           await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN rf TEXT');
+          break;
+          
+        // <<< NOVA MIGRAÇÃO PARA O DIÁRIO DE CAMPO CONSOLIDADO >>>
+        case 45:
+          // Recria a tabela 'diario_de_campo' com a nova chave única e campos ajustados.
+          await db.execute('''
+            CREATE TABLE diario_de_campo_temp (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              data_relatorio TEXT NOT NULL,
+              nome_lider TEXT NOT NULL,
+              projeto_id INTEGER NOT NULL,
+              talhao_id INTEGER,
+              km_inicial REAL, km_final REAL, localizacao_destino TEXT,
+              pedagio_valor REAL, abastecimento_valor REAL,
+              alimentacao_marmitas_qtd INTEGER, alimentacao_refeicao_valor REAL,
+              alimentacao_descricao TEXT, veiculo_placa TEXT,
+              veiculo_modelo TEXT, equipe_no_carro TEXT, lastModified TEXT NOT NULL,
+              UNIQUE(data_relatorio, nome_lider)
+            )
+          ''');
+          // Copia os dados, agrupando para evitar duplicatas na nova chave única.
+          await db.execute('''
+            INSERT INTO diario_de_campo_temp (id, data_relatorio, nome_lider, projeto_id, talhao_id, km_inicial, km_final, localizacao_destino, pedagio_valor, abastecimento_valor, alimentacao_marmitas_qtd, alimentacao_refeicao_valor, alimentacao_descricao, veiculo_placa, veiculo_modelo, equipe_no_carro, lastModified)
+            SELECT id, data_relatorio, nome_lider, projeto_id, talhao_id, km_inicial, km_final, localizacao_destino, pedagio_valor, abastecimento_valor, alimentacao_marmitas_qtd, alimentacao_refeicao_valor, alimentacao_descricao, veiculo_placa, veiculo_modelo, equipe_no_carro, lastModified
+            FROM diario_de_campo
+            GROUP BY data_relatorio, nome_lider
+          ''');
+          await db.execute('DROP TABLE diario_de_campo');
+          await db.execute('ALTER TABLE diario_de_campo_temp RENAME TO diario_de_campo');
+          break;
+          
+        // <<< NOVA MIGRAÇÃO PARA ADICIONAR DATA DE COLETA ÀS CUBAGENS >>>
+        case 46:
+          await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN dataColeta TEXT');
+          // Preenche a nova coluna com a data de modificação para dados existentes.
+          await db.execute('UPDATE cubagens_arvores SET dataColeta = lastModified WHERE dataColeta IS NULL');
           break;
       }
     }

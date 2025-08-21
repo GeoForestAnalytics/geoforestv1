@@ -1,6 +1,7 @@
 // lib/pages/gerente/operacoes_dashboard_page.dart (VERSÃO CORRIGIDA)
 
 import 'package:flutter/material.dart';
+import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -40,9 +41,8 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
         }
 
         return RefreshIndicator(
-          onRefresh: () async {
-            // TODO: Chamar a função de recarregar dados do GerenteProvider no futuro
-          },
+          // <<< LÓGICA DO 'TODO' IMPLEMENTADA AQUI >>>
+          onRefresh: () => context.read<GerenteProvider>().iniciarMonitoramento(),
           child: ListView(
             padding: const EdgeInsets.all(16.0),
             children: [

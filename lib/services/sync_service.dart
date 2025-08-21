@@ -1,4 +1,4 @@
-// lib/services/sync_service.dart (VERSÃO CORRIGIDA COM DOWNLOAD DE SEÇÕES)
+// lib/services/sync_service.dart (VERSÃO COM SINCRONIZAÇÃO DE DIÁRIO)
 
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
@@ -22,6 +22,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
+import 'package:geoforestv1/models/diario_de_campo_model.dart'; // <<< NOVO IMPORT
 
 class SyncService {
   final firestore.FirebaseFirestore _firestore = firestore.FirebaseFirestore.instance;
@@ -427,7 +428,6 @@ class SyncService {
           
           await txn.delete('cubagens_secoes', where: 'cubagemArvoreId = ?', whereArgs: [cubagemDaNuvem.id]);
           
-          // <<< INÍCIO DA CORREÇÃO >>>
           final secoesSnapshot = await docSnapshot.reference.collection('secoes').get();
 
           if (secoesSnapshot.docs.isNotEmpty) {
@@ -437,7 +437,6 @@ class SyncService {
               await txn.insert('cubagens_secoes', secao.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
             }
           }
-          // <<< FIM DA CORREÇÃO >>>
 
         } catch (e, s) {
           debugPrint("Erro CRÍTICO ao sincronizar cubagem ${cubagemDaNuvem.id}: $e\n$s");
@@ -454,5 +453,32 @@ class SyncService {
     final licenseId = licenseDoc.id;
     final projetoRef = _firestore.collection('clientes').doc(licenseId).collection('projetos').doc(projetoId);
     await projetoRef.update({'status': novoStatus});
+  }
+
+  // <<< MÉTODO NOVO ADICIONADO AQUI >>>
+  /// Envia um único documento de Diário de Campo para o Firestore.
+  Future<void> sincronizarDiarioDeCampo(DiarioDeCampo diario) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception("Usuário não está logado.");
+
+    final licenseDoc = await _licensingService.findLicenseDocumentForUser(user);
+    if (licenseDoc == null) throw Exception("Licença do usuário não encontrada.");
+    
+    final licenseId = licenseDoc.id;
+
+    // A ID do documento será uma combinação da data e do líder para garantir que seja único por dia/equipe.
+    final docId = '${diario.dataRelatorio}_${diario.nomeLider.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '-')}';
+
+    final docRef = _firestore
+        .collection('clientes')
+        .doc(licenseId)
+        .collection('diarios_de_campo')
+        .doc(docId);
+
+    final diarioMap = diario.toMap();
+    // Adiciona o timestamp do servidor para controle de versão na nuvem
+    diarioMap['lastModifiedServer'] = firestore.FieldValue.serverTimestamp();
+
+    await docRef.set(diarioMap, firestore.SetOptions(merge: true));
   }
 }

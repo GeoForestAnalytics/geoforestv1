@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO FINAL COM PAYLOAD DE CUBAGEM CORRIGIDO)
+// lib/services/export_service.dart (VERSÃO COM RELATÓRIO DIÁRIO CONSOLIDADO)
 
 import 'dart:io';
 import 'dart:convert';
@@ -31,8 +31,10 @@ import 'package:geoforestv1/utils/constants.dart';
 import 'package:geoforestv1/widgets/manager_export_dialog.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/models/projeto_model.dart';
+import 'package:geoforestv1/models/atividade_model.dart';
 
-
+// PAYLOADS PARA ISOLATES...
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
@@ -53,7 +55,6 @@ class _CsvParcelaPayload {
   });
 }
 
-// <<< CORREÇÃO 1: ADICIONAR OS CAMPOS FALTANTES AQUI >>>
 class _CsvCubagemPayload {
   final List<Map<String, dynamic>> cubagensMap;
   final Map<int, List<Map<String, dynamic>>> secoesPorCubagemMap;
@@ -86,6 +87,26 @@ class _DevEquipePayload {
   });
 }
 
+// <<< NOVO PAYLOAD PARA O RELATÓRIO CONSOLIDADO >>>
+class _CsvConsolidadoPayload {
+  final Map<String, dynamic> diarioMap;
+  final List<Map<String, dynamic>> parcelasMap;
+  final List<Map<String, dynamic>> cubagensMap;
+  final Map<int, Map<String, dynamic>> projetosMap;
+  final Map<int, Map<String, dynamic>> atividadesMap;
+  final Map<int, Map<String, dynamic>> talhoesMap;
+
+  _CsvConsolidadoPayload({
+    required this.diarioMap,
+    required this.parcelasMap,
+    required this.cubagensMap,
+    required this.projetosMap,
+    required this.atividadesMap,
+    required this.talhoesMap,
+  });
+}
+
+// ... FUNÇÕES DE ISOLATE EXISTENTES ...
 Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
@@ -255,6 +276,59 @@ Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
   return const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
 }
 
+// <<< NOVA FUNÇÃO DE ISOLATE PARA O RELATÓRIO CONSOLIDADO >>>
+Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) async {
+  List<List<dynamic>> rows = [];
+
+  // Cabeçalho do CSV
+  rows.add([
+    'Data_Relatorio', 'Lider_Equipe', 'Ajudantes', 'Projeto', 'Atividade', 'Fazenda', 'Talhao', 
+    'Tipo_Coleta', 'ID_Amostra', 'Status_Coleta', 'UP_RF',
+    'KM_Inicial', 'KM_Final', 'Destino', 'Pedagio_RS', 'Abastecimento_RS', 'Qtd_Marmitas', 'Refeicao_RS', 'Descricao_Alimentacao',
+    'Placa_Veiculo', 'Modelo_Veiculo'
+  ]);
+
+  final diario = DiarioDeCampo.fromMap(payload.diarioMap);
+  final projetos = payload.projetosMap.map((k, v) => MapEntry(k, Projeto.fromMap(v)));
+  final atividades = payload.atividadesMap.map((k, v) => MapEntry(k, Atividade.fromMap(v)));
+  final talhoes = payload.talhoesMap.map((k, v) => MapEntry(k, Talhao.fromMap(v)));
+
+  // Adiciona as linhas de PARCELAS
+  for (var pMap in payload.parcelasMap) {
+    final p = Parcela.fromMap(pMap);
+    final talhao = talhoes[p.talhaoId];
+    final atividade = atividades[talhao?.fazendaAtividadeId];
+    final projeto = projetos[atividade?.projetoId];
+
+    rows.add([
+      diario.dataRelatorio, diario.nomeLider, diario.equipeNoCarro, projeto?.nome, atividade?.tipo,
+      p.nomeFazenda, p.nomeTalhao, 'Inventario', p.idParcela, p.status.name, p.up,
+      diario.kmInicial, diario.kmFinal, diario.localizacaoDestino, diario.pedagioValor, diario.abastecimentoValor,
+      diario.alimentacaoMarmitasQtd, diario.alimentacaoRefeicaoValor, diario.alimentacaoDescricao,
+      diario.veiculoPlaca, diario.veiculoModelo
+    ]);
+  }
+
+  // Adiciona as linhas de CUBAGENS
+  for (var cMap in payload.cubagensMap) {
+    final c = CubagemArvore.fromMap(cMap);
+    final talhao = talhoes[c.talhaoId];
+    final atividade = atividades[talhao?.fazendaAtividadeId];
+    final projeto = projetos[atividade?.projetoId];
+
+    rows.add([
+      diario.dataRelatorio, diario.nomeLider, diario.equipeNoCarro, projeto?.nome, atividade?.tipo,
+      c.nomeFazenda, c.nomeTalhao, 'Cubagem', c.identificador, c.alturaTotal > 0 ? 'Concluida' : 'Pendente', c.rf,
+      diario.kmInicial, diario.kmFinal, diario.localizacaoDestino, diario.pedagioValor, diario.abastecimentoValor,
+      diario.alimentacaoMarmitasQtd, diario.alimentacaoRefeicaoValor, diario.alimentacaoDescricao,
+      diario.veiculoPlaca, diario.veiculoModelo
+    ]);
+  }
+
+  return const ListToCsvConverter().convert(rows, fieldDelimiter: ';');
+}
+
+
 class ExportService {
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
@@ -262,21 +336,74 @@ class ExportService {
   final _atividadeRepository = AtividadeRepository();
   final _talhaoRepository = TalhaoRepository();
 
+  // <<< NOVO MÉTODO PRINCIPAL PARA O RELATÓRIO CONSOLIDADO >>>
+  Future<void> exportarRelatorioDiarioConsolidadoCsv({
+    required BuildContext context,
+    required DiarioDeCampo diario,
+    required List<Parcela> parcelas,
+    required List<CubagemArvore> cubagens,
+  }) async {
+    try {
+      if (!await _requestPermission(context)) return;
+      ProgressDialog.show(context, 'Gerando CSV consolidado...');
+
+      // Coleta todos os IDs necessários para buscar os dados de hierarquia
+      final Set<int> talhaoIds = {...parcelas.map((p) => p.talhaoId), ...cubagens.map((c) => c.talhaoId)}.whereType<int>().toSet();
+      final talhoes = (await Future.wait(talhaoIds.map((id) => _talhaoRepository.getTalhaoById(id)))).whereType<Talhao>().toList();
+      final talhoesMap = {for (var t in talhoes) t.id!: t.toMap()};
+
+      final Set<int> atividadeIds = talhoes.map((t) => t.fazendaAtividadeId).toSet();
+      final atividades = (await _atividadeRepository.getTodasAsAtividades()).where((a) => atividadeIds.contains(a.id)).toList();
+      final atividadesMap = {for (var a in atividades) a.id!: a.toMap()};
+
+      final Set<int> projetoIds = atividades.map((a) => a.projetoId).toSet();
+      final projetos = (await _projetoRepository.getTodosOsProjetosParaGerente()).where((p) => projetoIds.contains(p.id)).toList();
+      final projetosMap = {for (var p in projetos) p.id!: p.toMap()};
+
+      // Monta o payload para o isolate
+      final payload = _CsvConsolidadoPayload(
+        diarioMap: diario.toMap(),
+        parcelasMap: parcelas.map((p) => p.toMap()).toList(),
+        cubagensMap: cubagens.map((c) => c.toMap()).toList(),
+        projetosMap: projetosMap,
+        atividadesMap: atividadesMap,
+        talhoesMap: talhoesMap,
+      );
+
+      // Gera o CSV em um isolate
+      final String csvData = await compute(_generateCsvConsolidadoInIsolate, payload);
+      
+      final nomeLiderFmt = diario.nomeLider.replaceAll(RegExp(r'\s+'), '_');
+      final dataFmt = diario.dataRelatorio;
+      final fName = 'relatorio_consolidado_${nomeLiderFmt}_${dataFmt}.csv';
+      
+      await _salvarECompartilharCsv(context, csvData, fName, 'Relatório Consolidado - GeoForest');
+
+    } catch (e, s) {
+      _handleExportError(context, 'exportar relatório consolidado', e, s);
+    } finally {
+      if(context.mounted) ProgressDialog.hide(context);
+    }
+  }
+
+  /// Exporta apenas o diário de campo (sem as coletas).
   Future<void> exportarDiarioDeCampoCsv({required BuildContext context, required DiarioDeCampo diario}) async {
+    // ... (código existente permanece igual)
     try {
       if (!await _requestPermission(context)) return;
 
       final projeto = await _projetoRepository.getProjetoById(diario.projetoId);
-      final talhao = await _talhaoRepository.getTalhaoById(diario.talhaoId);
+      // O talhaoId agora é opcional, então tratamos o caso nulo
+      final talhao = diario.talhaoId != null ? await _talhaoRepository.getTalhaoById(diario.talhaoId!) : null;
 
       List<List<dynamic>> rows = [
         ['Campo', 'Valor'],
         ['Data do Relatório', diario.dataRelatorio],
         ['Líder da Equipe', diario.nomeLider],
         ['Equipe Completa', diario.equipeNoCarro],
-        ['Projeto', projeto?.nome ?? 'N/A'],
-        ['Fazenda', talhao?.fazendaNome ?? 'N/A'],
-        ['Talhão', talhao?.nome ?? 'N/A'],
+        ['Projeto (Referência)', projeto?.nome ?? 'N/A'],
+        ['Fazenda (Referência)', talhao?.fazendaNome ?? 'N/A'],
+        ['Talhão (Referência)', talhao?.nome ?? 'N/A'],
         ['Placa do Veículo', diario.veiculoPlaca],
         ['Modelo do Veículo', diario.veiculoModelo],
         ['KM Inicial', diario.kmInicial],
@@ -301,38 +428,17 @@ class ExportService {
     }
   }
 
+  // <<< ESTE MÉTODO FOI REMOVIDO POIS AGORA USAMOS O CONSOLIDADO >>>
+  /*
   Future<void> exportarRelatorioDiarioCsv({
     required BuildContext context,
     required List<Parcela> parcelas,
     required String lider,
     required String ajudantes
-  }) async {
-    try {
-      if (!await _requestPermission(context)) return;
-
-      if (parcelas.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Nenhuma parcela coletada para exportar.'),
-          backgroundColor: Colors.orange,
-        ));
-        return;
-      }
-      
-      final dataFormatada = DateFormat('yyyy-MM-dd').format(parcelas.first.dataColeta!);
-      final nomeLiderFormatado = lider.replaceAll(RegExp(r'\s+'), '_');
-      final fName = 'coletas_${nomeLiderFormatado}_${dataFormatada}.csv';
-      
-      final path = await _gerarCsvParcela(parcelas, fName);
-      
-      if (context.mounted) {
-        await Share.shareXFiles([XFile(path)], subject: 'Coletas do dia - GeoForest');
-      }
-
-    } catch (e, s) {
-      _handleExportError(context, 'exportar coletas do dia', e, s);
-    }
-  }
+  }) async { ... }
+  */
   
+  // ... (TODOS OS OUTROS MÉTODOS EXISTENTES PERMANECEM IGUAIS) ...
   Future<void> exportarDesenvolvimentoEquipes(BuildContext context, {Set<int>? projetoIdsFiltrados}) async {
     try {
       if (!await _requestPermission(context)) return;

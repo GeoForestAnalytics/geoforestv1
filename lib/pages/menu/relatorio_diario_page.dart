@@ -1,31 +1,37 @@
-// lib/pages/menu/relatorio_diario_page.dart (VERSÃO ATUALIZADA COM FILTRO DE UP)
+// lib/pages/menu/relatorio_diario_page.dart (VERSÃO FINAL COM NAVEGAÇÃO COMPLETA)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // Imports do projeto
 import 'package:geoforestv1/models/atividade_model.dart';
+import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/providers/team_provider.dart';
+import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
-import 'package:geoforestv1/services/export_service.dart';
-
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/data/repositories/diario_de_campo_repository.dart';
+// <<< PASSO 1: IMPORT DA NOVA TELA DE VISUALIZAÇÃO >>>
+import 'visualizador_relatorio_page.dart';
 
+/// Enum para controlar qual etapa do relatório está sendo exibida.
 enum RelatorioStep {
   selecionarFiltros,
-  visualizarEPreencher,
+  consolidarEPreencher,
 }
 
+/// Página para geração de relatórios diários de atividades de campo.
 class RelatorioDiarioPage extends StatefulWidget {
   const RelatorioDiarioPage({super.key});
 
@@ -36,10 +42,9 @@ class RelatorioDiarioPage extends StatefulWidget {
 class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   RelatorioStep _currentStep = RelatorioStep.selecionarFiltros;
 
-  // Controladores
+  // Controladores do formulário do diário
   final _liderController = TextEditingController();
   final _ajudantesController = TextEditingController();
-  final _upController = TextEditingController(); // <<< NOVO CONTROLADOR PARA UP
   final _kmInicialController = TextEditingController();
   final _kmFinalController = TextEditingController();
   final _destinoController = TextEditingController();
@@ -57,38 +62,31 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   final _fazendaRepo = FazendaRepository();
   final _talhaoRepo = TalhaoRepository();
   final _parcelaRepo = ParcelaRepository();
+  final _cubagemRepo = CubagemRepository();
   final _diarioRepo = DiarioDeCampoRepository();
 
   // Estado dos filtros
   DateTime _dataSelecionada = DateTime.now();
-  List<Projeto> _projetosDisponiveis = [];
-  Projeto? _projetoSelecionado;
-  List<Atividade> _atividadesDisponiveis = [];
-  Atividade? _atividadeSelecionada;
-  List<Fazenda> _fazendasDisponiveis = [];
-  Fazenda? _fazendaSelecionada;
-  List<Talhao> _talhoesDisponiveis = [];
-  Talhao? _talhaoSelecionado;
+  List<Talhao> _locaisTrabalhados = [];
 
-  // Estado dos resultados
+  // Estado dos resultados consolidados
   DiarioDeCampo? _diarioAtual;
   List<Parcela> _parcelasDoRelatorio = [];
+  List<CubagemArvore> _cubagensDoRelatorio = [];
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    final teamProvider = Provider.of<TeamProvider>(context, listen: false);
-    _liderController.text = teamProvider.lider ?? '';
-    _ajudantesController.text = teamProvider.ajudantes ?? '';
-    _carregarProjetos();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _preencherNomesEquipe();
+    });
   }
 
   @override
   void dispose() {
     _liderController.dispose();
     _ajudantesController.dispose();
-    _upController.dispose(); // <<< DISPOSE DO NOVO CONTROLADOR
     _kmInicialController.dispose();
     _kmFinalController.dispose();
     _destinoController.dispose();
@@ -102,12 +100,24 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     super.dispose();
   }
 
-  Future<void> _carregarProjetos() async {
-    setState(() => _isLoading = true);
-    _projetosDisponiveis = await _projetoRepo.getTodosOsProjetosParaGerente();
-    setState(() => _isLoading = false);
+  /// Preenche os nomes da equipe, tratando o caso do gerente.
+  void _preencherNomesEquipe() {
+    final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+    _liderController.text = teamProvider.lider ?? '';
+    _ajudantesController.text = teamProvider.ajudantes ?? '';
+
+    if (_liderController.text.trim().isEmpty) {
+      final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
+      if (licenseProvider.licenseData?.cargo == 'gerente') {
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null) {
+          _liderController.text = currentUser.displayName ?? '';
+        }
+      }
+    }
   }
 
+  /// Exibe o seletor de data.
   Future<void> _selecionarData(BuildContext context) async {
     final DateTime? dataEscolhida = await showDatePicker(
       context: context,
@@ -115,74 +125,100 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 1)),
     );
+    if (dataEscolhida != null) setState(() => _dataSelecionada = dataEscolhida);
+  }
 
-    if (dataEscolhida != null && dataEscolhida != _dataSelecionada) {
+  /// Abre o diálogo para o usuário selecionar um local de trabalho.
+  Future<void> _adicionarLocalTrabalho() async {
+    final Talhao? talhaoSelecionado = await showDialog<Talhao>(
+      context: context,
+      builder: (_) => _SelecaoLocalTrabalhoDialog(
+        projetoRepo: _projetoRepo,
+        atividadeRepo: _atividadeRepo,
+        fazendaRepo: _fazendaRepo,
+        talhaoRepo: _talhaoRepo,
+      ),
+    );
+
+    if (talhaoSelecionado != null) {
       setState(() {
-        _dataSelecionada = dataEscolhida;
+        if (!_locaisTrabalhados.any((t) => t.id == talhaoSelecionado.id)) {
+          _locaisTrabalhados.add(talhaoSelecionado);
+        }
       });
     }
   }
-
-  Future<void> _gerarRelatorio() async {
-    if (_talhaoSelecionado == null || _liderController.text.trim().isEmpty) {
+  
+  /// Busca todas as coletas (parcelas e cubagens) dos locais selecionados na data escolhida.
+  Future<void> _gerarRelatorioConsolidado() async {
+    if (_locaisTrabalhados.isEmpty || _liderController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Por favor, preencha todos os filtros obrigatórios.'),
+        content: Text('Adicione pelo menos um local de trabalho e informe o líder.'),
         backgroundColor: Colors.orange,
       ));
       return;
     }
     setState(() => _isLoading = true);
 
-    final dataFormatada = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
     final lider = _liderController.text.trim();
-    final talhaoId = _talhaoSelecionado!.id!;
-    final up = _upController.text.trim(); // <<< OBTÉM O VALOR DA UP
+    final List<Parcela> parcelasEncontradas = [];
+    final List<CubagemArvore> cubagensEncontradas = [];
 
-    // <<< FUNÇÃO DE BUSCA ATUALIZADA PARA INCLUIR A UP >>>
-    final parcelasEncontradas = await _parcelaRepo.getParcelasDoDiaPorEquipeEFiltros(
-      nomeLider: lider,
-      dataSelecionada: _dataSelecionada,
-      talhaoId: talhaoId,
-      up: up.isNotEmpty ? up : null, // Passa a UP para a busca, se ela foi preenchida
-    );
+    for (final talhao in _locaisTrabalhados) {
+      final parcelas = await _parcelaRepo.getParcelasDoDiaPorEquipeEFiltros(
+        nomeLider: lider,
+        dataSelecionada: _dataSelecionada,
+        talhaoId: talhao.id!,
+      );
+      parcelasEncontradas.addAll(parcelas);
+
+      final cubagens = await _cubagemRepo.getCubagensDoDiaPorEquipe(
+        nomeLider: lider,
+        dataSelecionada: _dataSelecionada,
+        talhaoId: talhao.id!,
+      );
+      cubagensEncontradas.addAll(cubagens);
+    }
     
-    // A busca do diário permanece a mesma, pois ele é por talhão
-    final diarioEncontrado = await _diarioRepo.getDiario(dataFormatada, lider, talhaoId);
+    final dataFormatada = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
+    final diarioEncontrado = await _diarioRepo.getDiario(dataFormatada, lider);
 
     _diarioAtual = diarioEncontrado;
     _parcelasDoRelatorio = parcelasEncontradas;
+    _cubagensDoRelatorio = cubagensEncontradas;
 
     _preencherControladoresDiario();
 
     setState(() {
       _isLoading = false;
-      _currentStep = RelatorioStep.visualizarEPreencher;
+      _currentStep = RelatorioStep.consolidarEPreencher;
     });
   }
   
+  /// Preenche o formulário do diário com dados existentes.
   void _preencherControladoresDiario() {
-    _kmInicialController.text = _diarioAtual?.kmInicial?.toString() ?? '';
-    _kmFinalController.text = _diarioAtual?.kmFinal?.toString() ?? '';
+    _kmInicialController.text = _diarioAtual?.kmInicial?.toString().replaceAll('.', ',') ?? '';
+    _kmFinalController.text = _diarioAtual?.kmFinal?.toString().replaceAll('.', ',') ?? '';
     _destinoController.text = _diarioAtual?.localizacaoDestino ?? '';
-    _pedagioController.text = _diarioAtual?.pedagioValor?.toString() ?? '';
-    _abastecimentoController.text = _diarioAtual?.abastecimentoValor?.toString() ?? '';
+    _pedagioController.text = _diarioAtual?.pedagioValor?.toString().replaceAll('.', ',') ?? '';
+    _abastecimentoController.text = _diarioAtual?.abastecimentoValor?.toString().replaceAll('.', ',') ?? '';
     _marmitasController.text = _diarioAtual?.alimentacaoMarmitasQtd?.toString() ?? '';
-    _refeicaoValorController.text = _diarioAtual?.alimentacaoRefeicaoValor?.toString() ?? '';
+    _refeicaoValorController.text = _diarioAtual?.alimentacaoRefeicaoValor?.toString().replaceAll('.', ',') ?? '';
     _refeicaoDescricaoController.text = _diarioAtual?.alimentacaoDescricao ?? '';
     _placaController.text = _diarioAtual?.veiculoPlaca ?? '';
     _modeloController.text = _diarioAtual?.veiculoModelo ?? '';
   }
   
-  Future<void> _salvarEExportar(bool exportarDiario, bool exportarParcelas) async {
-    setState(() => _isLoading = true);
-    final dataFormatada = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
+  // <<< PASSO 2: AJUSTE FINAL NA NAVEGAÇÃO >>>
+  /// Salva o diário e navega para a tela de visualização e ações finais.
+  Future<void> _navegarParaVisualizacao() async {
+    if (mounted) setState(() => _isLoading = true);
 
     final diarioParaSalvar = DiarioDeCampo(
       id: _diarioAtual?.id,
-      dataRelatorio: dataFormatada,
+      dataRelatorio: DateFormat('yyyy-MM-dd').format(_dataSelecionada),
       nomeLider: _liderController.text.trim(),
-      projetoId: _projetoSelecionado!.id!,
-      talhaoId: _talhaoSelecionado!.id!,
+      projetoId: _locaisTrabalhados.first.projetoId!, 
       kmInicial: double.tryParse(_kmInicialController.text.replaceAll(',', '.')),
       kmFinal: double.tryParse(_kmFinalController.text.replaceAll(',', '.')),
       localizacaoDestino: _destinoController.text.trim(),
@@ -196,179 +232,181 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       equipeNoCarro: '${_liderController.text.trim()}, ${_ajudantesController.text.trim()}',
       lastModified: DateTime.now().toIso8601String(),
     );
+    
     await _diarioRepo.insertOrUpdateDiario(diarioParaSalvar);
-    _diarioAtual = diarioParaSalvar;
-
-    setState(() => _isLoading = false);
-
-    final exportService = ExportService();
-    if (exportarDiario) {
-      await exportService.exportarDiarioDeCampoCsv(context: context, diario: _diarioAtual!);
-    }
-    if (exportarParcelas) {
-      await exportService.exportarRelatorioDiarioCsv(
-        context: context, 
-        parcelas: _parcelasDoRelatorio, 
-        lider: _liderController.text.trim(),
-        ajudantes: _ajudantesController.text.trim()
-      );
-    }
-
-    if (!exportarDiario && !exportarParcelas) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Dados do diário salvos com sucesso!'),
-        backgroundColor: Colors.green,
+    
+    if (mounted) setState(() => _isLoading = false);
+    
+    if (mounted) {
+      // Navega para a nova tela, passando todos os dados consolidados.
+      final bool? precisaEditar = await Navigator.push<bool>(context, MaterialPageRoute(
+        builder: (context) => VisualizadorRelatorioPage(
+          diario: diarioParaSalvar,
+          parcelas: _parcelasDoRelatorio,
+          cubagens: _cubagensDoRelatorio,
+        ),
       ));
+
+      // Se o usuário NÃO clicou em "Editar" (retorno foi nulo ou false),
+      // significa que o fluxo terminou, então voltamos para a tela de filtros.
+      if (precisaEditar != true) {
+        setState(() {
+          _currentStep = RelatorioStep.selecionarFiltros;
+          _locaisTrabalhados.clear();
+          _parcelasDoRelatorio.clear();
+          _cubagensDoRelatorio.clear();
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // ... (O resto do build permanece o mesmo, pois já está refatorado)
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Relatório Diário da Equipe'),
+        title: const Text('Relatório Diário Consolidado'),
         leading: _currentStep != RelatorioStep.selecionarFiltros
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => setState(() => _currentStep = RelatorioStep.selecionarFiltros),
+                onPressed: () => setState(() {
+                  _currentStep = RelatorioStep.selecionarFiltros;
+                  // Limpa os resultados ao voltar para os filtros
+                   _locaisTrabalhados.clear();
+                  _parcelasDoRelatorio.clear();
+                  _cubagensDoRelatorio.clear();
+                }),
               )
             : null,
       ),
-      body: IndexedStack(
-        index: _currentStep.index,
-        children: [
-          _buildSelecionarDados(),
-          _buildVisualizarEPreencher(),
-        ],
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator())
+          : IndexedStack(
+              index: _currentStep.index,
+              children: [
+                _buildFiltros(),
+                _buildConsolidacaoEFormulario(),
+              ],
       ),
     );
   }
 
-  Widget _buildSelecionarDados() {
-    return _isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : ListView(
+  /// Constrói a UI da primeira etapa (filtros).
+  Widget _buildFiltros() {
+    return ListView(
+      padding: const EdgeInsets.all(16.0),
+      children: [
+        Card(
+          elevation: 2,
+          child: Padding(
             padding: const EdgeInsets.all(16.0),
-            children: [
-              Text("Filtros do Relatório", style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 20),
-              
-              ListTile(
-                title: const Text("Data da Atividade"),
-                subtitle: Text(DateFormat('dd/MM/yyyy').format(_dataSelecionada), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () => _selecionarData(context),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: BorderSide(color: Colors.grey.shade400)
+            child: Column(
+              children: [
+                Text("1. Informações Gerais", style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 20),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("Data do Relatório"),
+                  subtitle: Text(DateFormat('dd/MM/yyyy').format(_dataSelecionada), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () => _selecionarData(context),
                 ),
-              ),
-              const SizedBox(height: 16),
-              
-              TextFormField(controller: _liderController, decoration: const InputDecoration(labelText: 'Líder da Equipe *', border: OutlineInputBorder())),
-              const SizedBox(height: 16),
-              TextFormField(controller: _ajudantesController, decoration: const InputDecoration(labelText: 'Ajudantes', border: OutlineInputBorder())),
-              const SizedBox(height: 16),
-
-              DropdownButtonFormField<Projeto>(
-                value: _projetoSelecionado,
-                hint: const Text('Selecione o Projeto *'),
-                items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome))).toList(),
-                onChanged: _onProjetoSelecionado,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-              ),
-              if (_projetoSelecionado != null) ...[
                 const SizedBox(height: 16),
-                DropdownButtonFormField<Atividade>(
-                  value: _atividadeSelecionada,
-                  hint: const Text('Selecione a Atividade *'),
-                  items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo))).toList(),
-                  onChanged: _onAtividadeSelecionada,
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
-                ),
-              ],
-              if (_atividadeSelecionada != null) ...[
+                TextFormField(controller: _liderController, decoration: const InputDecoration(labelText: 'Líder da Equipe *', border: OutlineInputBorder())),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<Fazenda>(
-                  value: _fazendaSelecionada,
-                  hint: const Text('Selecione a Fazenda *'),
-                  items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome))).toList(),
-                  onChanged: _onFazendaSelecionada,
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
-                ),
+                TextFormField(controller: _ajudantesController, decoration: const InputDecoration(labelText: 'Ajudantes', border: OutlineInputBorder())),
               ],
-              if (_fazendaSelecionada != null) ...[
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                Text("2. Locais Trabalhados", style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                if (_locaisTrabalhados.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24.0),
+                    child: Text("Nenhum local adicionado.", style: TextStyle(color: Colors.grey)),
+                  )
+                else
+                  ..._locaisTrabalhados.map((talhao) => Card(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    child: ListTile(
+                      leading: const Icon(Icons.park_outlined),
+                      title: Text(talhao.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text("${talhao.fazendaNome ?? 'N/A'}"),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () => setState(() => _locaisTrabalhados.remove(talhao)),
+                      ),
+                    ),
+                  )),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<Talhao>(
-                  value: _talhaoSelecionado,
-                  hint: const Text('Selecione o Talhão *'),
-                  items: _talhoesDisponiveis.map((t) => DropdownMenuItem(value: t, child: Text(t.nome))).toList(),
-                  onChanged: (t) => setState(() => _talhaoSelecionado = t),
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
-                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.add_location_alt_outlined),
+                  label: const Text('Adicionar Local de Trabalho'),
+                  onPressed: _adicionarLocalTrabalho,
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                )
               ],
-              // <<< NOVO CAMPO PARA UP >>>
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _upController,
-                decoration: const InputDecoration(
-                  labelText: 'UP / Bloco / RF (Opcional)',
-                  border: OutlineInputBorder()
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.receipt_long),
-                onPressed: _gerarRelatorio,
-                label: const Text('Gerar Relatório'),
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
-              )
-            ],
-          );
+            ),
+          )
+        ),
+        const SizedBox(height: 24),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.receipt_long),
+          onPressed: _gerarRelatorioConsolidado,
+          label: const Text('Gerar Relatório Consolidado'),
+          style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+        )
+      ],
+    );
   }
 
-  Widget _buildVisualizarEPreencher() {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());    
-    if (_diarioAtual == null && _parcelasDoRelatorio.isEmpty) {
-      return const Center(child: Text("Nenhum dado encontrado para os filtros selecionados."));
-    }
-    
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: const TabBar(
-          tabs: [
-            Tab(icon: Icon(Icons.list_alt), text: "Coletas do Dia"),
-            Tab(icon: Icon(Icons.local_shipping), text: "Diário de Campo"),
-          ],
-        ),
-        body: TabBarView(
-          children: [
-            // Aba 1: Lista de Parcelas
-            _parcelasDoRelatorio.isEmpty
-              ? const Center(child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text("Nenhuma parcela coletada para os filtros selecionados.", textAlign: TextAlign.center),
-                ))
-              : ListView.builder(
-                  itemCount: _parcelasDoRelatorio.length,
-                  itemBuilder: (context, index) {
-                    final parcela = _parcelasDoRelatorio[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      child: ListTile(
-                        leading: Icon(parcela.status.icone, color: parcela.status.cor),
-                        title: Text("Parcela: ${parcela.idParcela}"),
-                        subtitle: Text("Status: ${parcela.status.name}"),
-                      ),
-                    );
-                  },
+  /// Constrói a UI da segunda etapa (visualização e preenchimento).
+  Widget _buildConsolidacaoEFormulario() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 90.0),
+      children: [
+        Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Resumo das Coletas do Dia", style: Theme.of(context).textTheme.titleLarge),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.list_alt, color: Colors.blue),
+                  title: const Text("Parcelas de Inventário"),
+                  trailing: Text(_parcelasDoRelatorio.length.toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
-            // Aba 2: Diário de Campo
-            Form(
-              child: ListView(
-                padding: const EdgeInsets.all(16.0),
+                ListTile(
+                  leading: const Icon(Icons.architecture, color: Colors.green),
+                  title: const Text("Árvores de Cubagem"),
+                  trailing: Text(_cubagensDoRelatorio.length.toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Form(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text("Diário de Campo", style: Theme.of(context).textTheme.titleLarge),
+                  const Divider(),
                   Text("Veículo", style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   TextFormField(controller: _placaController, decoration: const InputDecoration(labelText: 'Placa', border: OutlineInputBorder())),
@@ -380,7 +418,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
                     const SizedBox(width: 12),
                     Expanded(child: TextFormField(controller: _kmFinalController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'KM Final', border: OutlineInputBorder()))),
                   ]),
-                   const SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   TextFormField(controller: _destinoController, decoration: const InputDecoration(labelText: 'Localização/Destino', border: OutlineInputBorder())),
                   const Divider(height: 24),
                   Text("Despesas", style: Theme.of(context).textTheme.titleMedium),
@@ -401,54 +439,58 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
                 ],
               ),
             ),
-          ],
+          ),
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () {
-            showModalBottomSheet(context: context, builder: (ctx) => Wrap(
-              children: [
-                 ListTile(
-                  leading: const Icon(Icons.save_alt_outlined),
-                  title: const Text('Apenas Salvar Diário'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _salvarEExportar(false, false);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.price_check_outlined, color: Colors.green),
-                  title: const Text('Salvar e Exportar Diário (CSV)'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _salvarEExportar(true, false);
-                  },
-                ),
-                if(_parcelasDoRelatorio.isNotEmpty)
-                  ListTile(
-                    leading: const Icon(Icons.table_rows_outlined, color: Colors.blue),
-                    title: const Text('Salvar e Exportar Parcelas (CSV)'),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _salvarEExportar(false, true);
-                    },
-                  ),
-                if(_parcelasDoRelatorio.isNotEmpty)
-                  ListTile(
-                    leading: const Icon(Icons.collections_bookmark_outlined, color: Colors.purple),
-                    title: const Text('Salvar e Exportar TUDO'),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _salvarEExportar(true, true);
-                    },
-                  ),
-              ],
-            ));
-          },
-          label: const Text("Salvar / Exportar"),
-          icon: const Icon(Icons.save),
-        ),
-      ),
+        const SizedBox(height: 24),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.arrow_forward),
+          onPressed: _navegarParaVisualizacao,
+          label: const Text('Visualizar Relatório e Finalizar'),
+          style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+        )
+      ],
     );
+  }
+}
+
+/// Um widget de diálogo para selecionar a hierarquia: Projeto -> Atividade -> Fazenda -> Talhão.
+class _SelecaoLocalTrabalhoDialog extends StatefulWidget {
+  final ProjetoRepository projetoRepo;
+  final AtividadeRepository atividadeRepo;
+  final FazendaRepository fazendaRepo;
+  final TalhaoRepository talhaoRepo;
+
+  const _SelecaoLocalTrabalhoDialog({
+    required this.projetoRepo,
+    required this.atividadeRepo,
+    required this.fazendaRepo,
+    required this.talhaoRepo,
+  });
+
+  @override
+  State<_SelecaoLocalTrabalhoDialog> createState() => __SelecaoLocalTrabalhoDialogState();
+}
+
+class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialog> {
+  // Listas para popular os dropdowns
+  List<Projeto> _projetosDisponiveis = [];
+  Projeto? _projetoSelecionado;
+  List<Atividade> _atividadesDisponiveis = [];
+  Atividade? _atividadeSelecionada;
+  List<Fazenda> _fazendasDisponiveis = [];
+  Fazenda? _fazendaSelecionada;
+  List<Talhao> _talhoesDisponiveis = [];
+  Talhao? _talhaoSelecionado;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarProjetos();
+  }
+
+  Future<void> _carregarProjetos() async {
+    _projetosDisponiveis = await widget.projetoRepo.getTodosOsProjetosParaGerente();
+    if (mounted) setState(() {});
   }
   
   Future<void> _onProjetoSelecionado(Projeto? projeto) async {
@@ -459,8 +501,8 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       _talhaoSelecionado = null; _talhoesDisponiveis = [];
     });
     if (projeto != null) {
-      _atividadesDisponiveis = await _atividadeRepo.getAtividadesDoProjeto(projeto.id!);
-      setState(() {});
+      _atividadesDisponiveis = await widget.atividadeRepo.getAtividadesDoProjeto(projeto.id!);
+      if (mounted) setState(() {});
     }
   }
 
@@ -471,8 +513,8 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       _talhaoSelecionado = null; _talhoesDisponiveis = [];
     });
     if (atividade != null) {
-      _fazendasDisponiveis = await _fazendaRepo.getFazendasDaAtividade(atividade.id!);
-      setState(() {});
+      _fazendasDisponiveis = await widget.fazendaRepo.getFazendasDaAtividade(atividade.id!);
+      if (mounted) setState(() {});
     }
   }
 
@@ -482,8 +524,63 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       _talhaoSelecionado = null; _talhoesDisponiveis = [];
     });
     if (fazenda != null) {
-      _talhoesDisponiveis = await _talhaoRepo.getTalhoesDaFazenda(fazenda.id, fazenda.atividadeId);
-      setState(() {});
+      _talhoesDisponiveis = await widget.talhaoRepo.getTalhoesDaFazenda(fazenda.id, fazenda.atividadeId);
+      if (mounted) setState(() {});
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Adicionar Local de Trabalho'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<Projeto>(
+              value: _projetoSelecionado,
+              hint: const Text('Selecione o Projeto'),
+              items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome))).toList(),
+              onChanged: _onProjetoSelecionado,
+              isExpanded: true,
+            ),
+            const SizedBox(height: 16),
+            if (_projetoSelecionado != null)
+              DropdownButtonFormField<Atividade>(
+                value: _atividadeSelecionada,
+                hint: const Text('Selecione a Atividade'),
+                items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo))).toList(),
+                onChanged: _onAtividadeSelecionada,
+                isExpanded: true,
+              ),
+            const SizedBox(height: 16),
+            if (_atividadeSelecionada != null)
+              DropdownButtonFormField<Fazenda>(
+                value: _fazendaSelecionada,
+                hint: const Text('Selecione a Fazenda'),
+                items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome))).toList(),
+                onChanged: _onFazendaSelecionada,
+                isExpanded: true,
+              ),
+            const SizedBox(height: 16),
+            if (_fazendaSelecionada != null)
+              DropdownButtonFormField<Talhao>(
+                value: _talhaoSelecionado,
+                hint: const Text('Selecione o Talhão'),
+                items: _talhoesDisponiveis.map((t) => DropdownMenuItem(value: t, child: Text(t.nome))).toList(),
+                onChanged: (t) => setState(() => _talhaoSelecionado = t),
+                isExpanded: true,
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        FilledButton(
+          onPressed: _talhaoSelecionado != null ? () => Navigator.of(context).pop(_talhaoSelecionado) : null,
+          child: const Text('Adicionar'),
+        ),
+      ],
+    );
   }
 }

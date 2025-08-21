@@ -1,4 +1,4 @@
-// lib/providers/gerente_provider.dart (VERSÃO CORRIGIDA QUE RESOLVE PARCELAS E CUBAGENS)
+// lib/providers/gerente_provider.dart (VERSÃO COM DADOS DO DIÁRIO DE CAMPO)
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -6,6 +6,7 @@ import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
+import 'package:geoforestv1/models/diario_de_campo_model.dart'; // <<< NOVO IMPORT
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/services/gerente_service.dart';
@@ -16,13 +17,19 @@ class GerenteProvider with ChangeNotifier {
   final TalhaoRepository _talhaoRepository = TalhaoRepository();
   final AtividadeRepository _atividadeRepository = AtividadeRepository();
 
+  // Stream Subscriptions
   StreamSubscription? _dadosColetaSubscription;
   StreamSubscription? _dadosCubagemSubscription;
-  List<CubagemArvore> _cubagensSincronizadas = [];
+  StreamSubscription? _dadosDiarioSubscription; // <<< NOVA SUBSCRIPTION
+
+  // Listas de dados sincronizados
   List<Parcela> _parcelasSincronizadas = [];
+  List<CubagemArvore> _cubagensSincronizadas = [];
+  List<DiarioDeCampo> _diariosSincronizados = []; // <<< NOVA LISTA DE DADOS
   List<Projeto> _projetos = [];
   List<Atividade> _atividades = [];
   
+  // Mapas auxiliares para resolução de dados
   Map<int, int> _talhaoToProjetoMap = {};
   Map<int, int> _talhaoToAtividadeMap = {};
   Map<int, String> _talhaoIdToNomeMap = {};
@@ -31,13 +38,14 @@ class GerenteProvider with ChangeNotifier {
   bool _isLoading = true;
   String? _error;
   
+  // Getters públicos
   bool get isLoading => _isLoading;
   String? get error => _error;
-  
   List<Projeto> get projetos => _projetos;
   List<Atividade> get atividades => _atividades;
   List<Parcela> get parcelasSincronizadas => _parcelasSincronizadas;
   List<CubagemArvore> get cubagensSincronizadas => _cubagensSincronizadas;
+  List<DiarioDeCampo> get diariosSincronizados => _diariosSincronizados; // <<< NOVO GETTER
   Map<int, int> get talhaoToProjetoMap => _talhaoToProjetoMap;
   Map<int, int> get talhaoToAtividadeMap => _talhaoToAtividadeMap;
 
@@ -54,8 +62,11 @@ class GerenteProvider with ChangeNotifier {
   }
 
   Future<void> iniciarMonitoramento() async {
+    // Cancela subscriptions antigas para evitar múltiplos ouvintes
     _dadosColetaSubscription?.cancel();
     _dadosCubagemSubscription?.cancel();
+    _dadosDiarioSubscription?.cancel(); // <<< CANCELA A NOVA SUBSCRIPTION
+
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -69,20 +80,16 @@ class GerenteProvider with ChangeNotifier {
       
       await _buildAuxiliaryMaps();
 
+      // Listener para PARCELAS
       _dadosColetaSubscription = _gerenteService.getDadosColetaStream().listen(
         (listaDeParcelas) async {
-          // <<< CORREÇÃO APLICADA AQUI >>>
-          // Reconstrói os mapas com os dados mais recentes antes de processar as parcelas.
           await _buildAuxiliaryMaps();
-
           _parcelasSincronizadas = listaDeParcelas.map((p) {
             final nomeFazenda = _fazendaIdToNomeMap[p.idFazenda] ?? p.nomeFazenda;
             final nomeTalhao = _talhaoIdToNomeMap[p.talhaoId] ?? p.nomeTalhao;
-            
             final projetoId = p.projetoId ?? _talhaoToProjetoMap[p.talhaoId];
             final atividadeId = _talhaoToAtividadeMap[p.talhaoId];
             final tipoAtividade = atividadeId != null ? atividadeIdToTipoMap[atividadeId] : null;
-
             return p.copyWith(
               nomeFazenda: nomeFazenda, 
               nomeTalhao: nomeTalhao,
@@ -90,7 +97,6 @@ class GerenteProvider with ChangeNotifier {
               atividadeTipo: tipoAtividade,
             );
           }).toList();
-
           if (_isLoading) _isLoading = false;
           _error = null;
           notifyListeners();
@@ -102,19 +108,25 @@ class GerenteProvider with ChangeNotifier {
         },
       );
 
+      // Listener para CUBAGENS
       _dadosCubagemSubscription = _gerenteService.getDadosCubagemStream().listen(
-        (listaDeCubagens) async { // <-- Adicionado async
-          // <<< CORREÇÃO APLICADA AQUI TAMBÉM >>>
-          // Garante que os mapas também sejam reconstruídos quando chegam dados de cubagem.
+        (listaDeCubagens) async {
           await _buildAuxiliaryMaps();
-          
           _cubagensSincronizadas = listaDeCubagens;
-          if (_isLoading) _isLoading = false; // Garante que o loading termine
+          if (_isLoading) _isLoading = false;
           notifyListeners();
         },
-        onError: (e) {
-          debugPrint("Erro no stream de cubagens: $e");
+        onError: (e) => debugPrint("Erro no stream de cubagens: $e"),
+      );
+
+      // <<< NOVO LISTENER PARA DIÁRIOS DE CAMPO >>>
+      _dadosDiarioSubscription = _gerenteService.getDadosDiarioStream().listen(
+        (listaDeDiarios) {
+          _diariosSincronizados = listaDeDiarios;
+          if (_isLoading) _isLoading = false;
+          notifyListeners();
         },
+        onError: (e) => debugPrint("Erro no stream de diários de campo: $e"),
       );
 
     } catch (e) {
@@ -128,6 +140,7 @@ class GerenteProvider with ChangeNotifier {
   void dispose() {
     _dadosColetaSubscription?.cancel();
     _dadosCubagemSubscription?.cancel();
+    _dadosDiarioSubscription?.cancel(); // <<< FAZ O DISPOSE DA NOVA SUBSCRIPTION
     super.dispose();
   }
 }

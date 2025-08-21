@@ -1,4 +1,4 @@
-// lib/main.dart (VERSÃO FINAL COM FILTRO DE FAZENDA INTEGRADO)
+// lib/main.dart (VERSÃO FINAL COM O NOVO OPERACOES PROVIDER)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -30,6 +30,10 @@ import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/pages/gerente/gerente_map_page.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
+import 'package:geoforestv1/pages/gerente/gerente_main_page.dart';
+
+// <<< NOVO IMPORT PARA O PROVIDER DE OPERAÇÕES >>>
+import 'package:geoforestv1/providers/operacoes_provider.dart';
 
 
 void initializeProj4Definitions() {
@@ -158,46 +162,42 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => GerenteProvider()),
 
         // 2. O FilterProvider agora DEPENDE do GerenteProvider.
-        //    Ele usa um Proxy para receber a lista de projetos e se auto-atualizar.
         ChangeNotifierProxyProvider<GerenteProvider, DashboardFilterProvider>(
           create: (_) => DashboardFilterProvider(),
           update: (_, gerenteProvider, previousFilterProvider) {
             final filterProvider = previousFilterProvider ?? DashboardFilterProvider();
-            
-            // <<< INÍCIO DA ALTERAÇÃO >>>
-
-            // 1. Atualiza a lista de projetos disponíveis (como antes)
             filterProvider.updateProjetosDisponiveis(gerenteProvider.projetos);
-
-            // 2. Filtra as parcelas com base nos projetos já selecionados no provider
             List<Parcela> parcelasParaFiltroDeFazenda;
             if (filterProvider.selectedProjetoIds.isEmpty) {
-              // Se nenhum projeto está selecionado, todas as parcelas são candidatas
               parcelasParaFiltroDeFazenda = gerenteProvider.parcelasSincronizadas;
             } else {
-              // Se projetos estão selecionados, usa apenas as parcelas desses projetos
               parcelasParaFiltroDeFazenda = gerenteProvider.parcelasSincronizadas
                   .where((p) => filterProvider.selectedProjetoIds.contains(p.projetoId))
                   .toList();
             }
-            
-            // 3. Envia essa lista pré-filtrada para o FilterProvider popular as fazendas
             filterProvider.updateFazendasDisponiveis(parcelasParaFiltroDeFazenda);
-
-            // <<< FIM DA ALTERAÇÃO >>>
-
             return filterProvider;
           },
         ),
 
-        // 3. O MetricsProvider DEPENDE de AMBOS, Gerente e Filter.
-        //    Ele recebe os dados brutos e os filtros já atualizados.
+        // 3. O MetricsProvider (Dashboard de PROJETOS) DEPENDE de Gerente e Filter.
         ChangeNotifierProxyProvider2<GerenteProvider, DashboardFilterProvider, DashboardMetricsProvider>(
           create: (_) => DashboardMetricsProvider(),
           update: (_, gerenteProvider, filterProvider, previousMetricsProvider) {
             final metricsProvider = previousMetricsProvider ?? DashboardMetricsProvider();
             metricsProvider.update(gerenteProvider, filterProvider);
             return metricsProvider;
+          },
+        ),
+        
+        // <<< 4. NOVO PROVIDER DE OPERAÇÕES, que depende apenas do GerenteProvider >>>
+        ChangeNotifierProxyProvider<GerenteProvider, OperacoesProvider>(
+          create: (_) => OperacoesProvider(),
+          update: (_, gerenteProvider, previousOperacoesProvider) {
+            final operacoesProvider = previousOperacoesProvider ?? OperacoesProvider();
+            // O update irá calcular as métricas de custo, km, etc.
+            operacoesProvider.update(gerenteProvider); 
+            return operacoesProvider;
           },
         ),
         

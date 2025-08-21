@@ -1,10 +1,11 @@
-// lib/services/gerente_service.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/services/gerente_service.dart (VERSÃO COM STREAM DE DIÁRIO DE CAMPO)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:geoforestv1/models/cubagem_arvore_model.dart'; // <<< 1. IMPORT NECESSÁRIO
+import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
+import 'package:geoforestv1/models/diario_de_campo_model.dart'; // <<< NOVO IMPORT
 import 'package:geoforestv1/services/licensing_service.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 
@@ -74,7 +75,7 @@ class GerenteService {
                 return null;
               }
             })
-            .where((p) => p != null) // Filtra quaisquer parcelas que falharam na conversão
+            .where((p) => p != null)
             .cast<Parcela>()
             .toList();
             
@@ -86,9 +87,6 @@ class GerenteService {
     }
   }
 
-  // ===================================================================
-  // <<< 2. NOVO MÉTODO PARA BUSCAR DADOS DE CUBAGEM >>>
-  // ===================================================================
   /// Retorna um "fluxo" (Stream) de dados em tempo real da coleção de cubagens.
   Stream<List<CubagemArvore>> getDadosCubagemStream() async* {
     try {
@@ -98,7 +96,7 @@ class GerenteService {
       final stream = _firestore
           .collection('clientes')
           .doc(licenseId)
-          .collection('dados_cubagem') // Aponta para a coleção correta
+          .collection('dados_cubagem')
           .snapshots();
 
       await for (final querySnapshot in stream) {
@@ -107,21 +105,57 @@ class GerenteService {
         final cubagens = querySnapshot.docs
             .map((doc) {
               try {
-                // Usa o construtor correto do modelo de cubagem
                 return CubagemArvore.fromMap(doc.data());
               } catch (e) {
                 debugPrint("--- [GerenteService] ERRO ao converter um documento de cubagem do Firestore: $e. Dados: ${doc.data()}");
                 return null;
               }
             })
-            .where((c) => c != null) // Filtra quaisquer que falharam na conversão
+            .where((c) => c != null)
             .cast<CubagemArvore>()
             .toList();
             
-        yield cubagens; // Envia a lista de cubagens atualizada
+        yield cubagens;
       }
     } catch (e) {
       debugPrint("--- [GerenteService] ERRO CRÍTICO no stream de cubagens: $e");
+      yield* Stream.error(e); 
+    }
+  }
+
+  // <<< NOVO MÉTODO ADICIONADO AQUI >>>
+  /// Retorna um "fluxo" (Stream) de dados em tempo real da coleção de diários de campo.
+  Stream<List<DiarioDeCampo>> getDadosDiarioStream() async* {
+    try {
+      final licenseId = await _getLicenseId();
+      debugPrint("--- [GerenteService] Iniciando stream para ouvir DIÁRIOS da licença: $licenseId");
+
+      final stream = _firestore
+          .collection('clientes')
+          .doc(licenseId)
+          .collection('diarios_de_campo')
+          .snapshots();
+
+      await for (final querySnapshot in stream) {
+        debugPrint("--- [GerenteService] Stream de DIÁRIOS recebeu ${querySnapshot.docs.length} documentos.");
+        
+        final diarios = querySnapshot.docs
+            .map((doc) {
+              try {
+                return DiarioDeCampo.fromMap(doc.data());
+              } catch (e) {
+                debugPrint("--- [GerenteService] ERRO ao converter um documento de diário do Firestore: $e. Dados: ${doc.data()}");
+                return null;
+              }
+            })
+            .where((d) => d != null)
+            .cast<DiarioDeCampo>()
+            .toList();
+            
+        yield diarios; // Envia a lista de diários atualizada
+      }
+    } catch (e) {
+      debugPrint("--- [GerenteService] ERRO CRÍTICO no stream de diários: $e");
       yield* Stream.error(e); 
     }
   }

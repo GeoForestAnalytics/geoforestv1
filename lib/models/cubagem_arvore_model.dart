@@ -1,4 +1,4 @@
-// lib/models/cubagem_arvore_model.dart (VERSÃO ATUALIZADA COM RF E MÉTODO)
+// lib/models/cubagem_arvore_model.dart (VERSÃO COM DATA DE COLETA)
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CubagemArvore {
@@ -19,12 +19,11 @@ class CubagemArvore {
   final String? observacao;
   final double? latitude;
   final double? longitude;
-  
-  // <<< ADICIONADO CAMPO DE MÉTODO >>>
-  final String? metodoCubagem; // Ex: "Fixa", "Relativa"
-  
-  // <<< ADICIONADO CAMPO DE RF >>>
+  final String? metodoCubagem;
   final String? rf;
+  
+  // <<< ALTERAÇÃO 1: NOVO CAMPO ADICIONADO >>>
+  final DateTime? dataColeta;
   
   final DateTime? lastModified;
 
@@ -46,8 +45,9 @@ class CubagemArvore {
     this.observacao,
     this.latitude,
     this.longitude,
-    this.metodoCubagem, // <<< Adicionado ao construtor
-    this.rf,           // <<< Adicionado ao construtor
+    this.metodoCubagem,
+    this.rf,
+    this.dataColeta, // <<< ALTERAÇÃO 2: Adicionado ao construtor
     this.lastModified,
   });
 
@@ -56,8 +56,9 @@ class CubagemArvore {
     String? identificador, String? classe, bool? exportada, bool? isSynced,
     String? nomeLider, double? alturaTotal, String? tipoMedidaCAP, double? valorCAP,
     double? alturaBase, String? observacao, double? latitude, double? longitude,
-    String? metodoCubagem, // <<< Adicionado ao copyWith
-    String? rf,            // <<< Adicionado ao copyWith
+    String? metodoCubagem,
+    String? rf,
+    DateTime? dataColeta, // <<< ALTERAÇÃO 3: Adicionado ao copyWith
     DateTime? lastModified,
   }) {
     return CubagemArvore(
@@ -80,6 +81,7 @@ class CubagemArvore {
       longitude: longitude ?? this.longitude,
       metodoCubagem: metodoCubagem ?? this.metodoCubagem,
       rf: rf ?? this.rf,
+      dataColeta: dataColeta ?? this.dataColeta,
       lastModified: lastModified ?? this.lastModified,
     );
   }
@@ -100,8 +102,9 @@ class CubagemArvore {
       'observacao': observacao,
       'latitude': latitude,
       'longitude': longitude,
-      'metodoCubagem': metodoCubagem, // <<< Adicionado ao mapa
-      'rf': rf,                     // <<< Adicionado ao mapa
+      'metodoCubagem': metodoCubagem,
+      'rf': rf,
+      'dataColeta': dataColeta?.toIso8601String(), // <<< ALTERAÇÃO 4: Adicionado ao mapa
       'exportada': exportada ? 1 : 0,
       'isSynced': isSynced ? 1 : 0,
       'nomeLider': nomeLider,
@@ -130,8 +133,9 @@ class CubagemArvore {
       observacao: map['observacao'],
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
-      metodoCubagem: map['metodoCubagem'], // <<< Lido do mapa
-      rf: map['rf'],                     // <<< Lido do mapa
+      metodoCubagem: map['metodoCubagem'],
+      rf: map['rf'],
+      dataColeta: parseDate(map['dataColeta']), // <<< ALTERAÇÃO 5: Lido do mapa
       exportada: map['exportada'] == 1,
       isSynced: map['isSynced'] == 1,
       nomeLider: map['nomeLider'],

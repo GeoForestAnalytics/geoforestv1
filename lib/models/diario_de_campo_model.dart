@@ -1,11 +1,12 @@
-// Crie o arquivo: lib/models/diario_de_campo_model.dart
+// lib/models/diario_de_campo_model.dart (VERSÃO AJUSTADA)
 
 class DiarioDeCampo {
   final int? id;
   final String dataRelatorio;
   final String nomeLider;
   final int projetoId;
-  final int talhaoId;
+  // <<< ALTERAÇÃO 1: talhaoId agora é opcional >>>
+  final int? talhaoId;
   final double? kmInicial;
   final double? kmFinal;
   final String? localizacaoDestino;
@@ -18,13 +19,15 @@ class DiarioDeCampo {
   final String? veiculoModelo;
   final String? equipeNoCarro;
   final String lastModified;
+  // <<< ALTERAÇÃO 2: Novo campo para futura consolidação >>>
+  final String? locaisTrabalhadosJson;
 
   DiarioDeCampo({
     this.id,
     required this.dataRelatorio,
     required this.nomeLider,
     required this.projetoId,
-    required this.talhaoId,
+    this.talhaoId, // Agora opcional
     this.kmInicial,
     this.kmFinal,
     this.localizacaoDestino,
@@ -37,6 +40,7 @@ class DiarioDeCampo {
     this.veiculoModelo,
     this.equipeNoCarro,
     required this.lastModified,
+    this.locaisTrabalhadosJson, // Novo
   });
 
   Map<String, dynamic> toMap() {
@@ -58,6 +62,7 @@ class DiarioDeCampo {
       'veiculo_modelo': veiculoModelo,
       'equipe_no_carro': equipeNoCarro,
       'lastModified': lastModified,
+      // 'locais_trabalhados_json': locaisTrabalhadosJson, // Campo ainda não está no DB, será adicionado depois
     };
   }
 
@@ -80,6 +85,7 @@ class DiarioDeCampo {
       veiculoModelo: map['veiculo_modelo'],
       equipeNoCarro: map['equipe_no_carro'],
       lastModified: map['lastModified'],
+      // locaisTrabalhadosJson: map['locais_trabalhados_json'],
     );
   }
 }

@@ -1,4 +1,4 @@
-// lib/services/pdf_service.dart (VERSÃO ATUALIZADA COM PERMISSÕES INTEGRADAS)
+// lib/services/pdf_service.dart (VERSÃO COM PDF DO RELATÓRIO DIÁRIO)
 
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -16,11 +16,18 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
+import 'package:collection/collection.dart';
+
+// <<< IMPORTS ADICIONAIS NECESSÁRIOS >>>
+import 'package:geoforestv1/models/diario_de_campo_model.dart';
+import 'package:geoforestv1/models/cubagem_arvore_model.dart';
+
+
 
 class PdfService {
   final _analiseRepository = AnaliseRepository();
 
-  // <<< INÍCIO DA LÓGICA DE PERMISSÃO CENTRALIZADA >>>
+  // ... (Toda a lógica de permissão e salvamento de PDF permanece a mesma)
   Future<bool> _requestPermission(BuildContext context) async {
     PermissionStatus status;
     if (Platform.isAndroid) {
@@ -110,11 +117,48 @@ class PdfService {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao gerar o PDF: $e')));
     }
   }
-  // <<< FIM DA LÓGICA DE PERMISSÃO CENTRALIZADA >>>
+  
+  // <<< NOVO MÉTODO PRINCIPAL PARA O RELATÓRIO DIÁRIO >>>
+  Future<void> gerarRelatorioDiarioConsolidadoPdf({
+    required BuildContext context,
+    required DiarioDeCampo diario,
+    required List<Parcela> parcelas,
+    required List<CubagemArvore> cubagens,
+  }) async {
+    final pdf = pw.Document();
 
-  // O restante dos seus métodos de geração de PDF permanecem os mesmos
-  // ... (copie e cole todos os seus métodos `gerarRelatorio...` e `_build...` aqui, eles não precisam de alteração)
-  Future<void> gerarRelatorioVolumetricoPdf({
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        header: (pw.Context ctx) => _buildHeader('Relatório Diário de Atividades', diario.nomeLider),
+        footer: (pw.Context ctx) => _buildFooter(),
+        build: (pw.Context ctx) {
+          return [
+            pw.Text(
+              'Relatório Consolidado de ${DateFormat('dd/MM/yyyy').format(DateTime.parse(diario.dataRelatorio))}',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
+              textAlign: pw.TextAlign.center,
+            ),
+            pw.Divider(height: 20),
+            _buildTabelaDiarioPdf(diario),
+            pw.SizedBox(height: 20),
+            _buildResumoColetasPdf(parcelas, cubagens),
+            pw.SizedBox(height: 20),
+            _buildDetalhesColetasPdf(parcelas, cubagens),
+          ];
+        },
+      ),
+    );
+
+    final nomeLiderFmt = diario.nomeLider.replaceAll(RegExp(r'\s+'), '_');
+    final nomeArquivo = 'Relatorio_Diario_${nomeLiderFmt}_${diario.dataRelatorio}.pdf';
+    
+    // Usa o mesmo método de salvar e abrir que os outros relatórios já usam.
+    await _salvarEAbriPdf(context, pdf, nomeArquivo);
+  }
+
+  // ... (métodos de geração de PDF existentes permanecem iguais)
+    Future<void> gerarRelatorioVolumetricoPdf({
     required BuildContext context,
     required Map<String, dynamic> resultadoRegressao,
     required Map<String, dynamic> producaoInventario,
@@ -337,6 +381,118 @@ class PdfService {
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
 
+  // <<< NOVOS WIDGETS AUXILIARES PARA O PDF DO RELATÓRIO DIÁRIO >>>
+  pw.Widget _buildTabelaDiarioPdf(DiarioDeCampo diario) {
+    final nf = NumberFormat("#,##0.00", "pt_BR");
+    final distancia = (diario.kmFinal ?? 0) - (diario.kmInicial ?? 0);
+
+    return pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+      pw.Text('Diário de Campo e Despesas', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+      pw.Divider(height: 10),
+      pw.SizedBox(height: 5),
+      pw.TableHelper.fromTextArray(
+        cellPadding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        cellStyle: const pw.TextStyle(fontSize: 10),
+        columnWidths: {
+          0: const pw.FixedColumnWidth(120),
+          1: const pw.FlexColumnWidth(),
+        },
+        cellAlignment: pw.Alignment.centerLeft,
+        data: <List<String>>[
+          ['Equipe Completa:', diario.equipeNoCarro ?? 'N/A'],
+          ['Veículo:', '${diario.veiculoModelo ?? 'N/A'} - ${diario.veiculoPlaca ?? 'N/A'}'],
+          ['KM Inicial:', diario.kmInicial?.toString() ?? 'N/A'],
+          ['KM Final:', diario.kmFinal?.toString() ?? 'N/A'],
+          ['Distância Percorrida:', distancia > 0 ? '${distancia.toStringAsFixed(1)} km' : 'N/A'],
+          ['Destino:', diario.localizacaoDestino ?? 'N/A'],
+          ['Pedágio (R\$):', diario.pedagioValor != null ? 'R\$ ${nf.format(diario.pedagioValor)}' : 'N/A'],
+          ['Abastecimento (R\$):', diario.abastecimentoValor != null ? 'R\$ ${nf.format(diario.abastecimentoValor)}' : 'N/A'],
+          ['Alimentação:', '${diario.alimentacaoMarmitasQtd ?? 0} marmitas. ${diario.alimentacaoDescricao ?? ''}'],
+          ['Outras Refeições (R\$):', diario.alimentacaoRefeicaoValor != null ? 'R\$ ${nf.format(diario.alimentacaoRefeicaoValor)}' : 'N/A'],
+        ],
+        border: null,
+      ),
+    ]);
+  }
+
+  pw.Widget _buildResumoColetasPdf(List<Parcela> parcelas, List<CubagemArvore> cubagens) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text('Resumo das Coletas', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+        pw.Divider(height: 10),
+        pw.SizedBox(height: 5),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+          children: [
+            _buildPdfStat('Parcelas (Inventário)', parcelas.length.toString()),
+            _buildPdfStat('Árvores (Cubagem)', cubagens.length.toString()),
+          ]
+        )
+      ]
+    );
+  }
+
+  pw.Widget _buildDetalhesColetasPdf(List<Parcela> parcelas, List<CubagemArvore> cubagens) {
+    final allColetas = [...parcelas, ...cubagens];
+    if (allColetas.isEmpty) return pw.Container();
+    
+    // Agrupa por uma chave combinada: 'Projeto-Fazenda-Talhão'
+    final grupoPorLocal = groupBy(allColetas, (item) {
+      if (item is Parcela) {
+        return '${item.projetoId}-${item.nomeFazenda}-${item.nomeTalhao}';
+      }
+      if (item is CubagemArvore) {
+        // Precisaria buscar o projetoId para a cubagem
+        return 'ProjetoDesconhecido-${item.nomeFazenda}-${item.nomeTalhao}';
+      }
+      return 'Desconhecido';
+    });
+    
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.SizedBox(height: 10),
+        pw.Text('Detalhes das Coletas por Local', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+        pw.Divider(height: 10),
+        ...grupoPorLocal.entries.map((entry) {
+          final localParts = entry.key.split('-');
+          final nomeFazenda = localParts.length > 1 ? localParts[1] : 'N/A';
+          final nomeTalhao = localParts.length > 2 ? localParts[2] : 'N/A';
+          final coletas = entry.value;
+
+          return pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 10),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('$nomeFazenda / $nomeTalhao', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                pw.TableHelper.fromTextArray(
+                  cellPadding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                  cellStyle: const pw.TextStyle(fontSize: 9),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+                  data: <List<String>>[
+                    ['Tipo', 'ID Amostra', 'Status'],
+                    ...coletas.map((item) {
+                      if (item is Parcela) {
+                        return ['Inventário', item.idParcela, item.status.name];
+                      }
+                      if (item is CubagemArvore) {
+                        return ['Cubagem', item.identificador, item.alturaTotal > 0 ? 'Concluída' : 'Pendente'];
+                      }
+                      return <String>[];
+                    }).where((list) => list.isNotEmpty),
+                  ],
+                ),
+              ]
+            ),
+          );
+        }),
+      ]
+    );
+  }
+
+  // --- MÉTODOS DE BUILD AUXILIARES E EXISTENTES ---
   pw.Widget _buildHeader(String titulo, String subtitulo) {
     return pw.Container(
       alignment: pw.Alignment.centerLeft,
