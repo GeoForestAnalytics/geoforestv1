@@ -1,6 +1,7 @@
-// lib/services/pdf_service.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/services/pdf_service.dart (VERSÃO ATUALIZADA COM PERMISSÕES INTEGRADAS)
 
 import 'dart:io';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -14,49 +15,71 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
-
-// --- NOVO IMPORT DO REPOSITÓRIO ---
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
-// ------------------------------------
 
 class PdfService {
-  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
   final _analiseRepository = AnaliseRepository();
-  // ---------------------------------------
 
-  Future<bool> _requestPermission() async {
-    Permission permission;
+  // <<< INÍCIO DA LÓGICA DE PERMISSÃO CENTRALIZADA >>>
+  Future<bool> _requestPermission(BuildContext context) async {
+    PermissionStatus status;
     if (Platform.isAndroid) {
-      permission = Permission.manageExternalStorage;
+      final androidInfo = await DeviceInfoPlugin().androidInfo;
+      if (androidInfo.version.sdkInt >= 30) { // Android 11+
+        status = await Permission.manageExternalStorage.request();
+      } else {
+        status = await Permission.storage.request();
+      }
     } else {
-      permission = Permission.storage;
+      status = await Permission.storage.request();
     }
-    if (await permission.isGranted) return true;
-    var result = await permission.request();
-    return result == PermissionStatus.granted;
+
+    if (status.isGranted) {
+      return true;
+    }
+
+    if (context.mounted) {
+      if (status.isPermanentlyDenied) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Permissão negada. Habilite o acesso nas configurações do app.'),
+          duration: Duration(seconds: 5),
+        ));
+        await openAppSettings();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('A permissão de armazenamento é necessária para salvar arquivos.'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
+    return false;
   }
-  
-  Future<Directory?> getDownloadsDirectory() async {
-    if (Platform.isAndroid) {
-      final PathProviderAndroid provider = PathProviderAndroid();
-      final String? path = await provider.getDownloadsPath();
-      if (path != null) return Directory(path);
+
+  Future<Directory?> _getDownloadsDirectory(BuildContext context) async {
+    try {
+      if (Platform.isAndroid) {
+        final PathProviderAndroid provider = PathProviderAndroid();
+        final String? path = await provider.getDownloadsPath();
+        if (path != null) return Directory(path);
+      }
+      return await getApplicationDocumentsDirectory();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Erro ao encontrar pasta de Downloads: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
       return null;
     }
-    return await getApplicationDocumentsDirectory();
   }
 
   Future<void> _salvarEAbriPdf(BuildContext context, pw.Document pdf, String nomeArquivo) async {
     try {
-      if (!await _requestPermission()) {
-        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Permissão de armazenamento negada.'), backgroundColor: Colors.red));
-        return;
-      }
-      final downloadsDirectory = await getDownloadsDirectory();
-      if (downloadsDirectory == null) {
-         if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Não foi possível encontrar a pasta de Downloads.'), backgroundColor: Colors.red));
-         return;
-      }
+      if (!await _requestPermission(context)) return;
+
+      final downloadsDirectory = await _getDownloadsDirectory(context);
+      if (downloadsDirectory == null) return;
       
       final relatoriosDir = Directory('${downloadsDirectory.path}/GeoForest/Relatorios');
       if (!await relatoriosDir.exists()) await relatoriosDir.create(recursive: true);
@@ -87,7 +110,10 @@ class PdfService {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao gerar o PDF: $e')));
     }
   }
+  // <<< FIM DA LÓGICA DE PERMISSÃO CENTRALIZADA >>>
 
+  // O restante dos seus métodos de geração de PDF permanecem os mesmos
+  // ... (copie e cole todos os seus métodos `gerarRelatorio...` e `_build...` aqui, eles não precisam de alteração)
   Future<void> gerarRelatorioVolumetricoPdf({
     required BuildContext context,
     required Map<String, dynamic> resultadoRegressao,
@@ -310,8 +336,6 @@ class PdfService {
     final nomeArquivo = 'Simulacao_Desbaste_${nomeTalhao.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.pdf';
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
-
-  // --- WIDGETS AUXILIARES PARA CONSTRUÇÃO DE PDF ---
 
   pw.Widget _buildHeader(String titulo, String subtitulo) {
     return pw.Container(

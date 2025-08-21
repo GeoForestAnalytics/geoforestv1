@@ -51,45 +51,40 @@ class _SimulacaoDesbastePageState extends State<SimulacaoDesbastePage> {
 
   // <<< 3. FUNÇÃO DE EXPORTAÇÃO IMPLEMENTADA >>>
   Future<void> _exportarSimulacaoPdf() async {
-    if (_isExporting) return;
-    if (widget.parcelas.isEmpty) {
-       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não há dados para exportar.')),
-      );
-      return;
-    }
-
-    setState(() => _isExporting = true);
-    
-    // Extrai o nome da fazenda e do talhão da primeira parcela disponível
-    final nomeFazenda = widget.parcelas.first.nomeFazenda ?? 'Fazenda Desconhecida';
-    final nomeTalhao = widget.parcelas.first.nomeTalhao ?? 'Talhão Desconhecido';
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Gerando PDF da simulação...')),
+  if (_isExporting) return;
+  if (widget.parcelas.isEmpty) {
+     ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Não há dados para exportar.')),
     );
+    return;
+  }
+  setState(() => _isExporting = true);
+  
+  final nomeFazenda = widget.parcelas.first.nomeFazenda ?? 'Fazenda Desconhecida';
+  final nomeTalhao = widget.parcelas.first.nomeTalhao ?? 'Talhão Desconhecido';
 
-    try {
-      await _pdfService.gerarRelatorioSimulacaoPdf(
-        context: context,
-        nomeFazenda: nomeFazenda,
-        nomeTalhao: nomeTalhao,
-        intensidade: _intensidadeDesbaste,
-        analiseInicial: widget.analiseInicial,
-        resultadoSimulacao: _resultadoSimulacao,
+  try {
+    // A chamada para o serviço é a mesma, mas ele agora lida com a permissão.
+    await _pdfService.gerarRelatorioSimulacaoPdf(
+      context: context,
+      nomeFazenda: nomeFazenda,
+      nomeTalhao: nomeTalhao,
+      intensidade: _intensidadeDesbaste,
+      analiseInicial: widget.analiseInicial,
+      resultadoSimulacao: _resultadoSimulacao,
+    );
+  } catch(e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erro ao exportar: $e"), backgroundColor: Colors.red),
       );
-    } catch(e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Erro ao exportar: $e"), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if(mounted) {
-        setState(() => _isExporting = false);
-      }
+    }
+  } finally {
+    if(mounted) {
+      setState(() => _isExporting = false);
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {

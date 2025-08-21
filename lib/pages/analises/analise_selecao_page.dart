@@ -1,18 +1,18 @@
-// lib/pages/analises/analise_selecao_page.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/pages/analises/analise_selecao_page.dart (VERSÃO ATUALIZADA COM FILTROS HIERÁRQUICOS)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
+import 'package:geoforestv1/models/fazenda_model.dart';
+import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/pages/dashboard/relatorio_comparativo_page.dart';
 import 'package:geoforestv1/pages/analises/analise_volumetrica_page.dart';
 
-// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
+// Repositórios
+import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
-// ------------------------------------
-
-// O import do database_helper foi removido.
-// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
 
 class AnaliseSelecaoPage extends StatefulWidget {
   const AnaliseSelecaoPage({super.key});
@@ -22,94 +22,112 @@ class AnaliseSelecaoPage extends StatefulWidget {
 }
 
 class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
-  // --- INSTÂNCIAS DOS NOVOS REPOSITÓRIOS ---
-  final _talhaoRepository = TalhaoRepository();
+  // Repositórios
+  final _projetoRepository = ProjetoRepository();
   final _atividadeRepository = AtividadeRepository();
-  // ---------------------------------------
+  final _fazendaRepository = FazendaRepository();
+  final _talhaoRepository = TalhaoRepository();
 
-  Atividade? _atividadeSelecionada;
+  // Listas para popular os dropdowns
+  List<Projeto> _projetosDisponiveis = [];
   List<Atividade> _atividadesDisponiveis = [];
-  
-  List<Talhao> _talhoesDaAtividade = [];
-  
-  final Set<String> _fazendasSelecionadas = {};
+  List<Fazenda> _fazendasDisponiveis = [];
+  List<Talhao> _talhoesDisponiveis = [];
+
+  // Itens selecionados nos filtros
+  Projeto? _projetoSelecionado;
+  Atividade? _atividadeSelecionada;
+  Fazenda? _fazendaSelecionada;
+
+  // Lista final de talhões selecionados para a análise
   final Set<int> _talhoesSelecionados = {};
 
-  bool _isLoading = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _carregarDadosIniciais();
+    _carregarProjetos();
   }
 
-  // --- MÉTODO ATUALIZADO ---
-  Future<void> _carregarDadosIniciais() async {
-    // Usando o TalhaoRepository
+  // --- LÓGICA DE CARREGAMENTO EM CASCATA ---
+
+  Future<void> _carregarProjetos() async {
+    setState(() => _isLoading = true);
+    // Busca todos os projetos que são de inventário e têm dados concluídos
     final talhoesCompletos = await _talhaoRepository.getTalhoesComParcelasConcluidas();
     if (talhoesCompletos.isEmpty) {
-      if(mounted) setState(() => _atividadesDisponiveis = []);
-      return;
+       if(mounted) setState(() { _projetosDisponiveis = []; _isLoading = false; });
+       return;
+    }
+
+    final todosProjetos = await _projetoRepository.getTodosOsProjetosParaGerente();
+    final projetosIdsComDados = <int>{};
+
+    for (var talhao in talhoesCompletos) {
+      if(talhao.projetoId != null) {
+        projetosIdsComDados.add(talhao.projetoId!);
+      }
     }
     
-    final atividadeIds = talhoesCompletos.map((t) => t.fazendaAtividadeId).toSet();
-    
-    // Usando o AtividadeRepository
-    final todasAtividades = await _atividadeRepository.getTodasAsAtividades();
-    
-    if(mounted) {
+    if (mounted) {
       setState(() {
-        _atividadesDisponiveis = todasAtividades.where((a) => atividadeIds.contains(a.id)).toList();
-      });
-    }
-  }
-
-  // --- MÉTODO ATUALIZADO ---
-  Future<void> _onAtividadeChanged(Atividade? novaAtividade) async {
-    if (novaAtividade == null) return;
-    
-    setState(() {
-      _isLoading = true;
-      _atividadeSelecionada = novaAtividade;
-      _talhoesDaAtividade.clear();
-      _fazendasSelecionadas.clear();
-      _talhoesSelecionados.clear();
-    });
-    
-    // Usando o TalhaoRepository
-    final todosTalhoesCompletos = await _talhaoRepository.getTalhoesComParcelasConcluidas();
-    final talhoesFiltrados = todosTalhoesCompletos.where((t) => t.fazendaAtividadeId == novaAtividade.id).toList();
-
-    if(mounted) {
-      setState(() {
-        _talhoesDaAtividade = talhoesFiltrados;
+        _projetosDisponiveis = todosProjetos.where((p) => projetosIdsComDados.contains(p.id)).toList();
         _isLoading = false;
       });
     }
   }
 
-  // O restante dos métodos da classe não interage com o banco de dados,
-  // então eles permanecem exatamente iguais.
-  
-  void _toggleFazenda(String fazendaId, bool? isSelected) {
-    if (isSelected == null) return; 
+  Future<void> _onProjetoSelecionado(Projeto? projeto) async {
     setState(() {
-      if (isSelected) {
-        _fazendasSelecionadas.add(fazendaId);
-        for (var talhao in _talhoesDaAtividade) {
-          if (talhao.fazendaId == fazendaId) {
-            _talhoesSelecionados.add(talhao.id!);
-          }
-        }
-      } else {
-        _fazendasSelecionadas.remove(fazendaId);
-        _talhoesSelecionados.removeWhere((talhaoId) {
-          // A lógica aqui estava um pouco complexa, vamos simplificar para segurança
-          final talhao = _talhoesDaAtividade.firstWhere((t) => t.id == talhaoId, orElse: () => Talhao(fazendaId: '', fazendaAtividadeId: 0, nome: '', id: -1));
-          return talhao.fazendaId == fazendaId;
-        });
-      }
+      _projetoSelecionado = projeto;
+      _atividadeSelecionada = null;
+      _fazendaSelecionada = null;
+      _atividadesDisponiveis = [];
+      _fazendasDisponiveis = [];
+      _talhoesDisponiveis = [];
+      _talhoesSelecionados.clear();
+      if (projeto == null) return;
+      _isLoading = true;
     });
+
+    final atividades = await _atividadeRepository.getAtividadesDoProjeto(projeto!.id!);
+    // Filtra para mostrar apenas atividades de inventário
+    final tiposInventario = ["IPC", "IFC", "IFS", "BIO", "IFQ"];
+    _atividadesDisponiveis = atividades.where((a) => tiposInventario.any((tipo) => a.tipo.toUpperCase().contains(tipo))).toList();
+    
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _onAtividadeSelecionada(Atividade? atividade) async {
+    setState(() {
+      _atividadeSelecionada = atividade;
+      _fazendaSelecionada = null;
+      _fazendasDisponiveis = [];
+      _talhoesDisponiveis = [];
+      _talhoesSelecionados.clear();
+      if (atividade == null) return;
+      _isLoading = true;
+    });
+    
+    _fazendasDisponiveis = await _fazendaRepository.getFazendasDaAtividade(atividade!.id!);
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _onFazendaSelecionada(Fazenda? fazenda) async {
+    setState(() {
+      _fazendaSelecionada = fazenda;
+      _talhoesDisponiveis = [];
+      _talhoesSelecionados.clear();
+      if (fazenda == null) return;
+      _isLoading = true;
+    });
+
+    final todosTalhoesDaFazenda = await _talhaoRepository.getTalhoesDaFazenda(fazenda!.id, fazenda.atividadeId);
+    final talhoesCompletosIds = (await _talhaoRepository.getTalhoesComParcelasConcluidas()).map((t) => t.id).toSet();
+
+    _talhoesDisponiveis = todosTalhoesDaFazenda.where((t) => talhoesCompletosIds.contains(t.id)).toList();
+    setState(() => _isLoading = false);
   }
   
   void _toggleTalhao(int talhaoId, bool? isSelected) {
@@ -122,44 +140,30 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
       }
     });
   }
-  
+
   void _gerarRelatorio() {
     if (_talhoesSelecionados.isEmpty) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Selecione pelo menos um talhão para gerar a análise.'),
         backgroundColor: Colors.orange,
       ));
       return;
     }
-    final talhoesParaAnalisar = _talhoesDaAtividade.where((t) => _talhoesSelecionados.contains(t.id)).toList();
+    final talhoesParaAnalisar = _talhoesDisponiveis.where((t) => _talhoesSelecionados.contains(t.id)).toList();
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => RelatorioComparativoPage(
-          talhoesSelecionados: talhoesParaAnalisar
-        ),
+        builder: (context) => RelatorioComparativoPage(talhoesSelecionados: talhoesParaAnalisar),
       ),
     );
   }
-  
+
   void _navegarParaAnaliseVolumetrica() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const AnaliseVolumetricaPage()),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const AnaliseVolumetricaPage()));
   }
 
   @override
   Widget build(BuildContext context) {
-    final Map<String, List<Talhao>> talhoesPorFazenda = {};
-    for (var talhao in _talhoesDaAtividade) {
-      final fazendaNome = talhao.fazendaNome ?? 'Fazenda Desconhecida';
-      if (!talhoesPorFazenda.containsKey(fazendaNome)) {
-        talhoesPorFazenda[fazendaNome] = [];
-      }
-      talhoesPorFazenda[fazendaNome]!.add(talhao);
-    }
-
     return Scaffold(
       appBar: AppBar(title: const Text('GeoForest Analista')),
       body: Padding(
@@ -167,60 +171,57 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            DropdownButtonFormField<Atividade>(
-              value: _atividadeSelecionada,
-              hint: const Text('1. Selecione uma Atividade de Inventário'),
+            // --- NOVOS DROPDOWNS HIERÁRQUICOS ---
+            DropdownButtonFormField<Projeto>(
+              value: _projetoSelecionado,
+              hint: const Text('1. Selecione um Projeto'),
               isExpanded: true,
-              items: _atividadesDisponiveis.map((atividade) {
-                return DropdownMenuItem(
-                  value: atividade,
-                  child: Text(atividade.tipo),
-                );
-              }).toList(),
-              onChanged: _onAtividadeChanged,
+              items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome, overflow: TextOverflow.ellipsis))).toList(),
+              onChanged: _onProjetoSelecionado,
               decoration: const InputDecoration(border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
-            const Text('2. Selecione Fazendas e Talhões para Análise Comparativa', style: TextStyle(fontWeight: FontWeight.bold)),
+
+            DropdownButtonFormField<Atividade>(
+              value: _atividadeSelecionada,
+              hint: const Text('2. Selecione uma Atividade'),
+              isExpanded: true,
+              // Desabilita se o projeto não foi selecionado
+              disabledHint: const Text('Selecione um projeto primeiro'),
+              items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo, overflow: TextOverflow.ellipsis))).toList(),
+              onChanged: _projetoSelecionado == null ? null : _onAtividadeSelecionada,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 16),
+            
+            DropdownButtonFormField<Fazenda>(
+              value: _fazendaSelecionada,
+              hint: const Text('3. Selecione uma Fazenda'),
+              isExpanded: true,
+              disabledHint: const Text('Selecione uma atividade primeiro'),
+              items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome, overflow: TextOverflow.ellipsis))).toList(),
+              onChanged: _atividadeSelecionada == null ? null : _onFazendaSelecionada,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 16),
+            const Text('4. Selecione os Talhões para Análise Comparativa', style: TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
+            
             Expanded(
               child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _atividadeSelecionada == null
-                  ? const Center(child: Text('Aguardando seleção de atividade.'))
-                  : talhoesPorFazenda.isEmpty
-                    ? const Center(child: Text('Nenhum talhão com parcelas concluídas para esta atividade.'))
-                    : ListView(
-                      children: talhoesPorFazenda.entries.map((entry) {
-                        final fazendaNome = entry.key;
-                        final talhoes = entry.value;
-                        final fazendaId = talhoes.first.fazendaId;
-                        
-                        return ExpansionTile(
-                          title: Row(
-                            children: [
-                              Checkbox(
-                                value: _fazendasSelecionadas.contains(fazendaId),
-                                onChanged: (value) => _toggleFazenda(fazendaId, value),
-                              ),
-                              Expanded(child: Text(fazendaNome, style: const TextStyle(fontWeight: FontWeight.bold))),
-                            ],
-                          ),
-                          initiallyExpanded: true,
-                          children: talhoes.map((talhao) {
-                            return Padding(
-                              padding: const EdgeInsets.only(left: 32.0),
-                              child: CheckboxListTile(
-                                title: Text(talhao.nome),
-                                value: _talhoesSelecionados.contains(talhao.id!),
-                                onChanged: (value) => _toggleTalhao(talhao.id!, value),
-                                controlAffinity: ListTileControlAffinity.leading,
-                              ),
+                  ? const Center(child: CircularProgressIndicator())
+                  : _talhoesDisponiveis.isEmpty
+                      ? const Center(child: Text('Nenhum talhão com parcelas concluídas para os filtros selecionados.'))
+                      : ListView(
+                          children: _talhoesDisponiveis.map((talhao) {
+                            return CheckboxListTile(
+                              title: Text(talhao.nome),
+                              value: _talhoesSelecionados.contains(talhao.id!),
+                              onChanged: (value) => _toggleTalhao(talhao.id!, value),
+                              controlAffinity: ListTileControlAffinity.leading,
                             );
                           }).toList(),
-                        );
-                      }).toList(),
-                    ),
+                        ),
             ),
           ],
         ),

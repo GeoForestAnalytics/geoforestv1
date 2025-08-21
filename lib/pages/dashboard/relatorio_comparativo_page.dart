@@ -59,49 +59,49 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
   
   // <<< LÓGICA DE VERIFICAÇÃO DE ÁREA ANTES DE EXPORTAR >>>
   Future<void> _verificarAreaEExportarPdf() async {
-    bool dadosIncompletos = _talhoesAtuais.any((t) => t.areaHa == null || t.areaHa! <= 0);
+  bool dadosIncompletos = _talhoesAtuais.any((t) => t.areaHa == null || t.areaHa! <= 0);
 
-    if (dadosIncompletos && mounted) {
-      final bool? querEditar = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Dados Incompletos'),
-          content: const Text('Um ou mais talhões não possuem a área (ha) cadastrada. Deseja editá-los agora para um relatório mais completo?'),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Exportar Mesmo Assim')),
-            FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Editar Agora')),
-          ],
-        ),
-      );
+  if (dadosIncompletos && mounted) {
+    final bool? querEditar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Dados Incompletos'),
+        content: const Text('Um ou mais talhões não possuem a área (ha) cadastrada. Deseja editá-los agora para um relatório mais completo?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Exportar Mesmo Assim')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Editar Agora')),
+        ],
+      ),
+    );
 
-      if (querEditar == true) {
-        for (int i = 0; i < _talhoesAtuais.length; i++) {
-          var talhao = _talhoesAtuais[i];
-          if (talhao.areaHa == null || talhao.areaHa! <= 0) {
-            final bool? foiEditado = await Navigator.push<bool>(
-              context,
-              MaterialPageRoute(builder: (context) => FormTalhaoPage(
-                fazendaId: talhao.fazendaId,
-                fazendaAtividadeId: talhao.fazendaAtividadeId,
-                talhaoParaEditar: talhao,
-              )),
-            );
-            if (foiEditado == true) {
-              // Recarrega o talhão do banco para pegar o novo valor
-              final talhaoAtualizado = await dbHelper.database.then((db) => db.query('talhoes', where: 'id = ?', whereArgs: [talhao.id]).then((maps) => Talhao.fromMap(maps.first)));
-              _talhoesAtuais[i] = talhaoAtualizado;
-            }
+    if (querEditar == true) {
+      for (int i = 0; i < _talhoesAtuais.length; i++) {
+        var talhao = _talhoesAtuais[i];
+        if (talhao.areaHa == null || talhao.areaHa! <= 0) {
+          final bool? foiEditado = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(builder: (context) => FormTalhaoPage(
+              fazendaId: talhao.fazendaId,
+              fazendaAtividadeId: talhao.fazendaAtividadeId,
+              talhaoParaEditar: talhao,
+            )),
+          );
+          if (foiEditado == true) {
+            final talhaoAtualizado = await dbHelper.database.then((db) => db.query('talhoes', where: 'id = ?', whereArgs: [talhao.id]).then((maps) => Talhao.fromMap(maps.first)));
+            _talhoesAtuais[i] = talhaoAtualizado;
           }
         }
-        _agruparTalhoes(); // reagrupa com os dados atualizados
       }
+      _agruparTalhoes();
     }
-    
-    await pdfService.gerarRelatorioUnificadoPdf(
-      context: context,
-      talhoes: _talhoesAtuais,
-    );
   }
+  
+  // A chamada final é a mesma, mas agora o serviço fará o trabalho pesado da permissão.
+  await pdfService.gerarRelatorioUnificadoPdf(
+    context: context,
+    talhoes: _talhoesAtuais,
+  );
+}
 
   Future<PlanoConfig?> _mostrarDialogoDeConfiguracaoLote() async {
     final quantidadeController = TextEditingController();

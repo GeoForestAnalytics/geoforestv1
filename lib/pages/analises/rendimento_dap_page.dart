@@ -31,38 +31,37 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
   bool _isExporting = false;
 
   Future<void> _exportarPdf() async {
-    if (_isExporting) return;
-    setState(() => _isExporting = true);
-    
-    try {
-      RenderRepaintBoundary boundary = _graficoKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      ui.Image image = await boundary.toImage(pixelRatio: 2.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      Uint8List pngBytes = byteData!.buffer.asUint8List();
+  if (_isExporting) return;
+  setState(() => _isExporting = true);
+  
+  try {
+    RenderRepaintBoundary boundary = _graficoKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+    ui.Image image = await boundary.toImage(pixelRatio: 2.0);
+    ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    Uint8List pngBytes = byteData!.buffer.asUint8List();
+    final graficoImagem = pw.MemoryImage(pngBytes);
 
-      final graficoImagem = pw.MemoryImage(pngBytes);
-
-      await _pdfService.gerarRelatorioRendimentoPdf(
-        context: context,
-        nomeFazenda: widget.nomeFazenda,
-        nomeTalhao: widget.nomeTalhao,
-        dadosRendimento: widget.dadosRendimento,
-        analiseGeral: widget.analiseGeral,
-        graficoImagem: graficoImagem,
+    // A chamada para o serviço é a mesma, mas ele agora lida com a permissão.
+    await _pdfService.gerarRelatorioRendimentoPdf(
+      context: context,
+      nomeFazenda: widget.nomeFazenda,
+      nomeTalhao: widget.nomeTalhao,
+      dadosRendimento: widget.dadosRendimento,
+      analiseGeral: widget.analiseGeral,
+      graficoImagem: graficoImagem,
+    );
+  } catch (e) {
+    if(mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao exportar PDF: $e'), backgroundColor: Colors.red),
       );
-
-    } catch (e) {
-      if(mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao exportar PDF: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if(mounted) {
-        setState(() => _isExporting = false);
-      }
+    }
+  } finally {
+    if(mounted) {
+      setState(() => _isExporting = false);
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {

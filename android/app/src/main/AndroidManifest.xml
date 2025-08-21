@@ -1,31 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- PERMISSÕES NECESSÁRIAS PARA O APP FUNCIONAR -->
-
-    <!-- Permite que o app acesse a internet (ESSENCIAL para o Firebase) -->
+    <!-- PERMISSÕES NECESSÁRIAS -->
     <uses-permission android:name="android.permission.INTERNET" />
-
-    <!-- Permite que o app acesse a localização precisa do GPS -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    
-    <!-- Permissão de localização aproximada (geralmente pedida junto com a fina) -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    
-    <!-- Permite que o serviço de geolocalização rode em primeiro plano -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-
-    <!-- Permite que o app use a câmera do dispositivo -->
     <uses-permission android:name="android.permission.CAMERA" />
 
-    <!-- Permissões de armazenamento para Android 10 (API 29) e inferior -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <!-- Permissão de escrita para Android 9 (API 28) e inferior. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
-    <!-- Permissão de armazenamento para Android 11 (API 30) e superior -->
-    <!-- Seu código já pede essa permissão, mas declará-la aqui é uma boa prática -->
+    <!-- Permissão de acesso total para Android 11 (API 30) e superior. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
-
+    <!-- A tag requestLegacyExternalStorage é crucial para o Android 10 (API 29) -->
     <application
         android:label="Geo Forest Analytics"
         android:name="${applicationName}"
@@ -35,7 +23,6 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
