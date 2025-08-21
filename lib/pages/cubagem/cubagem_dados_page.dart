@@ -1,4 +1,4 @@
-// lib/pages/cubagem/cubagem_dados_page.dart (VERSÃO COMPLETA E FUNCIONAL)
+// lib/pages/cubagem/cubagem_dados_page.dart (VERSÃO FINAL COM RF E MÉTODO)
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -19,7 +19,7 @@ class CubagemResult {
 }
 
 class CubagemDadosPage extends StatefulWidget {
-  final String metodo;
+  final String metodo; // Mantido para cubagens manuais avulsas
   final CubagemArvore? arvoreParaEditar;
 
   const CubagemDadosPage({
@@ -45,6 +45,8 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
   late TextEditingController _alturaBaseController;
   late TextEditingController _classeController;
   late TextEditingController _observacaoController;
+  // <<< ADICIONADO NOVO CONTROLADOR PARA O RF >>>
+  late TextEditingController _rfController;
 
   Position? _posicaoAtualExibicao;
   bool _buscandoLocalizacao = false;
@@ -69,6 +71,10 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     _classeController = TextEditingController(text: arvore?.classe ?? '');
     _tipoMedidaCAP = arvore?.tipoMedidaCAP ?? 'fita';
     _observacaoController = TextEditingController(text: arvore?.observacao ?? '');
+    
+    // <<< INICIALIZA O NOVO CONTROLADOR >>>
+    _rfController = TextEditingController(text: arvore?.rf ?? '');
+    
     if (arvore?.latitude != null && arvore?.longitude != null) {
       _posicaoAtualExibicao = Position(
         latitude: arvore!.latitude!, longitude: arvore.longitude!,
@@ -93,47 +99,14 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     _alturaBaseController.dispose();
     _classeController.dispose();
     _observacaoController.dispose();
+
+    // <<< FAZ O DISPOSE DO NOVO CONTROLADOR >>>
+    _rfController.dispose();
+
     super.dispose();
   }
 
-  Future<void> _obterLocalizacaoAtual() async {
-    setState(() { _buscandoLocalizacao = true; _erroLocalizacao = null; });
-    try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) throw 'Serviço de GPS desabilitado.';
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) throw 'Permissão negada.';
-      }
-      if (permission == LocationPermission.deniedForever) throw 'Permissão negada permanentemente.';
-      
-      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high, timeLimit: const Duration(seconds: 20));
-      
-      setState(() {
-        _posicaoAtualExibicao = position;
-      });
-
-    } catch (e) {
-      setState(() => _erroLocalizacao = e.toString());
-    } finally {
-      if (mounted) setState(() => _buscandoLocalizacao = false);
-    }
-  }
-
-  // <<< FUNÇÃO RESTAURADA >>>
-  void _carregarSecoes(int arvoreId) async {
-    setState(() => _isLoading = true);
-    final secoesDoBanco = await _cubagemRepository.getSecoesPorArvoreId(arvoreId);
-    if(mounted) {
-      setState(() {
-        _secoes = secoesDoBanco;
-        _isLoading = false;
-      });
-    }
-  }
-
-  // <<< FUNÇÃO RESTAURADA E CORRIGIDA >>>
+  // <<< FUNÇÃO _gerarSecoesAutomaticas ATUALIZADA >>>
   void _gerarSecoesAutomaticas() {
     final alturaTotalStr = _alturaTotalController.text.replaceAll(',', '.');
     final double? alturaTotal = double.tryParse(alturaTotalStr);
@@ -146,11 +119,14 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
       return;
     }
     
+    // Prioriza o método que veio do CSV. Se não houver, usa o que foi passado para a página.
+    final metodoParaGerar = widget.arvoreParaEditar?.metodoCubagem ?? widget.metodo;
+
     List<double> alturasDeMedicao = [];
 
-    if (widget.metodo == 'Relativas') {
+    if (metodoParaGerar.toUpperCase().contains('RELATIVA')) {
       alturasDeMedicao = [0.01, 0.02, 0.03, 0.04, 0.05, 0.10, 0.15, 0.20, 0.25, 0.35, 0.45, 0.50, 0.55, 0.65, 0.75, 0.85, 0.90, 0.95].map((p) => alturaTotal * p).toList();
-    } else {
+    } else { // Assume 'FIXA' como padrão
       alturasDeMedicao = [0.1, 0.3, 0.7, 1.0, 2.0];
       for (double h = 4.0; h < alturaTotal; h += 2.0) {
         alturasDeMedicao.add(h);
@@ -164,32 +140,8 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
       _secoes = alturasDeMedicao.map((altura) => CubagemSecao(alturaMedicao: altura)).toList();
     });
   }
-  
-  // <<< FUNÇÃO RESTAURADA >>>
-  void _editarDiametrosSecao(int startIndex) async {
-    int currentIndex = startIndex;
-    bool continuarEditando = true;
 
-    while (continuarEditando && currentIndex < _secoes.length) {
-      final result = await showDialog<SecaoDialogResult>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => CubagemSecaoDialog(secaoParaEditar: _secoes[currentIndex]),
-      );
-
-      if (result != null) {
-        if(mounted) setState(() => _secoes[currentIndex] = result.secao);
-        if (result.irParaProximaSecao) {
-          currentIndex++;
-        } else {
-          continuarEditando = false;
-        }
-      } else {
-        continuarEditando = false;
-      }
-    }
-  }
-  
+  // <<< FUNÇÃO _salvarCubagem ATUALIZADA >>>
   void _salvarCubagem({required bool irParaProxima}) async {
     if (!_formKey.currentState!.validate()) return;
     if (_secoes.isEmpty) {
@@ -222,6 +174,10 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
       observacao: _observacaoController.text.trim().isNotEmpty ? _observacaoController.text.trim() : null,
       latitude: _posicaoAtualExibicao?.latitude,
       longitude: _posicaoAtualExibicao?.longitude,
+      metodoCubagem: widget.arvoreParaEditar?.metodoCubagem,
+      
+      // <<< ADICIONA O VALOR DO CAMPO RF AO OBJETO A SER SALVO >>>
+      rf: _rfController.text.trim().isNotEmpty ? _rfController.text.trim() : null,
     );
       
     try {
@@ -237,11 +193,68 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     }
   }
 
+  // O restante das funções (_obterLocalizacaoAtual, _carregarSecoes, etc.) permanece igual.
+  Future<void> _obterLocalizacaoAtual() async {
+    setState(() { _buscandoLocalizacao = true; _erroLocalizacao = null; });
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) throw 'Serviço de GPS desabilitado.';
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) throw 'Permissão negada.';
+      }
+      if (permission == LocationPermission.deniedForever) throw 'Permissão negada permanentemente.';
+      
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high, timeLimit: const Duration(seconds: 20));
+      
+      setState(() {
+        _posicaoAtualExibicao = position;
+      });
+
+    } catch (e) {
+      setState(() => _erroLocalizacao = e.toString());
+    } finally {
+      if (mounted) setState(() => _buscandoLocalizacao = false);
+    }
+  }
+  void _carregarSecoes(int arvoreId) async {
+    setState(() => _isLoading = true);
+    final secoesDoBanco = await _cubagemRepository.getSecoesPorArvoreId(arvoreId);
+    if(mounted) {
+      setState(() {
+        _secoes = secoesDoBanco;
+        _isLoading = false;
+      });
+    }
+  }
+  void _editarDiametrosSecao(int startIndex) async {
+    int currentIndex = startIndex;
+    bool continuarEditando = true;
+
+    while (continuarEditando && currentIndex < _secoes.length) {
+      final result = await showDialog<SecaoDialogResult>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => CubagemSecaoDialog(secaoParaEditar: _secoes[currentIndex]),
+      );
+
+      if (result != null) {
+        if(mounted) setState(() => _secoes[currentIndex] = result.secao);
+        if (result.irParaProximaSecao) {
+          currentIndex++;
+        } else {
+          continuarEditando = false;
+        }
+      } else {
+        continuarEditando = false;
+      }
+    }
+  }
   String? _validadorObrigatorio(String? v) {
     if (v == null || v.trim().isEmpty) return 'Campo obrigatório';
     return null;
   }
-
   Widget _buildColetorCoordenadas() {
     final latExibicao = _posicaoAtualExibicao?.latitude;
     final lonExibicao = _posicaoAtualExibicao?.longitude;
@@ -276,17 +289,21 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     );
   }
 
+  // <<< MÉTODO BUILD ATUALIZADO >>>
   @override
   Widget build(BuildContext context) {
+    // Prioriza o método do CSV, senão usa o que foi passado para a página
+    final metodoFinal = widget.arvoreParaEditar?.metodoCubagem ?? widget.metodo;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Cubagem - ${widget.metodo}'),
+        title: Text('Cubagem - $metodoFinal'),
         actions: [
           if (_isLoading)
             const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white)))
           else ...[
             IconButton(icon: const Icon(Icons.save), tooltip: 'Salvar Cubagem', onPressed: () => _salvarCubagem(irParaProxima: false)),
-            if (widget.arvoreParaEditar == null)
+            if (widget.arvoreParaEditar?.id == null) // Mostra "Salvar e Próxima" apenas para novas cubagens avulsas
               IconButton(icon: const Icon(Icons.save_alt), tooltip: 'Salvar e Próxima', onPressed: () => _salvarCubagem(irParaProxima: true)),
           ]
         ],
@@ -305,6 +322,14 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
               TextFormField(controller: _fazendaController, enabled: false, decoration: const InputDecoration(labelText: 'Fazenda (Automático)', border: OutlineInputBorder()), validator: _validadorObrigatorio),
               const SizedBox(height: 16),
               TextFormField(controller: _talhaoController, enabled: false, decoration: const InputDecoration(labelText: 'Talhão (Automático)', border: OutlineInputBorder()), validator: _validadorObrigatorio),
+              
+              // <<< ADICIONADO O CAMPO DE RF NA INTERFACE >>>
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _rfController,
+                decoration: const InputDecoration(labelText: 'RF / UP', border: OutlineInputBorder()),
+              ),
+              
               const Divider(height: 32, thickness: 1),
               TextFormField(controller: _identificadorController, enabled: false, decoration: const InputDecoration(labelText: 'Identificador da Árvore (Automático)', border: OutlineInputBorder()), validator: _validadorObrigatorio),
               const SizedBox(height: 16),

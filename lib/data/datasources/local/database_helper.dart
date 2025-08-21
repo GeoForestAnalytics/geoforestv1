@@ -1,4 +1,4 @@
-// lib/data/datasources/local/database_helper.dart (VERSÃO ATUALIZADA COM CAMPOS DE CUBAGEM)
+// lib/data/datasources/local/database_helper.dart (VERSÃO ATUALIZADA COM RF E MÉTODO)
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
@@ -29,8 +29,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      // <<< PASSO 1: INCREMENTAR A VERSÃO DO BANCO PARA 42 >>>
-      version: 42,
+      // <<< VERSÃO DO BANCO INCREMENTADA PARA 44 >>>
+      version: 44,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -40,6 +40,7 @@ class DatabaseHelper {
   Future<void> _onConfigure(Database db) async => await db.execute('PRAGMA foreign_keys = ON');
 
   Future<void> _onCreate(Database db, int version) async {
+    // ... (CREATE TABLE projetos)
     await db.execute('''
       CREATE TABLE projetos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,6 +55,7 @@ class DatabaseHelper {
         lastModified TEXT NOT NULL 
       )
     ''');
+    // ... (CREATE TABLE atividades)
     await db.execute('''
       CREATE TABLE atividades (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +68,7 @@ class DatabaseHelper {
         FOREIGN KEY (projetoId) REFERENCES projetos (id) ON DELETE CASCADE
       )
     ''');
+    // ... (CREATE TABLE fazendas)
     await db.execute('''
       CREATE TABLE fazendas (
         id TEXT NOT NULL,
@@ -79,6 +82,7 @@ class DatabaseHelper {
       )
     ''');
     
+    // ... (CREATE TABLE talhoes)
     await db.execute('''
       CREATE TABLE talhoes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,6 +103,7 @@ class DatabaseHelper {
       )
     ''');
 
+    // ... (CREATE TABLE parcelas)
     await db.execute('''
       CREATE TABLE parcelas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -135,6 +140,7 @@ class DatabaseHelper {
       )
     ''');
 
+    // ... (CREATE TABLE arvores)
     await db.execute('''
       CREATE TABLE arvores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,7 +164,7 @@ class DatabaseHelper {
       )
     ''');
     
-    // <<< PASSO 2: ADICIONAR AS NOVAS COLUNAS NA CRIAÇÃO DA TABELA >>>
+    // <<< ADICIONADAS AS DUAS NOVAS COLUNAS NA CRIAÇÃO DA TABELA >>>
     await db.execute('''
       CREATE TABLE cubagens_arvores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -172,9 +178,11 @@ class DatabaseHelper {
         valorCAP REAL NOT NULL,
         alturaBase REAL NOT NULL,
         classe TEXT,
-        observacao TEXT,          -- <<< NOVA COLUNA DE OBSERVAÇÃO
-        latitude REAL,            -- <<< NOVA COLUNA DE LATITUDE
-        longitude REAL,           -- <<< NOVA COLUNA DE LONGITUDE
+        observacao TEXT,
+        latitude REAL,
+        longitude REAL,
+        metodoCubagem TEXT,
+        rf TEXT,
         exportada INTEGER DEFAULT 0 NOT NULL,
         isSynced INTEGER DEFAULT 0 NOT NULL,
         nomeLider TEXT,
@@ -183,6 +191,7 @@ class DatabaseHelper {
       )
     ''');
     
+    // ... (CREATE TABLE cubagens_secoes e o restante)
     await db.execute('''
       CREATE TABLE cubagens_secoes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -231,6 +240,7 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_arvores_parcelaId ON arvores(parcelaId)');
     await db.execute('CREATE INDEX idx_cubagens_secoes_cubagemArvoreId ON cubagens_secoes(cubagemArvoreId)');
   }
+
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     for (var v = oldVersion + 1; v <= newVersion; v++) {
@@ -371,11 +381,18 @@ class DatabaseHelper {
           });
           break;
         
-        // <<< PASSO 3: ADICIONAR A LÓGICA DE MIGRAÇÃO PARA A NOVA VERSÃO >>>
         case 42:
           await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN observacao TEXT');
           await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN latitude REAL');
           await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN longitude REAL');
+          break;
+
+        // <<< ADICIONADA A LÓGICA DE MIGRAÇÃO PARA AS DUAS NOVAS VERSÕES >>>
+        case 43:
+          await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN metodoCubagem TEXT');
+          break;
+        case 44:
+          await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN rf TEXT');
           break;
       }
     }

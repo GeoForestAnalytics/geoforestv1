@@ -1,4 +1,4 @@
-// lib/models/cubagem_arvore_model.dart (VERSÃO ATUALIZADA COM NOVOS CAMPOS)
+// lib/models/cubagem_arvore_model.dart (VERSÃO ATUALIZADA COM RF E MÉTODO)
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CubagemArvore {
@@ -16,11 +16,15 @@ class CubagemArvore {
   String tipoMedidaCAP;
   double valorCAP;
   double alturaBase;
-  
-  // <<< PASSO 1: ADICIONAR AS NOVAS PROPRIEDADES >>>
   final String? observacao;
   final double? latitude;
   final double? longitude;
+  
+  // <<< ADICIONADO CAMPO DE MÉTODO >>>
+  final String? metodoCubagem; // Ex: "Fixa", "Relativa"
+  
+  // <<< ADICIONADO CAMPO DE RF >>>
+  final String? rf;
   
   final DateTime? lastModified;
 
@@ -39,30 +43,21 @@ class CubagemArvore {
     this.tipoMedidaCAP = 'fita',
     this.valorCAP = 0,
     this.alturaBase = 0,
-    this.observacao, // <<< Adicionar ao construtor
-    this.latitude,   // <<< Adicionar ao construtor
-    this.longitude,  // <<< Adicionar ao construtor
+    this.observacao,
+    this.latitude,
+    this.longitude,
+    this.metodoCubagem, // <<< Adicionado ao construtor
+    this.rf,           // <<< Adicionado ao construtor
     this.lastModified,
   });
 
   CubagemArvore copyWith({
-    int? id,
-    int? talhaoId,
-    String? idFazenda,
-    String? nomeFazenda,
-    String? nomeTalhao,
-    String? identificador,
-    String? classe,
-    bool? exportada,
-    bool? isSynced,
-    String? nomeLider,
-    double? alturaTotal,
-    String? tipoMedidaCAP,
-    double? valorCAP,
-    double? alturaBase,
-    String? observacao, // <<< Adicionar ao copyWith
-    double? latitude,   // <<< Adicionar ao copyWith
-    double? longitude,  // <<< Adicionar ao copyWith
+    int? id, int? talhaoId, String? idFazenda, String? nomeFazenda, String? nomeTalhao,
+    String? identificador, String? classe, bool? exportada, bool? isSynced,
+    String? nomeLider, double? alturaTotal, String? tipoMedidaCAP, double? valorCAP,
+    double? alturaBase, String? observacao, double? latitude, double? longitude,
+    String? metodoCubagem, // <<< Adicionado ao copyWith
+    String? rf,            // <<< Adicionado ao copyWith
     DateTime? lastModified,
   }) {
     return CubagemArvore(
@@ -83,6 +78,8 @@ class CubagemArvore {
       observacao: observacao ?? this.observacao,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      metodoCubagem: metodoCubagem ?? this.metodoCubagem,
+      rf: rf ?? this.rf,
       lastModified: lastModified ?? this.lastModified,
     );
   }
@@ -100,10 +97,11 @@ class CubagemArvore {
       'tipoMedidaCAP': tipoMedidaCAP,
       'valorCAP': valorCAP,
       'alturaBase': alturaBase,
-      // <<< PASSO 2: ADICIONAR OS CAMPOS AO MAPA PARA SALVAR NO BANCO >>>
       'observacao': observacao,
       'latitude': latitude,
       'longitude': longitude,
+      'metodoCubagem': metodoCubagem, // <<< Adicionado ao mapa
+      'rf': rf,                     // <<< Adicionado ao mapa
       'exportada': exportada ? 1 : 0,
       'isSynced': isSynced ? 1 : 0,
       'nomeLider': nomeLider,
@@ -129,10 +127,11 @@ class CubagemArvore {
       nomeTalhao: map['nome_talhao'] ?? '',
       identificador: map['identificador'],
       classe: map['classe'],
-      // <<< PASSO 3: LER OS CAMPOS DO MAPA AO CRIAR O OBJETO >>>
       observacao: map['observacao'],
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
+      metodoCubagem: map['metodoCubagem'], // <<< Lido do mapa
+      rf: map['rf'],                     // <<< Lido do mapa
       exportada: map['exportada'] == 1,
       isSynced: map['isSynced'] == 1,
       nomeLider: map['nomeLider'],
