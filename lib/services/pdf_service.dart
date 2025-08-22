@@ -1,4 +1,4 @@
-// lib/services/pdf_service.dart (VERSÃO COM OUTROS GASTOS NO PDF)
+// lib/services/pdf_service.dart (VERSÃO COM PDF DE DISTRIBUIÇÃO DE DAP CORRIGIDO)
 
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -28,6 +28,7 @@ class PdfService {
   final _analiseRepository = AnaliseRepository();
   final _talhaoRepository = TalhaoRepository();
 
+  // ... (As funções _requestPermission, _getDownloadsDirectory, _salvarEAbriPdf permanecem as mesmas)
   Future<bool> _requestPermission(BuildContext context) async {
     PermissionStatus status;
     if (Platform.isAndroid) {
@@ -118,6 +119,70 @@ class PdfService {
     }
   }
   
+  // <<< INÍCIO DA MODIFICAÇÃO >>>
+  Future<void> gerarRelatorioRendimentoPdf({
+    required BuildContext context,
+    required String nomeFazenda,
+    required String nomeTalhao,
+    required List<DapClassResult> dadosRendimento, // <<< Usa o novo modelo
+    required TalhaoAnalysisResult analiseGeral,
+    required pw.ImageProvider graficoImagem,
+  }) async {
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        header: (pw.Context context) => _buildHeader(nomeFazenda, nomeTalhao),
+        footer: (pw.Context context) => _buildFooter(),
+        build: (pw.Context context) {
+          return [
+            pw.Text(
+              'Relatório de Distribuição de Indivíduos por Classe de DAP', // <<< Título corrigido
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
+              textAlign: pw.TextAlign.center,
+            ),
+            pw.Divider(height: 20),
+            _buildResumoTalhaoPdf(analiseGeral),
+            pw.SizedBox(height: 20),
+            pw.Center(
+              child: pw.SizedBox(
+                width: 400,
+                child: pw.Image(graficoImagem),
+              ),
+            ),
+            pw.SizedBox(height: 20),
+            _buildTabelaRendimentoPdf(dadosRendimento), // <<< Chamada para a tabela corrigida
+          ];
+        },
+      ),
+    );
+    final nomeArquivo = 'Relatorio_Distribuicao_DAP_${nomeTalhao.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.pdf';
+    await _salvarEAbriPdf(context, pdf, nomeArquivo);
+  }
+
+  pw.Widget _buildTabelaRendimentoPdf(List<DapClassResult> dados) {
+    final headers = ['Classe DAP', 'Quantidade (árvores)', '% do Total'];
+    
+    final data = dados.map((item) => [
+          item.classe,
+          item.quantidade.toString(),
+          '${item.porcentagemDoTotal.toStringAsFixed(1)}%',
+        ]).toList();
+
+    return pw.TableHelper.fromTextArray(
+      headers: headers,
+      data: data,
+      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+      headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+      cellAlignment: pw.Alignment.center,
+      cellAlignments: {
+        0: pw.Alignment.centerLeft,
+      },
+    );
+  }
+  // <<< FIM DA MODIFICAÇÃO >>>
+
+  // ... (O resto do seu arquivo PdfService.dart, sem alterações)
   Future<void> gerarRelatorioDiarioConsolidadoPdf({
     required BuildContext context,
     required DiarioDeCampo diario,
@@ -349,47 +414,6 @@ class PdfService {
     final nomeArquivo = 'Plano_de_Cubagem_Regerado_${DateFormat('yyyy-MM-dd_HH-mm').format(hoje)}.pdf';
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
-
-  Future<void> gerarRelatorioRendimentoPdf({
-    required BuildContext context,
-    required String nomeFazenda,
-    required String nomeTalhao,
-    required List<DapClassResult> dadosRendimento, // <<< Usa o novo modelo
-    required TalhaoAnalysisResult analiseGeral,
-    required pw.ImageProvider graficoImagem,
-  }) async {
-    final pdf = pw.Document();
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        header: (pw.Context context) => _buildHeader(nomeFazenda, nomeTalhao),
-        footer: (pw.Context context) => _buildFooter(),
-        build: (pw.Context context) {
-          return [
-            pw.Text(
-              'Relatório de Distribuição de Indivíduos por Classe de DAP', // <<< Título corrigido
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
-              textAlign: pw.TextAlign.center,
-            ),
-            pw.Divider(height: 20),
-            _buildResumoTalhaoPdf(analiseGeral),
-            pw.SizedBox(height: 20),
-            pw.Center(
-              child: pw.SizedBox(
-                width: 400,
-                child: pw.Image(graficoImagem),
-              ),
-            ),
-            pw.SizedBox(height: 20),
-            _buildTabelaRendimentoPdf(dadosRendimento), // <<< Chamada para a tabela corrigida
-          ];
-        },
-      ),
-    );
-    final nomeArquivo = 'Relatorio_Distribuicao_DAP_${nomeTalhao.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.pdf';
-    await _salvarEAbriPdf(context, pdf, nomeArquivo);
-  }
-
   
   Future<void> gerarRelatorioSimulacaoPdf({
     required BuildContext context,
@@ -430,7 +454,6 @@ class PdfService {
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
 
-  // <<< INÍCIO DA MODIFICAÇÃO >>>
   pw.Widget _buildTabelaDiarioPdf(DiarioDeCampo diario) {
     final nf = NumberFormat("#,##0.00", "pt_BR");
     final distancia = (diario.kmFinal ?? 0) - (diario.kmInicial ?? 0);
@@ -458,16 +481,13 @@ class PdfService {
           ['Abastecimento (R\$):', diario.abastecimentoValor != null ? 'R\$ ${nf.format(diario.abastecimentoValor)}' : 'N/A'],
           ['Alimentação:', '${diario.alimentacaoMarmitasQtd ?? 0} marmitas. ${diario.alimentacaoDescricao ?? ''}'],
           ['Outras Refeições (R\$):', diario.alimentacaoRefeicaoValor != null ? 'R\$ ${nf.format(diario.alimentacaoRefeicaoValor)}' : 'N/A'],
-          // --- LINHAS ADICIONADAS ---
           ['Outras Despesas (R\$):', diario.outrasDespesasValor != null ? 'R\$ ${nf.format(diario.outrasDespesasValor)}' : 'N/A'],
           ['Descrição Outras Despesas:', diario.outrasDespesasDescricao ?? 'N/A'],
-          // --------------------------
         ],
         border: null,
       ),
     ]);
   }
-  // <<< FIM DA MODIFICAÇÃO >>>
 
   pw.Widget _buildResumoColetasPdf(List<Parcela> parcelas, List<CubagemArvore> cubagens) {
     return pw.Column(

@@ -78,8 +78,9 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
       appBar: AppBar(
         title: const Text('Distribuição por DAP'),
         actions: [
-          // <<< INÍCIO DA CORREÇÃO >>>
-          // A lógica if/else foi reestruturada para ser um único elemento na lista.
+          // <<< AQUI ESTÁ A CORREÇÃO PRINCIPAL >>>
+          // A lógica if/else foi reestruturada para ser um único elemento na lista,
+          // usando uma condição ternária dentro do widget.
           if (_isExporting)
             const Padding(
               padding: EdgeInsets.only(right: 16.0),
@@ -91,7 +92,6 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
               onPressed: _exportarPdf,
               tooltip: 'Exportar para PDF'
             ),
-          // <<< FIM DA CORREÇÃO >>>
         ],
       ),
       body: SingleChildScrollView(

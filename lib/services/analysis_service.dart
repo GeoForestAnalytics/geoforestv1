@@ -1,4 +1,4 @@
-// lib/services/analysis_service.dart (VERSÃO COM NOMES DE CLASSE CORRIGIDOS)
+// lib/services/analysis_service.dart (VERSÃO COM ANÁLISES VOLUMÉTRICAS COMPLETAS)
 
 import 'dart:math';
 import 'package:collection/collection.dart';
@@ -34,6 +34,132 @@ class AnalysisService {
     SortimentoModel(id: 1, nome: "8-18cm", comprimento: 6.0, diametroMinimo: 8, diametroMaximo: 18),
   ];
 
+  // <<< NOVO MÉTODO PRINCIPAL PARA ORQUESTRAR A ANÁLISE VOLUMÉTRICA >>>
+  Future<AnaliseVolumetricaCompletaResult> gerarAnaliseVolumetricaCompleta({
+    required List<CubagemArvore> arvoresParaRegressao,
+    required List<Talhao> talhoesInventario,
+  }) async {
+
+    // 1. Gerar Equação de Volume
+    final resultadoRegressao = await gerarEquacaoSchumacherHall(arvoresParaRegressao);
+    if (resultadoRegressao.containsKey('error')) {
+      throw Exception(resultadoRegressao['error']);
+    }
+    
+    // 2. Aplicar equação no inventário e calcular totais
+    double volumeTotalLote = 0;
+    double areaTotalLote = 0;
+    double areaBasalMediaPonderada = 0;
+    int arvoresHaMediaPonderada = 0;
+    List<Arvore> todasAsArvoresDoInventarioComVolume = [];
+
+    for (final talhao in talhoesInventario) {
+        final dadosAgregados = await _analiseRepository.getDadosAgregadosDoTalhao(talhao.id!); 
+        final List<Parcela> parcelas = dadosAgregados['parcelas'];
+        final List<Arvore> arvores = dadosAgregados['arvores'];
+        
+        if (parcelas.isEmpty || arvores.isEmpty) continue;
+        
+        final arvoresComVolume = aplicarEquacaoDeVolume(
+          arvoresDoInventario: arvores,
+          b0: resultadoRegressao['b0'], b1: resultadoRegressao['b1'], b2: resultadoRegressao['b2'],
+        );
+        todasAsArvoresDoInventarioComVolume.addAll(arvoresComVolume);
+        
+        final analiseTalhao = getTalhaoInsights(parcelas, arvoresComVolume);
+        
+        if (talhao.areaHa != null && talhao.areaHa! > 0) {
+            volumeTotalLote += (analiseTalhao.volumePorHectare * talhao.areaHa!);
+            areaTotalLote += talhao.areaHa!;
+            areaBasalMediaPonderada += (analiseTalhao.areaBasalPorHectare * talhao.areaHa!);
+            arvoresHaMediaPonderada += (analiseTalhao.arvoresPorHectare * talhao.areaHa!).round();
+        }
+    }
+
+    final totaisInventario = {
+      'talhoes': talhoesInventario.map((t) => t.nome).join(', '),
+      'volume_ha': areaTotalLote > 0 ? volumeTotalLote / areaTotalLote : 0.0,
+      'arvores_ha': areaTotalLote > 0 ? (arvoresHaMediaPonderada / areaTotalLote).round() : 0,
+      'area_basal_ha': areaTotalLote > 0 ? areaBasalMediaPonderada / areaTotalLote : 0.0,
+      'volume_total_lote': volumeTotalLote,
+      'area_total_lote': areaTotalLote,
+    };
+
+    // 3. Calcular Proporções de Sortimento e Volume por Código
+    final producaoPorSortimento = await _calcularProducaoPorSortimento(arvoresParaRegressao, totaisInventario['volume_ha']);
+    final volumePorCodigo = _calcularVolumePorCodigo(todasAsArvoresDoInventarioComVolume, areaTotalLote > 0 ? volumeTotalLote / areaTotalLote : 0);
+
+    return AnaliseVolumetricaCompletaResult(
+      resultadoRegressao: resultadoRegressao,
+      totaisInventario: totaisInventario,
+      producaoPorSortimento: producaoPorSortimento,
+      volumePorCodigo: volumePorCodigo,
+    );
+  }
+
+  // <<< NOVO MÉTODO AUXILIAR PARA CALCULAR PRODUÇÃO POR SORTIMENTO >>>
+  Future<List<VolumePorSortimento>> _calcularProducaoPorSortimento(List<CubagemArvore> arvoresCubadas, double volumeHaInventario) async {
+    final Map<String, double> volumesAcumuladosSortimento = {};
+    for (final arvoreCubada in arvoresCubadas) {
+      if (arvoreCubada.id == null) continue;
+      final secoes = await _cubagemRepository.getSecoesPorArvoreId(arvoreCubada.id!);
+      final volumePorSortimento = classificarSortimentos(secoes);
+      volumePorSortimento.forEach((sortimento, volume) {
+        volumesAcumuladosSortimento.update(sortimento, (value) => value + volume, ifAbsent: () => volume);
+      });
+    }
+
+    double volumeTotalCubado = volumesAcumuladosSortimento.values.fold(0.0, (a, b) => a + b);
+    if (volumeTotalCubado == 0) return [];
+
+    final List<VolumePorSortimento> resultado = [];
+    final sortedKeys = volumesAcumuladosSortimento.keys.toList()..sort((a,b) {
+      final numA = double.tryParse(a.split('-').first.replaceAll('>', '')) ?? 99;
+      final numB = double.tryParse(b.split('-').first.replaceAll('>', '')) ?? 99;
+      return numB.compareTo(numA);
+    });
+
+    for (final sortimento in sortedKeys) {
+      final volumeDoSortimento = volumesAcumuladosSortimento[sortimento]!;
+      final porcentagem = (volumeDoSortimento / volumeTotalCubado) * 100;
+      resultado.add(VolumePorSortimento(
+        nome: sortimento,
+        porcentagem: porcentagem,
+        volumeHa: volumeHaInventario * (porcentagem / 100),
+      ));
+    }
+    return resultado;
+  }
+  
+  // <<< NOVO MÉTODO AUXILIAR PARA CALCULAR VOLUME POR CÓDIGO >>>
+  List<VolumePorCodigo> _calcularVolumePorCodigo(List<Arvore> arvoresComVolume, double volumeTotalHa) {
+    if (arvoresComVolume.isEmpty || volumeTotalHa <= 0) return [];
+
+    final grupoPorCodigo = groupBy(arvoresComVolume, (Arvore a) => a.codigo.name);
+
+    final Map<String, double> volumeAcumuladoPorCodigo = {};
+    grupoPorCodigo.forEach((codigo, arvores) {
+      volumeAcumuladoPorCodigo[codigo] = arvores.map((a) => a.volume ?? 0).fold(0.0, (prev, vol) => prev + vol);
+    });
+
+    final double volumeTotalAmostrado = volumeAcumuladoPorCodigo.values.fold(0.0, (a, b) => a + b);
+    if (volumeTotalAmostrado <= 0) return [];
+
+    final List<VolumePorCodigo> resultado = [];
+    volumeAcumuladoPorCodigo.forEach((codigo, volume) {
+      final porcentagem = (volume / volumeTotalAmostrado) * 100;
+      resultado.add(VolumePorCodigo(
+        codigo: codigo,
+        porcentagem: porcentagem,
+        volumeTotal: volumeTotalHa * (porcentagem / 100),
+      ));
+    });
+
+    resultado.sort((a,b) => b.volumeTotal.compareTo(a.volumeTotal));
+    return resultado;
+  }
+
+  // ... (métodos existentes que não mudam)
   double calcularVolumeComercialSmalian(List<CubagemSecao> secoes) {
     if (secoes.length < 2) return 0.0;
     secoes.sort((a, b) => a.alturaMedicao.compareTo(b.alturaMedicao));
@@ -299,10 +425,7 @@ class AnalysisService {
     return _analisarListaDeArvores(arvoresRemanescentes, areaTotalAmostradaHa, parcelasOriginais.length, codeAnalysisRemanescente);
   }
   
-  // <<< INÍCIO DA CORREÇÃO >>>
-  // O nome da classe retornada foi corrigido de RendimentoDAP para DapClassResult.
   List<DapClassResult> analisarRendimentoPorDAP(List<Parcela> parcelasDoTalhao, List<Arvore> todasAsArvores) {
-  // <<< FIM DA CORREÇÃO >>>
     if (parcelasDoTalhao.isEmpty || todasAsArvores.isEmpty) {
       return [];
     }
@@ -324,11 +447,8 @@ class AnalysisService {
     
     final double totalArvoresVivas = arvoresVivas.length.toDouble();
     if (totalArvoresVivas == 0) return [];
-
-    // <<< INÍCIO DA CORREÇÃO >>>
-    // O nome da classe retornada foi corrigido de RendimentoDAP para DapClassResult.
+    
     final List<DapClassResult> resultadoFinal = [];
-    // <<< FIM DA CORREÇÃO >>>
     final sortedKeys = arvoresPorClasse.keys.toList()..sort((a,b) {
       final numA = double.tryParse(a.split('-').first.replaceAll('>', '')) ?? 99;
       final numB = double.tryParse(b.split('-').first.replaceAll('>', '')) ?? 99;
@@ -339,14 +459,11 @@ class AnalysisService {
       final arvores = arvoresPorClasse[classe]!;
       if (arvores.isNotEmpty) {
         final double porcentagem = (arvores.length / totalArvoresVivas) * 100;
-        // <<< INÍCIO DA CORREÇÃO >>>
-        // O nome do construtor foi corrigido de RendimentoDAP para DapClassResult.
         resultadoFinal.add(DapClassResult(
           classe: classe,
           quantidade: arvores.length,
           porcentagemDoTotal: porcentagem,
         ));
-        // <<< FIM DA CORREÇÃO >>>
       }
     }
     return resultadoFinal;

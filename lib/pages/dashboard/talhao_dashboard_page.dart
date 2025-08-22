@@ -1,4 +1,4 @@
-// lib/pages/dashboard/talhao_dashboard_page.dart (VERSÃO COM ANÁLISE DE CÓDIGOS)
+// lib/pages/dashboard/talhao_dashboard_page.dart (VERSÃO COM ANÁLISE DE CÓDIGOS COMPLETA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -11,7 +11,6 @@ import 'package:geoforestv1/pages/analises/simulacao_desbaste_page.dart';
 import 'package:geoforestv1/pages/analises/rendimento_dap_page.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
-
 
 class TalhaoDashboardPage extends StatelessWidget {
   final Talhao talhao;
@@ -138,10 +137,8 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     );
   }
 
-  // <<< MÉTODO ATUALIZADO PARA USAR O NOVO MODELO DE DADOS >>>
   void _analisarRendimento() {
     if (_analysisResult == null) return;
-    // A chamada do serviço agora retorna o novo tipo de objeto
     final resultadoRendimento = _analysisService.analisarRendimentoPorDAP(_parcelasDoTalhao, _arvoresDoTalhao);
     if (resultadoRendimento.isEmpty && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -155,7 +152,7 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
         builder: (context) => RendimentoDapPage(
           nomeFazenda: widget.talhao.fazendaNome ?? 'Fazenda não informada',
           nomeTalhao: widget.talhao.nome,
-          dadosRendimento: resultadoRendimento, // Passa a nova lista de objetos
+          dadosRendimento: resultadoRendimento,
           analiseGeral: _analysisResult!,
         ),
       ),
@@ -186,7 +183,6 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
             children: [
               _buildResumoCard(result),
               const SizedBox(height: 16),
-              // <<< CHAMADA PARA O NOVO CARD DE ANÁLISE DE CÓDIGOS >>>
               if (result.analiseDeCodigos != null)
                 _buildCodeAnalysisCard(result.analiseDeCodigos!),
               const SizedBox(height: 16),
@@ -231,7 +227,6 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     );
   }
 
-  // <<< NOVO WIDGET COMPLETO PARA O CARD DE ANÁLISE DE CÓDIGOS >>>
   Widget _buildCodeAnalysisCard(CodeAnalysisResult codeAnalysis) {
     return Card(
       elevation: 2,
@@ -245,7 +240,11 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
             // Resumo de contagens
             _buildStatRow('Total de Fustes Amostrados:', codeAnalysis.totalFustes.toString()),
             _buildStatRow('Total de Covas Amostradas:', codeAnalysis.totalCovasAmostradas.toString()),
-            _buildStatRow('Covas Ocupadas (Sobrevivência):', '${codeAnalysis.totalCovasOcupadas} (${(codeAnalysis.totalCovasOcupadas / codeAnalysis.totalCovasAmostradas * 100).toStringAsFixed(1)}%)'),
+            if (codeAnalysis.totalCovasAmostradas > 0)
+              _buildStatRow(
+                'Covas Ocupadas (Sobrevivência):', 
+                '${codeAnalysis.totalCovasOcupadas} (${(codeAnalysis.totalCovasOcupadas / codeAnalysis.totalCovasAmostradas * 100).toStringAsFixed(1)}%)'
+              ),
             const SizedBox(height: 16),
             Text('Estatísticas por Código', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
@@ -260,8 +259,12 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
                   DataColumn(label: Text('Qtd.'), numeric: true),
                   DataColumn(label: Text('Média\nCAP'), numeric: true),
                   DataColumn(label: Text('Mediana\nCAP'), numeric: true),
+                  DataColumn(label: Text('Moda\nCAP'), numeric: true),
+                  DataColumn(label: Text('DP\nCAP'), numeric: true),
                   DataColumn(label: Text('Média\nAltura'), numeric: true),
                   DataColumn(label: Text('Mediana\nAltura'), numeric: true),
+                  DataColumn(label: Text('Moda\nAltura'), numeric: true),
+                  DataColumn(label: Text('DP\nAltura'), numeric: true),
                 ],
                 rows: codeAnalysis.estatisticasPorCodigo.entries.map((entry) {
                   final stats = entry.value;
@@ -270,8 +273,12 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
                     DataCell(Text(codeAnalysis.contagemPorCodigo[entry.key]?.toString() ?? '0')),
                     DataCell(Text(stats.mediaCap.toStringAsFixed(1))),
                     DataCell(Text(stats.medianaCap.toStringAsFixed(1))),
+                    DataCell(Text(stats.modaCap.toStringAsFixed(1))),
+                    DataCell(Text(stats.desvioPadraoCap.toStringAsFixed(1))),
                     DataCell(Text(stats.mediaAltura.toStringAsFixed(1))),
                     DataCell(Text(stats.medianaAltura.toStringAsFixed(1))),
+                    DataCell(Text(stats.modaAltura.toStringAsFixed(1))),
+                    DataCell(Text(stats.desvioPadraoAltura.toStringAsFixed(1))),
                   ]);
                 }).toList(),
               ),
@@ -282,7 +289,6 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     );
   }
 
-  // ... (O restante dos widgets de build permanece o mesmo)
   Widget _buildResumoCard(TalhaoAnalysisResult result) {
     return Card(
       elevation: 2,
