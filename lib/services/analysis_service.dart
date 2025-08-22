@@ -1,4 +1,4 @@
-// lib/services/analysis_service.dart (VERSÃO COM ANÁLISES VOLUMÉTRICAS COMPLETAS)
+// lib/services/analysis_service.dart (VERSÃO COM CORREÇÃO DE TIPO)
 
 import 'dart:math';
 import 'package:collection/collection.dart';
@@ -34,19 +34,16 @@ class AnalysisService {
     SortimentoModel(id: 1, nome: "8-18cm", comprimento: 6.0, diametroMinimo: 8, diametroMaximo: 18),
   ];
 
-  // <<< NOVO MÉTODO PRINCIPAL PARA ORQUESTRAR A ANÁLISE VOLUMÉTRICA >>>
   Future<AnaliseVolumetricaCompletaResult> gerarAnaliseVolumetricaCompleta({
     required List<CubagemArvore> arvoresParaRegressao,
     required List<Talhao> talhoesInventario,
   }) async {
 
-    // 1. Gerar Equação de Volume
     final resultadoRegressao = await gerarEquacaoSchumacherHall(arvoresParaRegressao);
     if (resultadoRegressao.containsKey('error')) {
       throw Exception(resultadoRegressao['error']);
     }
     
-    // 2. Aplicar equação no inventário e calcular totais
     double volumeTotalLote = 0;
     double areaTotalLote = 0;
     double areaBasalMediaPonderada = 0;
@@ -85,9 +82,11 @@ class AnalysisService {
       'area_total_lote': areaTotalLote,
     };
 
-    // 3. Calcular Proporções de Sortimento e Volume por Código
-    final producaoPorSortimento = await _calcularProducaoPorSortimento(arvoresParaRegressao, totaisInventario['volume_ha']);
-    final volumePorCodigo = _calcularVolumePorCodigo(todasAsArvoresDoInventarioComVolume, areaTotalLote > 0 ? volumeTotalLote / areaTotalLote : 0);
+    // <<< INÍCIO DA CORREÇÃO >>>
+    // O erro estava aqui: o 'as double' garante que o tipo está correto.
+    final producaoPorSortimento = await _calcularProducaoPorSortimento(arvoresParaRegressao, totaisInventario['volume_ha'] as double);
+    final volumePorCodigo = _calcularVolumePorCodigo(todasAsArvoresDoInventarioComVolume, totaisInventario['volume_ha'] as double);
+    // <<< FIM DA CORREÇÃO >>>
 
     return AnaliseVolumetricaCompletaResult(
       resultadoRegressao: resultadoRegressao,
@@ -97,7 +96,6 @@ class AnalysisService {
     );
   }
 
-  // <<< NOVO MÉTODO AUXILIAR PARA CALCULAR PRODUÇÃO POR SORTIMENTO >>>
   Future<List<VolumePorSortimento>> _calcularProducaoPorSortimento(List<CubagemArvore> arvoresCubadas, double volumeHaInventario) async {
     final Map<String, double> volumesAcumuladosSortimento = {};
     for (final arvoreCubada in arvoresCubadas) {
@@ -131,7 +129,6 @@ class AnalysisService {
     return resultado;
   }
   
-  // <<< NOVO MÉTODO AUXILIAR PARA CALCULAR VOLUME POR CÓDIGO >>>
   List<VolumePorCodigo> _calcularVolumePorCodigo(List<Arvore> arvoresComVolume, double volumeTotalHa) {
     if (arvoresComVolume.isEmpty || volumeTotalHa <= 0) return [];
 
@@ -159,7 +156,7 @@ class AnalysisService {
     return resultado;
   }
 
-  // ... (métodos existentes que não mudam)
+  // ... (o resto do arquivo permanece igual)
   double calcularVolumeComercialSmalian(List<CubagemSecao> secoes) {
     if (secoes.length < 2) return 0.0;
     secoes.sort((a, b) => a.alturaMedicao.compareTo(b.alturaMedicao));

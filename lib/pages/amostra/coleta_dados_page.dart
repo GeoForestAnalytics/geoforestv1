@@ -291,23 +291,25 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   }
 
   Future<void> _reabrirParaEdicao() async {
-    setState(() => _salvando = true);
-    try {
-      final parcelaReaberta = _parcelaAtual.copyWith(status: StatusParcela.emAndamento);
-      await _parcelaRepository.updateParcela(parcelaReaberta);
-      if(mounted) {
-        setState(() {
-          _parcelaAtual = parcelaReaberta;
-          _isReadOnly = false;
-          _salvando = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Parcela reaberta. Agora você pode editar os dados.'), backgroundColor: Colors.orange));
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao reabrir parcela: $e'), backgroundColor: Colors.red));
-      if (mounted) setState(() => _salvando = false);
+  setState(() => _salvando = true);
+  try {
+    // 1. Chama o método específico e mais seguro para atualizar apenas o status.
+    await _parcelaRepository.updateParcelaStatus(_parcelaAtual.dbId!, StatusParcela.emAndamento);
+    
+    if(mounted) {
+      setState(() {
+        // 2. Atualiza o objeto local para refletir a mudança.
+        _parcelaAtual = _parcelaAtual.copyWith(status: StatusParcela.emAndamento);
+        _isReadOnly = false;
+        _salvando = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Parcela reaberta. Agora você pode editar os dados.'), backgroundColor: Colors.orange));
     }
+  } catch (e) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao reabrir parcela: $e'), backgroundColor: Colors.red));
+    if (mounted) setState(() => _salvando = false);
   }
+}
 
   Future<void> _salvarEIniciarColeta() async {
     if (!_formKey.currentState!.validate()) return;

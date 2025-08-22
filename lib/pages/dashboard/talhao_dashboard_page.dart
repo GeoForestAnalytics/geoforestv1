@@ -1,4 +1,4 @@
-// lib/pages/dashboard/talhao_dashboard_page.dart (VERSÃO COM ANÁLISE DE CÓDIGOS COMPLETA)
+// lib/pages/dashboard/talhao_dashboard_page.dart (VERSÃO COMPLETA E CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -11,6 +11,7 @@ import 'package:geoforestv1/pages/analises/simulacao_desbaste_page.dart';
 import 'package:geoforestv1/pages/analises/rendimento_dap_page.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
+import 'package:geoforestv1/widgets/grafico_dispersao_cap_altura.dart';
 
 class TalhaoDashboardPage extends StatelessWidget {
   final Talhao talhao;
@@ -201,11 +202,16 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
                 ),
               ),
               const SizedBox(height: 16),
+              GraficoDispersaoCapAltura(arvores: _arvoresDoTalhao),
+              const SizedBox(height: 16),
+              
+              // <<< CORREÇÃO APLICADA AQUI: REMOVIDA A LINHA DUPLICADA >>>
               _buildInsightsCard("⚠️ Alertas", result.warnings, Colors.red.shade100),
               const SizedBox(height: 12),
               _buildInsightsCard("💡 Insights", result.insights, Colors.blue.shade100),
               const SizedBox(height: 12),
               _buildInsightsCard("🛠️ Recomendações", result.recommendations, Colors.orange.shade100),
+              
               const SizedBox(height: 24),
               ElevatedButton.icon(
                 onPressed: _navegarParaSimulacao,

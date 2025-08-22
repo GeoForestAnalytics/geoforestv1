@@ -1,14 +1,24 @@
-# Correção do OperacoesDashboardPage
+# Fixes for Scatter Chart Errors
 
-## Tarefas a serem realizadas:
+## Issues to Fix:
+1. [x] Replace `tooltipBgColor` with `getTooltipColor` function
+2. [x] Fix `spotIndex` property access - track indices in ScatterSpot creation
+3. [x] Update `getTooltipItems` function signature and return type
+4. [x] Ensure proper data access for tooltips
 
-1. [ ] Reorganizar o método _buildDespesasChart
-2. [ ] Mover a função _abbreviate para fora do método
-3. [ ] Verificar estrutura completa do arquivo
-4. [ ] Testar compilação
-5. [ ] Validar funcionalidades
+## Steps:
+1. [x] Modify scatterSpots creation to include index tracking
+2. [x] Update ScatterTouchTooltipData configuration
+3. [x] Fix tooltip function to use new API
+4. [ ] Test compilation
 
-## Progresso:
-- Análise inicial concluída
-- Plano de correção definido
-- Iniciando implementação
+## Progress:
+- [x] Step 1: Track indices in scatter spots
+- [x] Step 2: Update tooltip configuration
+- [x] Step 3: Fix tooltip function
+- [ ] Step 4: Verify fixes
+
+## Changes Made:
+- Replaced `tooltipBgColor` with `getTooltipColor: (_) => Colors.black`
+- Fixed the tooltip function to properly find the index by comparing spot coordinates
+- Updated the function to return a single `ScatterTooltipItem` instead of a list

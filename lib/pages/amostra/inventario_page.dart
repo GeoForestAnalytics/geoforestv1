@@ -38,14 +38,19 @@ class _InventarioPageState extends State<InventarioPage> {
   
   bool _isReadOnly = false;
 
-  @override
+   @override
   void initState() {
     super.initState();
     _parcelaAtual = widget.parcela;
-    _dataLoadingFuture = _carregarDadosIniciais();
+    // 1. Usa a lista de árvores que já veio com o objeto Parcela.
+    _arvoresColetadas = widget.parcela.arvores; 
+    // 2. A função de carregamento agora só configura o status, sem acessar o banco para buscar árvores.
+    _dataLoadingFuture = _configurarStatusDaTela();
   }
 
-  Future<bool> _carregarDadosIniciais() async {
+  // A antiga função "_carregarDadosIniciais" foi renomeada e simplificada.
+  Future<bool> _configurarStatusDaTela() async {
+    // A lógica de definir se a tela é somente leitura permanece a mesma.
     if (_parcelaAtual.status == StatusParcela.concluida || _parcelaAtual.status == StatusParcela.exportada) {
       _isReadOnly = true;
     } else {
@@ -55,11 +60,8 @@ class _InventarioPageState extends State<InventarioPage> {
         await _parcelaRepository.updateParcelaStatus(_parcelaAtual.dbId!, StatusParcela.emAndamento);
       }
     }
-
-    if (_parcelaAtual.dbId != null) {
-      _arvoresColetadas = await _parcelaRepository.getArvoresDaParcela(_parcelaAtual.dbId!);
-    }
     
+    // Não há mais chamada ao banco para buscar as árvores aqui.
     return true;
   }
   

@@ -1,9 +1,8 @@
-// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO COM ANÁLISES COMPLETAS)
+// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO COM FILTRO DE ATIVIDADE)
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
-import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
@@ -17,6 +16,8 @@ import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
+
+
 
 class AnaliseVolumetricaPage extends StatefulWidget {
   const AnaliseVolumetricaPage({super.key});
@@ -35,17 +36,20 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   final _analysisService = AnalysisService();
   final _pdfService = PdfService();
 
-  // Filtros
+  // <<< MUDANÇA 1: ADIÇÃO DOS ESTADOS PARA O NOVO FILTRO DE ATIVIDADE >>>
   List<Projeto> _projetosDisponiveis = [];
   Projeto? _projetoSelecionado;
+  List<Atividade> _atividadesDisponiveis = [];
+  Atividade? _atividadeSelecionada;
   List<Fazenda> _fazendasDisponiveis = [];
   Fazenda? _fazendaSelecionada;
+
+  // Listas de Talhões
   List<Talhao> _talhoesComCubagemDisponiveis = [];
   List<Talhao> _talhoesComInventarioDisponiveis = [];
   final Set<int> _talhoesCubadosSelecionados = {};
   final Set<int> _talhoesInventarioSelecionados = {};
 
-  // <<< ESTADO DO RESULTADO FOI UNIFICADO >>>
   AnaliseVolumetricaCompletaResult? _analiseResult;
   
   // Controle de UI
@@ -59,17 +63,19 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     _carregarProjetosIniciais();
   }
 
-  // --- Lógica de carregamento dos filtros (sem alteração) ---
   Future<void> _carregarProjetosIniciais() async {
     setState(() => _isLoading = true);
     _projetosDisponiveis = await _projetoRepository.getTodosOsProjetosParaGerente();
     setState(() => _isLoading = false);
   }
 
+  // <<< MUDANÇA 2: LÓGICA DE FILTRO EM CASCATA ATUALIZADA >>>
   Future<void> _onProjetoSelecionado(Projeto? projeto) async {
     setState(() {
       _projetoSelecionado = projeto;
+      _atividadeSelecionada = null;
       _fazendaSelecionada = null;
+      _atividadesDisponiveis = [];
       _fazendasDisponiveis = [];
       _talhoesComCubagemDisponiveis = [];
       _talhoesComInventarioDisponiveis = [];
@@ -83,18 +89,28 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       _isLoading = true;
     });
 
-    final todasAtividades = await _atividadeRepository.getAtividadesDoProjeto(projeto!.id!);
-    final Map<String, Fazenda> fazendasUnicas = {};
-    for (final atividade in todasAtividades) {
-      final fazendasDaAtividade = await _fazendaRepository.getFazendasDaAtividade(atividade.id!);
-      for (final fazenda in fazendasDaAtividade) {
-        fazendasUnicas.putIfAbsent(fazenda.nome, () => fazenda);
-      }
-    }
-    
-    _fazendasDisponiveis = fazendasUnicas.values.toList();
-    _fazendasDisponiveis.sort((a, b) => a.nome.compareTo(b.nome));
+    _atividadesDisponiveis = await _atividadeRepository.getAtividadesDoProjeto(projeto!.id!);
+    setState(() => _isLoading = false);
+  }
 
+  Future<void> _onAtividadeSelecionada(Atividade? atividade) async {
+    setState(() {
+      _atividadeSelecionada = atividade;
+      _fazendaSelecionada = null;
+      _fazendasDisponiveis = [];
+      _talhoesComCubagemDisponiveis = [];
+      _talhoesComInventarioDisponiveis = [];
+      _talhoesCubadosSelecionados.clear();
+      _talhoesInventarioSelecionados.clear();
+      _limparResultados();
+      if (atividade == null) {
+        _isLoading = false;
+        return;
+      }
+      _isLoading = true;
+    });
+
+    _fazendasDisponiveis = await _fazendaRepository.getFazendasDaAtividade(atividade!.id!);
     setState(() => _isLoading = false);
   }
 
@@ -113,44 +129,42 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       _isLoading = true;
     });
     
-    await _carregarTalhoesParaSelecao(_projetoSelecionado!, fazenda!);
+    await _carregarTalhoesParaSelecao();
     setState(() => _isLoading = false);
   }
 
-  Future<void> _carregarTalhoesParaSelecao(Projeto projeto, Fazenda fazendaSelecionada) async {
-      final todasAtividades = await _atividadeRepository.getAtividadesDoProjeto(projeto.id!);
-      final atividadeCub = todasAtividades.cast<Atividade?>().firstWhere((a) => a?.tipo.toUpperCase().contains('CUB') ?? false, orElse: () => null);
-      final atividadesIpc = todasAtividades.where((a) => a.tipo.toUpperCase().contains('IPC') || a.tipo.toUpperCase().contains('IFC')).toList();
+  // <<< MUDANÇA 3: LÓGICA DE BUSCA DOS TALHÕES COMPLETAMENTE REFEITA >>>
+  Future<void> _carregarTalhoesParaSelecao() async {
+    if (_projetoSelecionado == null || _atividadeSelecionada == null || _fazendaSelecionada == null) return;
+    
+    // 1. Carrega os talhões de INVENTÁRIO (baseado nos filtros que o usuário selecionou)
+    final todosTalhoesDaFazendaInventario = await _talhaoRepository.getTalhoesDaFazenda(_fazendaSelecionada!.id, _fazendaSelecionada!.atividadeId);
+    final talhoesCompletosInvIds = (await _talhaoRepository.getTalhoesComParcelasConcluidas()).map((t) => t.id).toSet();
+    final talhoesInventarioEncontrados = todosTalhoesDaFazendaInventario.where((t) => talhoesCompletosInvIds.contains(t.id)).toList();
 
-      List<Talhao> talhoesCubagemEncontrados = [];
-      List<Talhao> talhoesInventarioEncontrados = [];
+    // 2. Procura inteligentemente pelos talhões de CUBAGEM
+    List<Talhao> talhoesCubagemEncontrados = [];
+    // Busca todas as atividades do projeto para encontrar uma de cubagem
+    final todasAtividadesDoProjeto = await _atividadeRepository.getAtividadesDoProjeto(_projetoSelecionado!.id!);
+    final atividadeCub = todasAtividadesDoProjeto.cast<Atividade?>().firstWhere((a) => a?.tipo.toUpperCase().contains('CUB') ?? false, orElse: () => null);
+    
+    if (atividadeCub != null) {
+      // Encontra a fazenda com o MESMO NOME dentro da atividade de cubagem
+      final fazendasDaAtividadeCub = await _fazendaRepository.getFazendasDaAtividade(atividadeCub.id!);
+      final fazendaCub = fazendasDaAtividadeCub.cast<Fazenda?>().firstWhere((f) => f?.nome == _fazendaSelecionada!.nome, orElse: () => null);
       
-      final talhoesCompletosInvIds = (await _talhaoRepository.getTalhoesComParcelasConcluidas()).map((t) => t.id).toSet();
-      final todasCubagens = await _cubagemRepository.getTodasCubagens();
-      final talhoesCompletosCubIds = todasCubagens.where((c) => c.alturaTotal > 0 && c.talhaoId != null).map((c) => c.talhaoId!).toSet();
-      
-      if (atividadeCub != null) {
-          final fazendasDaAtividade = await _fazendaRepository.getFazendasDaAtividade(atividadeCub.id!);
-          final fazendaCub = fazendasDaAtividade.cast<Fazenda?>().firstWhere((f) => f?.nome == fazendaSelecionada.nome, orElse: () => null);
-          if (fazendaCub != null) {
-              final todosTalhoesDaFazenda = await _talhaoRepository.getTalhoesDaFazenda(fazendaCub.id, fazendaCub.atividadeId);
-              talhoesCubagemEncontrados = todosTalhoesDaFazenda.where((t) => talhoesCompletosCubIds.contains(t.id)).toList();
-          }
+      if (fazendaCub != null) {
+        final todosTalhoesDaFazendaCub = await _talhaoRepository.getTalhoesDaFazenda(fazendaCub.id, fazendaCub.atividadeId);
+        final todasCubagens = await _cubagemRepository.getTodasCubagens();
+        final talhoesCompletosCubIds = todasCubagens.where((c) => c.alturaTotal > 0 && c.talhaoId != null).map((c) => c.talhaoId!).toSet();
+        talhoesCubagemEncontrados = todosTalhoesDaFazendaCub.where((t) => talhoesCompletosCubIds.contains(t.id)).toList();
       }
+    }
 
-      for (var atividadeIpc in atividadesIpc) {
-          final fazendasDaAtividade = await _fazendaRepository.getFazendasDaAtividade(atividadeIpc.id!);
-          final fazendaIpc = fazendasDaAtividade.cast<Fazenda?>().firstWhere((f) => f?.nome == fazendaSelecionada.nome, orElse: () => null);
-           if (fazendaIpc != null) {
-              final todosTalhoesDaFazenda = await _talhaoRepository.getTalhoesDaFazenda(fazendaIpc.id, fazendaIpc.atividadeId);
-              talhoesInventarioEncontrados.addAll(todosTalhoesDaFazenda.where((t) => talhoesCompletosInvIds.contains(t.id)));
-          }
-      }
-      
-      setState(() {
-          _talhoesComCubagemDisponiveis = talhoesCubagemEncontrados;
-          _talhoesComInventarioDisponiveis = talhoesInventarioEncontrados.toSet().toList(); // Remove duplicatas
-      });
+    setState(() {
+        _talhoesComInventarioDisponiveis = talhoesInventarioEncontrados;
+        _talhoesComCubagemDisponiveis = talhoesCubagemEncontrados;
+    });
   }
   
   void _limparResultados() {
@@ -159,7 +173,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     });
   }
 
-  // <<< LÓGICA PRINCIPAL ATUALIZADA >>>
   Future<void> _gerarAnaliseCompleta() async {
     if (_talhoesCubadosSelecionados.isEmpty || _talhoesInventarioSelecionados.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -170,7 +183,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     setState(() { _isAnalyzing = true; _errorMessage = null; _limparResultados(); });
     
     try {
-      // Coleta os dados de entrada
       List<CubagemArvore> arvoresParaRegressao = [];
       for(final talhaoId in _talhoesCubadosSelecionados) {
         arvoresParaRegressao.addAll(await _cubagemRepository.getTodasCubagensDoTalhao(talhaoId));
@@ -182,13 +194,11 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         if (talhao != null) talhoesInventarioAnalisados.add(talhao);
       }
 
-      // Chama o serviço para fazer todo o trabalho pesado
       final resultadoCompleto = await _analysisService.gerarAnaliseVolumetricaCompleta(
         arvoresParaRegressao: arvoresParaRegressao,
         talhoesInventario: talhoesInventarioAnalisados,
       );
 
-      // Atualiza o estado da tela com o resultado completo
       if (mounted) {
         setState(() {
           _analiseResult = resultadoCompleto;
@@ -207,6 +217,24 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     }
   }
 
+  Future<void> _exportarPdf() async {
+    if (_analiseResult == null) return;
+    
+    final resultadoRegressao = _analiseResult!.resultadoRegressao;
+    final producaoInventario = _analiseResult!.totaisInventario;
+    
+    final producaoSortimento = {
+      'porcentagens': {for (var v in _analiseResult!.producaoPorSortimento) v.nome: v.porcentagem}
+    };
+    
+    await _pdfService.gerarRelatorioVolumetricoPdf(
+      context: context,
+      resultadoRegressao: resultadoRegressao,
+      producaoInventario: producaoInventario,
+      producaoSortimento: producaoSortimento,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -215,10 +243,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.picture_as_pdf_outlined),
-            onPressed: (_analiseResult == null || _isAnalyzing) ? null : () {
-              // A chamada ao PDF service será ajustada no futuro
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Função de PDF a ser atualizada.")));
-            },
+            onPressed: (_analiseResult == null || _isAnalyzing) ? null : _exportarPdf,
             tooltip: 'Exportar Relatório (PDF)',
           ),
         ],
@@ -240,10 +265,25 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                           onChanged: _onProjetoSelecionado, decoration: const InputDecoration(border: OutlineInputBorder()),
                         ),
                         const SizedBox(height: 10),
+                        // <<< MUDANÇA 4: ADIÇÃO DO DROPDOWN DE ATIVIDADE NA UI >>>
+                        DropdownButtonFormField<Atividade>(
+                          value: _atividadeSelecionada,
+                          hint: const Text('Selecione uma Atividade'),
+                          disabledHint: const Text('Selecione um projeto primeiro'),
+                          isExpanded: true,
+                          items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo, overflow: TextOverflow.ellipsis))).toList(),
+                          onChanged: _projetoSelecionado == null ? null : _onAtividadeSelecionada,
+                          decoration: const InputDecoration(border: OutlineInputBorder()),
+                        ),
+                        const SizedBox(height: 10),
                         DropdownButtonFormField<Fazenda>(
-                          value: _fazendaSelecionada, hint: const Text('Selecione uma Fazenda'), isExpanded: true,
+                          value: _fazendaSelecionada,
+                          hint: const Text('Selecione uma Fazenda'),
+                          disabledHint: const Text('Selecione uma atividade primeiro'),
+                          isExpanded: true,
                           items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome, overflow: TextOverflow.ellipsis))).toList(),
-                          onChanged: _projetoSelecionado == null ? null : _onFazendaSelecionada, decoration: const InputDecoration(border: OutlineInputBorder()),
+                          onChanged: _atividadeSelecionada == null ? null : _onFazendaSelecionada,
+                          decoration: const InputDecoration(border: OutlineInputBorder()),
                         ),
                       ],
                     ),
@@ -262,8 +302,8 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                 if (_analiseResult != null) ...[
                   _buildResultCard(_analiseResult!),
                   _buildProductionTable(_analiseResult!),
-                  _buildProducaoComercialCard(_analiseResult!), // <<< NOVO CARD
-                  _buildVolumePorCodigoCard(_analiseResult!), // <<< NOVO CARD
+                  _buildProducaoComercialCard(_analiseResult!),
+                  _buildVolumePorCodigoCard(_analiseResult!),
                 ]
               ],
             ),
@@ -274,8 +314,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       ),
     );
   }
-
-  // --- Widgets de Build (Seleção e Resultados) ---
 
   Widget _buildTalhaoSelectionCard({
     required String title, required String subtitle,
@@ -292,7 +330,8 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
             Text(subtitle, style: const TextStyle(color: Colors.grey)),
             const Divider(),
             if (_isLoading) const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))
-            else if (_fazendaSelecionada == null) const Center(child: Text('Selecione uma fazenda para ver os talhões.'))
+            // <<< MUDANÇA 5: TEXTO DE AVISO ATUALIZADO >>>
+            else if (_fazendaSelecionada == null) const Center(child: Text('Selecione um projeto, atividade e fazenda para ver os talhões.'))
             else if (talhoesDisponiveis.isEmpty) const Center(child: Padding(padding: EdgeInsets.all(8.0), child: Text('Nenhum talhão com dados encontrado.')))
             else
               ListView.builder(
@@ -325,12 +364,17 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     return Card( elevation: 2, child: Padding( padding: const EdgeInsets.all(16.0), child: Column( crossAxisAlignment: CrossAxisAlignment.start, children: [ Text('Totais do Inventário', style: Theme.of(context).textTheme.titleLarge), const Divider(), _buildStatRow('Talhões Aplicados:', '${totais['talhoes']}'), _buildStatRow('Volume por Hectare:', '${(totais['volume_ha'] as double).toStringAsFixed(2)} m³/ha'), _buildStatRow('Árvores por Hectare:', '${totais['arvores_ha']}'), _buildStatRow('Área Basal por Hectare:', '${(totais['area_basal_ha'] as double).toStringAsFixed(2)} m²/ha'), const Divider(height: 15), _buildStatRow('Volume Total para ${(totais['area_total_lote'] as double).toStringAsFixed(2)} ha:', '${(totais['volume_total_lote'] as double).toStringAsFixed(2)} m³'), ], ), ), );
   }
 
-  // <<< NOVO WIDGET PARA PRODUÇÃO COMERCIAL (SORTIMENTOS) >>>
   Widget _buildProducaoComercialCard(AnaliseVolumetricaCompletaResult result) {
     final data = result.producaoPorSortimento;
     if (data.isEmpty) return const SizedBox.shrink();
     
-    final List<Color> colors = [PdfColors.blue700, PdfColors.green700, PdfColors.orange700, PdfColors.red700, PdfColors.purple700];
+    final List<Color> colors = [
+      Colors.blue.shade700,
+      Colors.green.shade700,
+      Colors.orange.shade700,
+      Colors.red.shade700,
+      Colors.purple.shade700
+    ];
 
     return Card(
       elevation: 2,
@@ -341,15 +385,30 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
           children: [
             Text('Produção Comercial Estimada', style: Theme.of(context).textTheme.titleLarge),
             const Divider(),
-            pw.SizedBox(height: 200, child: pw.PieChart(
-              data: data.map((item, index) => pw.PieChartData(
-                item.porcentagem,
-                title: '${item.nome}\n${item.porcentagem.toStringAsFixed(1)}%',
-                color: colors[index % colors.length],
-                titleStyle: const pw.TextStyle(fontSize: 10, color: PdfColors.white)
-              )).toList(),
-            )),
-            pw.SizedBox(height: 20),
+            SizedBox(
+              height: 200,
+              child: PieChart(
+                PieChartData(
+                  sections: data.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final item = entry.value;
+                    return PieChartSectionData(
+                      value: item.porcentagem,
+                      title: '${item.nome}\n${item.porcentagem.toStringAsFixed(1)}%',
+                      color: colors[index % colors.length],
+                      radius: 80,
+                      titleStyle: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
+                    );
+                  }).toList(),
+                  sectionsSpace: 2,
+                  centerSpaceRadius: 40,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
             _buildDetailedTable(
               headers: ['Sortimento', 'Volume (m³/ha)', '% Total'],
               rows: data.map((item) => [
@@ -364,7 +423,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
-  // <<< NOVO WIDGET PARA VOLUME POR CÓDIGO >>>
   Widget _buildVolumePorCodigoCard(AnaliseVolumetricaCompletaResult result) {
     final data = result.volumePorCodigo;
     if (data.isEmpty) return const SizedBox.shrink();
@@ -412,14 +470,13 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
-  // <<< WIDGET AUXILIAR GENÉRICO PARA CRIAR TABELAS >>>
   Widget _buildDetailedTable({required List<String> headers, required List<List<String>> rows}) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
         columnSpacing: 24,
         headingRowHeight: 32,
-        headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+        headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
         columns: headers.map((h) => DataColumn(label: Text(h, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
         rows: rows.map((row) => DataRow(
           cells: row.map((cell) => DataCell(Text(cell))).toList()

@@ -784,27 +784,7 @@ class PdfService {
     );
   }
   
-  pw.Widget _buildTabelaRendimentoPdf(List<DapClassResult> dados) {
-    final headers = ['Classe DAP', 'Quantidade (árvores)', '% do Total'];
-    
-    final data = dados.map((item) => [
-          item.classe,
-          item.quantidade.toString(),
-          '${item.porcentagemDoTotal.toStringAsFixed(1)}%',
-        ]).toList();
-
-    return pw.TableHelper.fromTextArray(
-      headers: headers,
-      data: data,
-      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-      headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
-      cellAlignment: pw.Alignment.center,
-      cellAlignments: {
-        0: pw.Alignment.centerLeft,
-      },
-    );
-  }
-  
+ 
   pw.Widget _buildTabelaSimulacaoPdf(TalhaoAnalysisResult antes, TalhaoAnalysisResult depois) {
     final headers = ['Parâmetro', 'Antes', 'Após'];
     
