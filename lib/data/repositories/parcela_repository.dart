@@ -13,67 +13,75 @@ class ParcelaRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
   Future<Parcela> saveFullColeta(Parcela p, List<Arvore> arvores) async {
-    final db = await _dbHelper.database;
-    final now = DateTime.now().toIso8601String();
+  final db = await _dbHelper.database;
+  final now = DateTime.now().toIso8601String();
 
-    await db.transaction((txn) async {
-      int pId;
-      // Corrigindo para criar uma nova instância modificável
-      Parcela parcelaModificavel = p.copyWith(isSynced: false);
-      
-      final pMap = parcelaModificavel.toMap();
-      final d = parcelaModificavel.dataColeta ?? DateTime.now();
-      pMap['dataColeta'] = d.toIso8601String();
-      pMap['lastModified'] = now;
+  // 1. Criamos uma variável que VAI SER o valor de retorno.
+  late Parcela parcelaDeRetorno;
 
-      if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
-        final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
-          SELECT A.projetoId FROM talhoes T
-          INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
-          INNER JOIN atividades A ON F.atividadeId = A.id
-          WHERE T.id = ? LIMIT 1
-        ''', [pMap['talhaoId']]);
+  await db.transaction((txn) async {
+    int pId;
+    
+    // A lógica de criar e modificar a parcela permanece a mesma.
+    Parcela parcelaModificavel = p.copyWith(isSynced: false);
+    
+    final pMap = parcelaModificavel.toMap();
+    final d = parcelaModificavel.dataColeta ?? DateTime.now();
+    pMap['dataColeta'] = d.toIso8601String();
+    pMap['lastModified'] = now;
 
-        if (talhaoInfo.isNotEmpty) {
-          pMap['projetoId'] = talhaoInfo.first['projetoId'];
-          parcelaModificavel = parcelaModificavel.copyWith(projetoId: talhaoInfo.first['projetoId'] as int?);
-        }
+    if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
+      final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
+        SELECT A.projetoId FROM talhoes T
+        INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
+        INNER JOIN atividades A ON F.atividadeId = A.id
+        WHERE T.id = ? LIMIT 1
+      ''', [pMap['talhaoId']]);
+
+      if (talhaoInfo.isNotEmpty) {
+        pMap['projetoId'] = talhaoInfo.first['projetoId'];
+        parcelaModificavel = parcelaModificavel.copyWith(projetoId: talhaoInfo.first['projetoId'] as int?);
       }
+    }
 
-      // <<< BLOCO DO RG DA COLETA FOI REMOVIDO DAQUI >>>
+    final prefs = await SharedPreferences.getInstance();
+    String? nomeDoResponsavel = prefs.getString('nome_lider');
+    if (nomeDoResponsavel == null || nomeDoResponsavel.isEmpty) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        nomeDoResponsavel = user.displayName ?? user.email;
+      }
+    }
+    if (nomeDoResponsavel != null) {
+      pMap['nomeLider'] = nomeDoResponsavel;
+    }
 
-      final prefs = await SharedPreferences.getInstance();
-      String? nomeDoResponsavel = prefs.getString('nome_lider');
-      if (nomeDoResponsavel == null || nomeDoResponsavel.isEmpty) {
-        final user = FirebaseAuth.instance.currentUser;
-        if (user != null) {
-          nomeDoResponsavel = user.displayName ?? user.email;
-        }
-      }
-      if (nomeDoResponsavel != null) {
-        pMap['nomeLider'] = nomeDoResponsavel;
-      }
+    if (parcelaModificavel.dbId == null) {
+      pMap.remove('id');
+      pId = await txn.insert('parcelas', pMap);
+      parcelaModificavel = parcelaModificavel.copyWith(dbId: pId, dataColeta: d);
+    } else {
+      pId = parcelaModificavel.dbId!;
+      await txn.update('parcelas', pMap, where: 'id = ?', whereArgs: [pId]);
+    }
+    await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [pId]);
+    for (final a in arvores) {
+      final aMap = a.toMap();
+      aMap['parcelaId'] = pId;
+      aMap['lastModified'] = now;
+      await txn.insert('arvores', aMap);
+    }
 
-      if (parcelaModificavel.dbId == null) {
-        pMap.remove('id');
-        pId = await txn.insert('parcelas', pMap);
-        parcelaModificavel = parcelaModificavel.copyWith(dbId: pId, dataColeta: d);
-      } else {
-        pId = parcelaModificavel.dbId!;
-        await txn.update('parcelas', pMap, where: 'id = ?', whereArgs: [pId]);
-      }
-      await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [pId]);
-      for (final a in arvores) {
-        final aMap = a.toMap();
-        aMap['parcelaId'] = pId;
-        aMap['lastModified'] = now;
-        await txn.insert('arvores', aMap);
-      }
-      // Atribui a versão final modificável de volta para o objeto original
-      p = parcelaModificavel; 
-    });
-    return p;
-  }
+    // 2. A CORREÇÃO CRÍTICA:
+    //    Anexamos a lista de árvores ao objeto que foi modificado
+    //    e o atribuímos à nossa variável de retorno.
+    parcelaModificavel.arvores = arvores;
+    parcelaDeRetorno = parcelaModificavel; 
+  });
+
+  // 3. Retornamos a variável que foi corretamente populada DENTRO da transação.
+  return parcelaDeRetorno;
+}
 
 
   Future<void> saveBatchParcelas(List<Parcela> parcelas) async {
