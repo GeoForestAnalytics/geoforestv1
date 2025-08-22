@@ -1,13 +1,13 @@
-// lib/providers/dashboard_metrics_provider.dart (VERSÃO CORRIGIDA COM GETTERS FALTANTES)
+// lib/providers/dashboard_metrics_provider.dart
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
-import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 
 class ProgressoFazenda {
@@ -60,29 +60,33 @@ class DashboardMetricsProvider with ChangeNotifier {
 
   List<DesempenhoFazenda> _desempenhoPorCubagem = [];
   Map<String, int> _progressoPorEquipe = {};
-  Map<String, int> _coletasPorMes = {};
+  // --- RENOMEADO ---
+  Map<String, int> _coletasPorAtividade = {};
   List<DesempenhoFazenda> _desempenhoPorFazenda = [];
   List<ProgressoFazenda> _progressoPorFazenda = [];
   DesempenhoFazendaTotais _desempenhoInventarioTotais = DesempenhoFazendaTotais();
   DesempenhoFazendaTotais _desempenhoCubagemTotais = DesempenhoFazendaTotais();
   
-  // <<< CORREÇÃO: Variáveis privadas para os novos KPIs >>>
   double _volumeTotalColetado = 0.0;
   int _totalAmostrasConcluidas = 0;
   int _totalCubagensConcluidas = 0;
+  // --- NOVO KPI ---
+  double _mediaDiariaColetas = 0.0;
   
   List<Parcela> get parcelasFiltradas => _parcelasFiltradas;
   List<DesempenhoFazenda> get desempenhoPorCubagem => _desempenhoPorCubagem;
   Map<String, int> get progressoPorEquipe => _progressoPorEquipe;
-  Map<String, int> get coletasPorMes => _coletasPorMes;
+  // --- RENOMEADO ---
+  Map<String, int> get coletasPorAtividade => _coletasPorAtividade;
   List<DesempenhoFazenda> get desempenhoPorFazenda => _desempenhoPorFazenda;
   List<ProgressoFazenda> get progressoPorFazenda => _progressoPorFazenda;
   DesempenhoFazendaTotais get desempenhoInventarioTotais => _desempenhoInventarioTotais;
   DesempenhoFazendaTotais get desempenhoCubagemTotais => _desempenhoCubagemTotais;
-  // <<< CORREÇÃO: Getters públicos para os novos KPIs >>>
   double get volumeTotalColetado => _volumeTotalColetado;
   int get totalAmostrasConcluidas => _totalAmostrasConcluidas;
   int get totalCubagensConcluidas => _totalCubagensConcluidas;
+  // --- NOVO GETTER ---
+  double get mediaDiariaColetas => _mediaDiariaColetas;
 
 
   void update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) {
@@ -96,20 +100,23 @@ class DashboardMetricsProvider with ChangeNotifier {
 
     final projetosAtivos = gerenteProvider.projetos.where((p) => p.status == 'ativo').toList();
     final Map<int, String> atividadeIdToTipoMap = { for (var a in gerenteProvider.atividades) if (a.id != null) a.id!: a.tipo };
+    final Map<int, Atividade> atividadeMap = { for (var a in gerenteProvider.atividades) if (a.id != null) a.id!: a };
 
     _recalcularParcelasFiltradas(
       gerenteProvider.parcelasSincronizadas,
       projetosAtivos,
       filterProvider,
+      gerenteProvider.talhaoToAtividadeMap,
     );
     
     _cubagensFiltradas = _filtrarCubagens(
       gerenteProvider.cubagensSincronizadas, 
       gerenteProvider.talhaoToProjetoMap, 
       projetosAtivos, 
-      filterProvider
+      filterProvider,
+      gerenteProvider.talhaoToAtividadeMap,
     );
-
+    
     _recalcularDesempenhoPorCubagem(
       gerenteProvider.talhaoToAtividadeMap,
       atividadeIdToTipoMap
@@ -117,14 +124,21 @@ class DashboardMetricsProvider with ChangeNotifier {
 
     _recalcularKpisDeProjeto();
     _recalcularProgressoPorEquipe();
-    _recalcularColetasPorMes();
+    // --- LÓGICA ATUALIZADA ---
+    _recalcularColetasPorAtividade(gerenteProvider.talhaoToAtividadeMap, atividadeMap);
+    _recalcularMediaDiariaColetas(filterProvider);
     _recalcularDesempenhoPorFazenda();
     _recalcularProgressoPorFazenda();
     
     notifyListeners();
   }
   
-  void _recalcularParcelasFiltradas(List<Parcela> todasAsParcelas, List<Projeto> projetosAtivos, DashboardFilterProvider filterProvider) {
+  void _recalcularParcelasFiltradas(
+    List<Parcela> todasAsParcelas, 
+    List<Projeto> projetosAtivos, 
+    DashboardFilterProvider filterProvider,
+    Map<int, int> talhaoToAtividadeMap
+  ) {
     final idsProjetosAtivos = projetosAtivos.map((p) => p.id!).toSet();
     
     _parcelasFiltradas = todasAsParcelas.where((p) {
@@ -132,6 +146,14 @@ class DashboardMetricsProvider with ChangeNotifier {
         if (p.projetoId == null || !filterProvider.selectedProjetoIds.contains(p.projetoId)) return false;
       } else {
         if (p.projetoId == null || !idsProjetosAtivos.contains(p.projetoId)) return false;
+      }
+      
+      // --- NOVO: Aplica o filtro de atividade ---
+      if (filterProvider.selectedAtividadeId != null) {
+        final atividadeId = talhaoToAtividadeMap[p.talhaoId];
+        if (atividadeId != filterProvider.selectedAtividadeId) {
+          return false;
+        }
       }
 
       if (filterProvider.selectedFazendaNomes.isNotEmpty) {
@@ -146,16 +168,112 @@ class DashboardMetricsProvider with ChangeNotifier {
       return _filtroDeData(p.dataColeta, filterProvider);
     }).toList();
   }
+  
+  List<CubagemArvore> _filtrarCubagens(
+    List<CubagemArvore> todasAsCubagens,
+    Map<int, int> talhaoToProjetoMap,
+    List<Projeto> projetosAtivos,
+    DashboardFilterProvider filterProvider,
+    Map<int, int> talhaoToAtividadeMap
+  ) {
+    final idsProjetosAtivos = projetosAtivos.map((p) => p.id).toSet();
+    return todasAsCubagens.where((c) {
+      final projetoId = talhaoToProjetoMap[c.talhaoId];
 
+      if (filterProvider.selectedProjetoIds.isNotEmpty) {
+        if (projetoId == null || !filterProvider.selectedProjetoIds.contains(projetoId)) return false;
+      } else {
+        if (projetoId == null || !idsProjetosAtivos.contains(projetoId)) return false;
+      }
+
+      // --- NOVO: Aplica o filtro de atividade ---
+      if (filterProvider.selectedAtividadeId != null) {
+        final atividadeId = talhaoToAtividadeMap[c.talhaoId];
+        if (atividadeId != filterProvider.selectedAtividadeId) {
+          return false;
+        }
+      }
+
+      if (filterProvider.selectedFazendaNomes.isNotEmpty) {
+        if (!filterProvider.selectedFazendaNomes.contains(c.nomeFazenda)) return false;
+      }
+      
+      if (filterProvider.lideresSelecionados.isNotEmpty) {
+        final nomeLider = c.nomeLider?.isNotEmpty == true ? c.nomeLider! : 'Gerente';
+        if (!filterProvider.lideresSelecionados.contains(nomeLider)) return false;
+      }
+      
+      return _filtroDeData(c.dataColeta, filterProvider);
+    }).toList();
+  }
+  
+  // --- NOVA: Lógica para o KPI "Média Diária de Coletas" ---
+  void _recalcularMediaDiariaColetas(DashboardFilterProvider filter) {
+    final List<DateTime> datasColetas = [
+      ..._parcelasFiltradas.map((p) => p.dataColeta),
+      ..._cubagensFiltradas.map((c) => c.dataColeta),
+    ].whereType<DateTime>().toList();
+
+    if (datasColetas.isEmpty) {
+      _mediaDiariaColetas = 0.0;
+      return;
+    }
+
+    final totalColetas = datasColetas.length;
+    
+    int diasNoPeriodo = 1;
+    if(filter.periodo == PeriodoFiltro.todos) {
+        if(datasColetas.length > 1) {
+            datasColetas.sort();
+            diasNoPeriodo = datasColetas.last.difference(datasColetas.first).inDays + 1;
+        }
+    } else if (filter.periodo == PeriodoFiltro.personalizado && filter.periodoPersonalizado != null) {
+        diasNoPeriodo = filter.periodoPersonalizado!.duration.inDays + 1;
+    } else if (filter.periodo == PeriodoFiltro.ultimos7Dias) {
+        diasNoPeriodo = 7;
+    }
+    
+    _mediaDiariaColetas = diasNoPeriodo > 0 ? totalColetas / diasNoPeriodo : 0.0;
+  }
+  
+  // --- NOVA: Lógica para o gráfico "Coletas por Atividade" ---
+  void _recalcularColetasPorAtividade(Map<int, int> talhaoToAtividadeMap, Map<int, Atividade> atividadeMap) {
+    final List<dynamic> todasAsColetas = [
+      ..._parcelasFiltradas.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada), 
+      ..._cubagensFiltradas.where((c) => c.alturaTotal > 0)
+    ];
+    
+    if (todasAsColetas.isEmpty) {
+      _coletasPorAtividade = {};
+      return;
+    }
+
+    final grupoPorAtividadeId = groupBy(todasAsColetas, (coleta) {
+      int? talhaoId;
+      if (coleta is Parcela) talhaoId = coleta.talhaoId;
+      if (coleta is CubagemArvore) talhaoId = coleta.talhaoId;
+      return talhaoToAtividadeMap[talhaoId];
+    });
+
+    final mapaContagem = grupoPorAtividadeId.map((atividadeId, listaColetas) {
+      final atividade = atividadeMap[atividadeId];
+      final nomeAtividade = atividade?.tipo ?? 'Desconhecida';
+      return MapEntry(nomeAtividade, listaColetas.length);
+    });
+
+    _coletasPorAtividade = Map.fromEntries(
+        mapaContagem.entries.toList()..sort((a, b) => b.value.compareTo(a.value))
+    );
+  }
+
+  // Métodos que não foram alterados:
   void _recalcularKpisDeProjeto() {
     final parcelasConcluidas = _parcelasFiltradas.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada).toList();
     
     _totalAmostrasConcluidas = parcelasConcluidas.length;
     
-    // Simulação simplificada de volume. O ideal seria usar uma equação.
     _volumeTotalColetado = parcelasConcluidas.fold(0.0, (sum, p) {
         final areaHa = p.areaMetrosQuadrados / 10000;
-        // Um valor placeholder para volume/ha
         final volumePorHectare = 250.0; 
         return sum + (areaHa * volumePorHectare);
     });
@@ -185,35 +303,6 @@ class DashboardMetricsProvider with ChangeNotifier {
         concluidas: concluidas,
         progresso: progresso,
       );
-    }).toList();
-  }
-
-  List<CubagemArvore> _filtrarCubagens(
-    List<CubagemArvore> todasAsCubagens,
-    Map<int, int> talhaoToProjetoMap,
-    List<Projeto> projetosAtivos,
-    DashboardFilterProvider filterProvider,
-  ) {
-    final idsProjetosAtivos = projetosAtivos.map((p) => p.id).toSet();
-    return todasAsCubagens.where((c) {
-      final projetoId = talhaoToProjetoMap[c.talhaoId];
-
-      if (filterProvider.selectedProjetoIds.isNotEmpty) {
-        if (projetoId == null || !filterProvider.selectedProjetoIds.contains(projetoId)) return false;
-      } else {
-        if (projetoId == null || !idsProjetosAtivos.contains(projetoId)) return false;
-      }
-
-      if (filterProvider.selectedFazendaNomes.isNotEmpty) {
-        if (!filterProvider.selectedFazendaNomes.contains(c.nomeFazenda)) return false;
-      }
-      
-      if (filterProvider.lideresSelecionados.isNotEmpty) {
-        final nomeLider = c.nomeLider?.isNotEmpty == true ? c.nomeLider! : 'Gerente';
-        if (!filterProvider.lideresSelecionados.contains(nomeLider)) return false;
-      }
-      
-      return _filtroDeData(c.dataColeta, filterProvider);
     }).toList();
   }
 
@@ -272,24 +361,6 @@ class DashboardMetricsProvider with ChangeNotifier {
     final mapaContagem = grupoPorEquipe.map((nomeEquipe, listaParcelas) => MapEntry(nomeEquipe, listaParcelas.length));
     final sortedEntries = mapaContagem.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     _progressoPorEquipe = Map.fromEntries(sortedEntries);
-  }
-
-  void _recalcularColetasPorMes() {
-    final parcelas = _parcelasFiltradas.where((p) => p.status == StatusParcela.concluida && p.dataColeta != null).toList();
-    if (parcelas.isEmpty) {
-      _coletasPorMes = {};
-      return;
-    }
-    final grupoPorMes = groupBy(parcelas, (Parcela p) => DateFormat('MMM/yy', 'pt_BR').format(p.dataColeta!));
-    final mapaContagem = grupoPorMes.map((mes, lista) => MapEntry(mes, lista.length));
-    final chavesOrdenadas = mapaContagem.keys.toList()..sort((a, b) {
-      try {
-        final dataA = DateFormat('MMM/yy', 'pt_BR').parse(a);
-        final dataB = DateFormat('MMM/yy', 'pt_BR').parse(b);
-        return dataA.compareTo(dataB);
-      } catch (e) { return 0; }
-    });
-    _coletasPorMes = {for (var key in chavesOrdenadas) key: mapaContagem[key]!};
   }
 
   void _recalcularDesempenhoPorFazenda() {

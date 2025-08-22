@@ -1,4 +1,4 @@
-// lib/pages/gerente/projetos_dashboard_page.dart (VERSÃO COM CORREÇÃO DO notifyListeners)
+// lib/pages/gerente/projetos_dashboard_page.dart (VERSÃO FINAL E LIMPA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -22,8 +22,7 @@ class ProjetosDashboardPage extends StatefulWidget {
 class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
   final _exportService = ExportService();
   final NumberFormat _volumeFormat = NumberFormat.decimalPattern('pt_BR');
-  final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$ ');
-
+  // A linha do _currencyFormat foi removida daqui.
 
   @override
   void initState() {
@@ -44,7 +43,7 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
 
         if (gerenteProvider.error != null) {
           return Center(
-              child: Text('Ocorreu um erro:\\n${gerenteProvider.error}',
+              child: Text('Ocorreu um erro:\n${gerenteProvider.error}',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.red)));
         }
@@ -72,13 +71,13 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                 color: Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(height: 24),
-              _buildKpiGrid(context, metricsProvider, operacoesProvider),
+              _buildKpiGrid(context, metricsProvider),
               const SizedBox(height: 24),
               if (metricsProvider.progressoPorEquipe.isNotEmpty)
                 _buildRankingCard(context, metricsProvider.progressoPorEquipe),
               const SizedBox(height: 24),
-              if (metricsProvider.coletasPorMes.isNotEmpty)
-                _buildBarChartWithTrendLineCard(context, metricsProvider.coletasPorMes),
+              if (metricsProvider.coletasPorAtividade.isNotEmpty)
+                _buildColetasPorAtividadeChartCard(context, metricsProvider.coletasPorAtividade),
               const SizedBox(height: 24),
               if (metricsProvider.desempenhoPorFazenda.isNotEmpty)
                 _buildFazendaDataTableCard(context, metricsProvider.desempenhoPorFazenda, metricsProvider.desempenhoInventarioTotais),
@@ -128,6 +127,8 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
           children: [
             _buildMultiSelectProjectFilter(context, filterProvider),
             const SizedBox(height: 8),
+            _buildAtividadeFilter(context, filterProvider),
+            const SizedBox(height: 8),
             _buildMultiSelectFazendaFilter(context, filterProvider),
             const SizedBox(height: 16),
             Row(
@@ -139,6 +140,131 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
             ),
             if (filterProvider.periodo == PeriodoFiltro.personalizado)
               _buildDatePicker(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAtividadeFilter(BuildContext context, DashboardFilterProvider provider) {
+    final atividadesDisponiveis = provider.atividadesDisponiveis;
+    if (atividadesDisponiveis.isEmpty && provider.selectedProjetoIds.isNotEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return DropdownButtonFormField<int>(
+      value: provider.selectedAtividadeId,
+      hint: const Text("Todas as Atividades"),
+      isExpanded: true,
+      decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0)),
+      items: [
+        const DropdownMenuItem<int>(
+          value: null,
+          child: Text("Todas as Atividades"),
+        ),
+        ...atividadesDisponiveis.map((atividade) => DropdownMenuItem(
+          value: atividade.id,
+          child: Text(atividade.tipo, overflow: TextOverflow.ellipsis),
+        )),
+      ],
+      onChanged: (value) {
+        context.read<DashboardFilterProvider>().setSelectedAtividade(value);
+      },
+    );
+  }
+
+  Widget _buildKpiGrid(BuildContext context, DashboardMetricsProvider metrics) {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
+      childAspectRatio: 1.2,
+      children: [
+        _buildKpiCard('Volume Coletado', '${_volumeFormat.format(metrics.volumeTotalColetado)} m³', Icons.forest, Colors.teal),
+        _buildKpiCard('Amostras Concluídas', metrics.totalAmostrasConcluidas.toString(), Icons.checklist, Colors.blue),
+        _buildKpiCard('Cubagens Concluídas', metrics.totalCubagensConcluidas.toString(), Icons.architecture, Colors.orange),
+        _buildKpiCard('Média Diária', '${metrics.mediaDiariaColetas.toStringAsFixed(1)} coletas', Icons.show_chart, Colors.purple),
+      ],
+    );
+  }
+
+  Widget _buildColetasPorAtividadeChartCard(BuildContext context, Map<String, int> data) {
+    final entries = data.entries.toList();
+    final barGroups = entries.asMap().entries.map((entry) {
+      return BarChartGroupData(
+        x: entry.key,
+        barRods: [
+          BarChartRodData(toY: entry.value.value.toDouble(), color: Colors.indigo, borderRadius: BorderRadius.circular(4))
+        ],
+      );
+    }).toList();
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Text("Coletas Concluídas por Atividade", style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 250,
+              child: BarChart(
+                BarChartData(
+                    barGroups: barGroups,
+                    titlesData: FlTitlesData(
+                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 30,
+                          getTitlesWidget: (double value, TitleMeta meta) {
+                            if (value.toInt() >= entries.length) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Text(
+                                entries[value.toInt()].key,
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                       leftTitles: const AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 28,
+                        ),
+                      ),
+                    ),
+                    barTouchData: BarTouchData(
+                      touchTooltipData: BarTouchTooltipData(
+                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                          final atividade = entries[groupIndex].key;
+                          final total = entries[groupIndex].value;
+                          return BarTooltipItem(
+                            '$atividade\n',
+                            const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            children: <TextSpan>[
+                              TextSpan(
+                                text: total.toString(),
+                                style: const TextStyle(
+                                  color: Colors.yellow,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -162,7 +288,6 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
         title: 'Filtrar por Projeto',
         items: projetosDisponiveis.map((p) => {'id': p.id, 'label': p.nome}).toList(),
         selectedItems: provider.selectedProjetoIds.map((id) => id as dynamic).toSet(),
-        // <<< CORREÇÃO AQUI >>>
         onConfirm: (selected) => context.read<DashboardFilterProvider>().setSelectedProjetos(selected.cast<int>()),
         onClear: () => context.read<DashboardFilterProvider>().clearProjetoSelection(),
       ),
@@ -197,7 +322,6 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
         title: 'Filtrar por Fazenda',
         items: provider.fazendasDisponiveis.map((nome) => {'id': nome, 'label': nome}).toList(),
         selectedItems: provider.selectedFazendaNomes,
-        // <<< CORREÇÃO AQUI >>>
         onConfirm: (selected) => context.read<DashboardFilterProvider>().setSelectedFazendas(selected.cast<String>()),
         onClear: () => context.read<DashboardFilterProvider>().clearFazendaSelection(),
       ),
@@ -370,26 +494,6 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
   
-  Widget _buildKpiGrid(BuildContext context, DashboardMetricsProvider metrics, OperacoesProvider operacoes) {
-    final totalColetas = metrics.totalAmostrasConcluidas + metrics.totalCubagensConcluidas;
-    final custoPorColeta = totalColetas > 0 ? operacoes.kpis.custoTotalCampo / totalColetas : 0.0;
-
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 1.2,
-      children: [
-        _buildKpiCard('Volume Coletado', '${_volumeFormat.format(metrics.volumeTotalColetado)} m³', Icons.forest, Colors.teal),
-        _buildKpiCard('Amostras Concluídas', metrics.totalAmostrasConcluidas.toString(), Icons.checklist, Colors.blue),
-        _buildKpiCard('Cubagens Concluídas', metrics.totalCubagensConcluidas.toString(), Icons.architecture, Colors.orange),
-        _buildKpiCard('Custo / Coleta', _currencyFormat.format(custoPorColeta), Icons.attach_money, Colors.red),
-      ],
-    );
-  }
-  
   Widget _buildKpiCard(String title, String value, IconData icon, Color color) {
     return Card(
       elevation: 2,
@@ -462,73 +566,6 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
-  Widget _buildBarChartWithTrendLineCard(BuildContext context, Map<String, int> data) {
-    final entries = data.entries.toList();
-    final barGroups = entries.asMap().entries.map((entry) {
-      return BarChartGroupData(
-        x: entry.key,
-        barRods: [
-          BarChartRodData(toY: entry.value.value.toDouble(), color: Colors.indigo, borderRadius: BorderRadius.circular(4))
-        ],
-      );
-    }).toList();
-
-    final double media = data.values.isEmpty ? 0 : data.values.reduce((a, b) => a + b) / data.values.length;
-
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Text("Coletas Concluídas por Mês", style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 24),
-            SizedBox(
-              height: 250,
-              child: BarChart(
-                BarChartData(
-                    barGroups: barGroups,
-                    titlesData: FlTitlesData(
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 22,
-                          getTitlesWidget: (double value, TitleMeta meta) {
-                            if (value.toInt() >= entries.length) return const SizedBox.shrink();
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: Text(entries[value.toInt()].key, style: const TextStyle(fontSize: 10)),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    extraLinesData: ExtraLinesData(
-                      horizontalLines: [
-                        HorizontalLine(
-                            y: media,
-                            color: Colors.red.withOpacity(0.8),
-                            strokeWidth: 2,
-                            dashArray: [10, 5],
-                            label: HorizontalLineLabel(
-                              show: true,
-                              alignment: Alignment.topRight,
-                              padding: const EdgeInsets.only(right: 5, bottom: 5),
-                              labelResolver: (line) => 'Média: ${line.y.toStringAsFixed(1)}',
-                              style: TextStyle(color: Colors.red.withOpacity(0.8), fontWeight: FontWeight.bold),
-                            )),
-                      ],
-                    )),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  
   Widget _buildFazendaDataTableCard(BuildContext context, List<DesempenhoFazenda> data, DesempenhoFazendaTotais totais) {
     return Card(
       elevation: 2,

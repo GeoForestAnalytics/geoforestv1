@@ -1,7 +1,8 @@
-// lib/providers/dashboard_filter_provider.dart (VERSÃO COM MÉTODOS DE ATUALIZAÇÃO CORRIGIDOS)
+// lib/providers/dashboard_filter_provider.dart
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 
@@ -18,6 +19,10 @@ class DashboardFilterProvider with ChangeNotifier {
   DateTimeRange? _periodoPersonalizado;
   List<String> _lideresDisponiveis = [];
   Set<String> _lideresSelecionados = {};
+  // --- NOVO ---
+  List<Atividade> _atividadesDisponiveis = [];
+  int? _selectedAtividadeId;
+
 
   // --- Getters ---
   List<Projeto> get projetosDisponiveis => _projetosDisponiveis;
@@ -28,11 +33,23 @@ class DashboardFilterProvider with ChangeNotifier {
   DateTimeRange? get periodoPersonalizado => _periodoPersonalizado;
   List<String> get lideresDisponiveis => _lideresDisponiveis;
   Set<String> get lideresSelecionados => _lideresSelecionados;
+  // --- NOVO ---
+  List<Atividade> get atividadesDisponiveis => _atividadesDisponiveis;
+  int? get selectedAtividadeId => _selectedAtividadeId;
+
   
   // --- Métodos de atualização chamados pelo ProxyProvider ---
   void updateProjetosDisponiveis(List<Projeto> novosProjetos) {
     _projetosDisponiveis = novosProjetos;
     _selectedProjetoIds.removeWhere((id) => !_projetosDisponiveis.any((p) => p.id == id));
+  }
+
+  // --- NOVO ---
+  void updateAtividadesDisponiveis(List<Atividade> atividades) {
+    _atividadesDisponiveis = atividades;
+    if (_selectedAtividadeId != null && !_atividadesDisponiveis.any((a) => a.id == _selectedAtividadeId)) {
+      _selectedAtividadeId = null; 
+    }
   }
 
   void updateFazendasDisponiveis(List<Parcela> parcelas) {
@@ -52,18 +69,22 @@ class DashboardFilterProvider with ChangeNotifier {
   }
 
   // --- Métodos de manipulação dos filtros (chamados pela UI) ---
-
-  // <<< NOVO MÉTODO PARA ATUALIZAR A SELEÇÃO DE PROJETOS >>>
   void setSelectedProjetos(Set<int> newSelection) {
     _selectedProjetoIds = newSelection;
     _selectedFazendaNomes.clear();
     _lideresSelecionados.clear();
+    _selectedAtividadeId = null; // Limpa o filtro de atividade ao mudar o projeto
     notifyListeners();
   }
 
-  // <<< NOVO MÉTODO PARA ATUALIZAR A SELEÇÃO DE FAZENDAS >>>
   void setSelectedFazendas(Set<String> newSelection) {
     _selectedFazendaNomes = newSelection;
+    notifyListeners();
+  }
+  
+  // --- NOVO ---
+  void setSelectedAtividade(int? atividadeId) {
+    _selectedAtividadeId = atividadeId;
     notifyListeners();
   }
 
@@ -71,6 +92,7 @@ class DashboardFilterProvider with ChangeNotifier {
     _selectedProjetoIds.clear();
     _selectedFazendaNomes.clear();
     _lideresSelecionados.clear();
+    _selectedAtividadeId = null; // Limpa o filtro de atividade
     notifyListeners();
   }
   
