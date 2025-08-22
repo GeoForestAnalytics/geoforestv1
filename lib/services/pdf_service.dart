@@ -1,4 +1,4 @@
-// lib/services/pdf_service.dart (VERSÃO COM REGENERAÇÃO DE PDF DO PLANO)
+// lib/services/pdf_service.dart (VERSÃO COM OUTROS GASTOS NO PDF)
 
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -20,17 +20,14 @@ import 'package:collection/collection.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 
-// <<< NOVOS IMPORTS NECESSÁRIOS >>>
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 
 
 class PdfService {
   final _analiseRepository = AnaliseRepository();
-  // <<< NOVA INSTÂNCIA DE REPOSITÓRIO >>>
   final _talhaoRepository = TalhaoRepository();
 
-  // ... (Toda a lógica de permissão e salvamento de PDF permanece a mesma)
   Future<bool> _requestPermission(BuildContext context) async {
     PermissionStatus status;
     if (Platform.isAndroid) {
@@ -121,8 +118,6 @@ class PdfService {
     }
   }
   
-  // ... (métodos de gerarRelatorioDiario... e outros permanecem iguais)
-
   Future<void> gerarRelatorioDiarioConsolidadoPdf({
     required BuildContext context,
     required DiarioDeCampo diario,
@@ -154,7 +149,7 @@ class PdfService {
       ),
     );
 
-    final nomeLiderFmt = diario.nomeLider.replaceAll(RegExp(r'\s+'), '_');
+    final nomeLiderFmt = diario.nomeLider.replaceAll(RegExp(r'\\s+'), '_');
     final nomeArquivo = 'Relatorio_Diario_${nomeLiderFmt}_${diario.dataRelatorio}.pdf';
     
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
@@ -303,8 +298,6 @@ class PdfService {
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
   
-  // <<< NOVO MÉTODO PARA REGERAR PDF ADICIONADO AQUI >>>
-  /// Regenera um PDF de um plano de cubagem já existente a partir de uma atividade.
   Future<void> gerarPdfDePlanoExistente({
     required BuildContext context,
     required Atividade atividade,
@@ -317,7 +310,6 @@ class PdfService {
 
     final pdf = pw.Document();
     
-    // Agrupa as árvores por talhão para criar uma página por talhão
     final grupoPorTalhao = groupBy(placeholders, (CubagemArvore c) => c.talhaoId);
 
     for (var talhaoId in grupoPorTalhao.keys) {
@@ -325,7 +317,6 @@ class PdfService {
       final primeiroItem = arvoresDoTalhao.first;
       final talhao = await _talhaoRepository.getTalhaoById(talhaoId!);
 
-      // Conta quantas árvores por classe diamétrica
       final plano = <String, int>{};
       for (var arvore in arvoresDoTalhao) {
         if (arvore.classe != null) {
@@ -439,6 +430,7 @@ class PdfService {
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
 
+  // <<< INÍCIO DA MODIFICAÇÃO >>>
   pw.Widget _buildTabelaDiarioPdf(DiarioDeCampo diario) {
     final nf = NumberFormat("#,##0.00", "pt_BR");
     final distancia = (diario.kmFinal ?? 0) - (diario.kmInicial ?? 0);
@@ -466,11 +458,16 @@ class PdfService {
           ['Abastecimento (R\$):', diario.abastecimentoValor != null ? 'R\$ ${nf.format(diario.abastecimentoValor)}' : 'N/A'],
           ['Alimentação:', '${diario.alimentacaoMarmitasQtd ?? 0} marmitas. ${diario.alimentacaoDescricao ?? ''}'],
           ['Outras Refeições (R\$):', diario.alimentacaoRefeicaoValor != null ? 'R\$ ${nf.format(diario.alimentacaoRefeicaoValor)}' : 'N/A'],
+          // --- LINHAS ADICIONADAS ---
+          ['Outras Despesas (R\$):', diario.outrasDespesasValor != null ? 'R\$ ${nf.format(diario.outrasDespesasValor)}' : 'N/A'],
+          ['Descrição Outras Despesas:', diario.outrasDespesasDescricao ?? 'N/A'],
+          // --------------------------
         ],
         border: null,
       ),
     ]);
   }
+  // <<< FIM DA MODIFICAÇÃO >>>
 
   pw.Widget _buildResumoColetasPdf(List<Parcela> parcelas, List<CubagemArvore> cubagens) {
     return pw.Column(

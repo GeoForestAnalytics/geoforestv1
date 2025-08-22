@@ -1,9 +1,8 @@
-// lib/providers/operacoes_filter_provider.dart (VERSÃO FINAL COM OPÇÃO "TODOS")
+// lib/providers/operacoes_filter_provider.dart (VERSÃO COM PERÍODO PADRÃO "TODOS")
 
 import 'package:flutter/material.dart';
 
 /// Enum para definir os períodos de filtro pré-configurados.
-// <<< ALTERAÇÃO 1: Adicionando a nova opção 'todos' >>>
 enum PeriodoFiltro { todos, hoje, ultimos7Dias, esteMes, mesPassado, personalizado }
 
 /// Provider responsável por gerenciar o estado dos filtros do Dashboard de Operações.
@@ -11,7 +10,7 @@ class OperacoesFilterProvider with ChangeNotifier {
   // --- ESTADO DOS FILTROS ---
 
   // Filtro de Período
-  // <<< ALTERAÇÃO 2: O valor inicial padrão agora é 'todos' >>>
+  // <<< ALTERAÇÃO: O valor inicial padrão agora é 'todos' >>>
   PeriodoFiltro _periodo = PeriodoFiltro.todos;
   DateTimeRange? _periodoPersonalizado;
 
@@ -37,7 +36,6 @@ class OperacoesFilterProvider with ChangeNotifier {
     if (_periodo == PeriodoFiltro.personalizado) {
       _periodoPersonalizado = personalizado;
     } else {
-      // Limpa o período personalizado se outra opção for selecionada
       _periodoPersonalizado = null;
     }
     notifyListeners();
@@ -69,9 +67,8 @@ class OperacoesFilterProvider with ChangeNotifier {
 extension PeriodoFiltroExtension on PeriodoFiltro {
   String get displayName {
     switch (this) {
-      // <<< ALTERAÇÃO 3: Adicionando o nome de exibição para a nova opção >>>
       case PeriodoFiltro.todos:
-        return 'Todos os Períodos';
+        return 'Todos';
       case PeriodoFiltro.hoje:
         return 'Hoje';
       case PeriodoFiltro.ultimos7Dias:

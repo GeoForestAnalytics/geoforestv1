@@ -1,76 +1,108 @@
-// lib/providers/dashboard_filter_provider.dart (VERSÃO COM FILTRO DE FAZENDA)
+// lib/providers/dashboard_filter_provider.dart (VERSÃO COM MÉTODOS DE ATUALIZAÇÃO CORRIGIDOS)
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 
+// Enum copiado do filtro de operações para manter a consistência
+enum PeriodoFiltro { todos, hoje, ultimos7Dias, esteMes, mesPassado, personalizado }
+
 class DashboardFilterProvider with ChangeNotifier {
-  // --- Filtro de Projeto (Existente) ---
+  // --- Filtros ---
   List<Projeto> _projetosDisponiveis = [];
   Set<int> _selectedProjetoIds = {};
-
-  List<Projeto> get projetosDisponiveis => _projetosDisponiveis;
-  Set<int> get selectedProjetoIds => _selectedProjetoIds;
-
-  // --- Filtro de Fazenda (Novo) ---
   List<String> _fazendasDisponiveis = [];
   Set<String> _selectedFazendaNomes = {};
+  PeriodoFiltro _periodo = PeriodoFiltro.todos;
+  DateTimeRange? _periodoPersonalizado;
+  List<String> _lideresDisponiveis = [];
+  Set<String> _lideresSelecionados = {};
 
+  // --- Getters ---
+  List<Projeto> get projetosDisponiveis => _projetosDisponiveis;
+  Set<int> get selectedProjetoIds => _selectedProjetoIds;
   List<String> get fazendasDisponiveis => _fazendasDisponiveis;
   Set<String> get selectedFazendaNomes => _selectedFazendaNomes;
+  PeriodoFiltro get periodo => _periodo;
+  DateTimeRange? get periodoPersonalizado => _periodoPersonalizado;
+  List<String> get lideresDisponiveis => _lideresDisponiveis;
+  Set<String> get lideresSelecionados => _lideresSelecionados;
   
-  /// Chamado pelo ProxyProvider para atualizar a lista de projetos.
+  // --- Métodos de atualização chamados pelo ProxyProvider ---
   void updateProjetosDisponiveis(List<Projeto> novosProjetos) {
     _projetosDisponiveis = novosProjetos;
-    // Garante que não fiquem IDs de projetos que não existem mais
     _selectedProjetoIds.removeWhere((id) => !_projetosDisponiveis.any((p) => p.id == id));
   }
 
-  /// <<< NOVO MÉTODO >>>
-  /// Chamado pelo ProxyProvider para atualizar a lista de fazendas.
   void updateFazendasDisponiveis(List<Parcela> parcelas) {
-      // Extrai os nomes únicos de fazendas das parcelas filtradas por projeto
       final nomesFazendas = parcelas
           .where((p) => p.nomeFazenda != null && p.nomeFazenda!.isNotEmpty)
           .map((p) => p.nomeFazenda!)
           .toSet()
           .toList();
-      nomesFazendas.sort(); // Ordena alfabeticamente
+      nomesFazendas.sort();
       _fazendasDisponiveis = nomesFazendas;
-      // Garante que não fiquem nomes de fazendas que não existem mais no filtro atual
       _selectedFazendaNomes.removeWhere((nome) => !_fazendasDisponiveis.contains(nome));
   }
+  
+  void updateLideresDisponiveis(List<String> lideres) {
+    _lideresDisponiveis = lideres..sort();
+    _lideresSelecionados.removeWhere((l) => !_lideresDisponiveis.contains(l));
+  }
 
-  void toggleProjetoSelection(int projetoId) {
-    if (_selectedProjetoIds.contains(projetoId)) {
-      _selectedProjetoIds.remove(projetoId);
-    } else {
-      _selectedProjetoIds.add(projetoId);
-    }
-    // Ao mudar o projeto, limpamos o filtro de fazenda para evitar inconsistências
+  // --- Métodos de manipulação dos filtros (chamados pela UI) ---
+
+  // <<< NOVO MÉTODO PARA ATUALIZAR A SELEÇÃO DE PROJETOS >>>
+  void setSelectedProjetos(Set<int> newSelection) {
+    _selectedProjetoIds = newSelection;
     _selectedFazendaNomes.clear();
+    _lideresSelecionados.clear();
     notifyListeners();
   }
-  
+
+  // <<< NOVO MÉTODO PARA ATUALIZAR A SELEÇÃO DE FAZENDAS >>>
+  void setSelectedFazendas(Set<String> newSelection) {
+    _selectedFazendaNomes = newSelection;
+    notifyListeners();
+  }
+
   void clearProjetoSelection() {
     _selectedProjetoIds.clear();
-    _selectedFazendaNomes.clear(); // Limpa também o filtro de fazenda
-    notifyListeners();
-  }
-
-  /// <<< NOVO MÉTODO >>>
-  void toggleFazendaSelection(String fazendaNome) {
-    if (_selectedFazendaNomes.contains(fazendaNome)) {
-      _selectedFazendaNomes.remove(fazendaNome);
-    } else {
-      _selectedFazendaNomes.add(fazendaNome);
-    }
+    _selectedFazendaNomes.clear();
+    _lideresSelecionados.clear();
     notifyListeners();
   }
   
-  /// <<< NOVO MÉTODO >>>
   void clearFazendaSelection() {
     _selectedFazendaNomes.clear();
     notifyListeners();
+  }
+
+  void setPeriodo(PeriodoFiltro novoPeriodo, {DateTimeRange? personalizado}) {
+    _periodo = novoPeriodo;
+    _periodoPersonalizado = (_periodo == PeriodoFiltro.personalizado) ? personalizado : null;
+    notifyListeners();
+  }
+
+  void setSingleLider(String? lider) {
+    _lideresSelecionados.clear();
+    if (lider != null) {
+      _lideresSelecionados.add(lider);
+    }
+    notifyListeners();
+  }
+}
+
+extension PeriodoFiltroExtension on PeriodoFiltro {
+  String get displayName {
+    switch (this) {
+      case PeriodoFiltro.todos: return 'Todos';
+      case PeriodoFiltro.hoje: return 'Hoje';
+      case PeriodoFiltro.ultimos7Dias: return 'Últimos 7 dias';
+      case PeriodoFiltro.esteMes: return 'Este mês';
+      case PeriodoFiltro.mesPassado: return 'Mês passado';
+      case PeriodoFiltro.personalizado: return 'Personalizado';
+    }
   }
 }

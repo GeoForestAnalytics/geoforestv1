@@ -1,4 +1,4 @@
-// lib/providers/operacoes_provider.dart (VERSÃO FINAL COM IMPORT CORRIGIDO)
+// lib/providers/operacoes_provider.dart (VERSÃO COM MAIS KPIs PARA OS TOTALIZADORES)
 
 import 'package:flutter/foundation.dart';
 import 'package:collection/collection.dart';
@@ -6,20 +6,24 @@ import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
-import 'package:intl/intl.dart'; // <<< IMPORT ADICIONADO AQUI >>>
+import 'package:intl/intl.dart';
 
-// Classes de modelo para estruturar os dados calculados
+// <<< 1. ATUALIZAÇÃO DO MODELO DE DADOS DOS KPIs >>>
 class KpiData {
   final int coletasRealizadas;
   final double custoTotalCampo;
   final double kmRodados;
   final double custoPorColeta;
+  final double custoTotalAbastecimento;
+  final double custoMedioKmGeral;
 
   KpiData({
     this.coletasRealizadas = 0,
     this.custoTotalCampo = 0.0,
     this.kmRodados = 0.0,
     this.custoPorColeta = 0.0,
+    this.custoTotalAbastecimento = 0.0,
+    this.custoMedioKmGeral = 0.0,
   });
 }
 
@@ -37,23 +41,19 @@ class CustoPorVeiculo {
   });
 }
 
-/// Provider responsável por calcular as métricas do Dashboard de Operações.
 class OperacoesProvider with ChangeNotifier {
-  // --- DADOS FILTRADOS E CALCULADOS ---
   KpiData _kpis = KpiData();
   Map<String, double> _composicaoDespesas = {};
   Map<String, int> _coletasPorEquipe = {};
   List<CustoPorVeiculo> _custosPorVeiculo = [];
   List<DiarioDeCampo> _diariosFiltrados = [];
 
-  // --- GETTERS PÚBLICOS ---
   KpiData get kpis => _kpis;
   Map<String, double> get composicaoDespesas => _composicaoDespesas;
   Map<String, int> get coletasPorEquipe => _coletasPorEquipe;
   List<CustoPorVeiculo> get custosPorVeiculo => _custosPorVeiculo;
   List<DiarioDeCampo> get diariosFiltrados => _diariosFiltrados;
 
-  /// Método principal chamado pelo ProxyProvider para atualizar todos os cálculos.
   void update(GerenteProvider gerenteProvider, OperacoesFilterProvider filterProvider) {
     final todosOsDiarios = gerenteProvider.diariosSincronizados;
     final todasAsParcelas = gerenteProvider.parcelasSincronizadas;
@@ -67,7 +67,6 @@ class OperacoesProvider with ChangeNotifier {
     final parcelasFiltradas = todasAsParcelas.where((p) {
       if (p.dataColeta == null || p.nomeLider == null) return false;
       final dataString = DateFormat('yyyy-MM-dd').format(p.dataColeta!);
-      // Se não houver líderes filtrados, considera todos.
       final liderMatch = lideresFiltrados.isEmpty || lideresFiltrados.contains(p.nomeLider!);
       return datasFiltradas.contains(dataString) && liderMatch;
     }).toList();
@@ -75,7 +74,6 @@ class OperacoesProvider with ChangeNotifier {
     final cubagensFiltradas = todasAsCubagens.where((c) {
       if (c.dataColeta == null || c.nomeLider == null) return false;
       final dataString = DateFormat('yyyy-MM-dd').format(c.dataColeta!);
-      // Se não houver líderes filtrados, considera todos.
       final liderMatch = lideresFiltrados.isEmpty || lideresFiltrados.contains(c.nomeLider!);
       return datasFiltradas.contains(dataString) && liderMatch;
     }).toList();
@@ -149,23 +147,29 @@ class OperacoesProvider with ChangeNotifier {
     }
   }
 
+  // <<< 2. ATUALIZAÇÃO DOS CÁLCULOS GERAIS (KPIs) >>>
   void _calcularKPIs(List<DiarioDeCampo> diarios, int totalColetas) {
-    final double custoTotal = diarios.fold(0.0, (prev, d) {
-      return prev + (d.abastecimentoValor ?? 0) + (d.pedagioValor ?? 0) + (d.alimentacaoRefeicaoValor ?? 0);
-    });
+    double custoTotal = 0;
+    double custoAbastecimentoTotal = 0;
+    double kmTotal = 0;
 
-    final double kmTotal = diarios.fold(0.0, (prev, d) {
+    for (final d in diarios) {
+      final abastecimento = d.abastecimentoValor ?? 0;
+      custoAbastecimentoTotal += abastecimento;
+      custoTotal += abastecimento + (d.pedagioValor ?? 0) + (d.alimentacaoRefeicaoValor ?? 0) + (d.outrasDespesasValor ?? 0);
+
       if (d.kmFinal != null && d.kmInicial != null && d.kmFinal! > d.kmInicial!) {
-        return prev + (d.kmFinal! - d.kmInicial!);
+        kmTotal += (d.kmFinal! - d.kmInicial!);
       }
-      return prev;
-    });
+    }
 
     _kpis = KpiData(
       coletasRealizadas: totalColetas,
       custoTotalCampo: custoTotal,
       kmRodados: kmTotal,
       custoPorColeta: totalColetas > 0 ? custoTotal / totalColetas : 0.0,
+      custoTotalAbastecimento: custoAbastecimentoTotal,
+      custoMedioKmGeral: kmTotal > 0 ? custoAbastecimentoTotal / kmTotal : 0.0,
     );
   }
 

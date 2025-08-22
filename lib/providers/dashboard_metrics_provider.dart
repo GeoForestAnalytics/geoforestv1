@@ -1,4 +1,4 @@
-// lib/providers/dashboard_metrics_provider.dart (VERSÃO COM AGRUPAMENTO DE CUBAGEM CORRIGIDO)
+// lib/providers/dashboard_metrics_provider.dart (VERSÃO CORRIGIDA COM GETTERS FALTANTES)
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
@@ -8,6 +8,7 @@ import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/material.dart';
 
 class ProgressoFazenda {
   final String nome;
@@ -22,8 +23,6 @@ class ProgressoFazenda {
     required this.progresso,
   });
 }
-
-// Removido o DesempenhoCubagem, pois usaremos o DesempenhoFazenda para ambos.
 
 class DesempenhoFazenda {
   final String nomeAtividade;
@@ -44,27 +43,57 @@ class DesempenhoFazenda {
   });
 }
 
+class DesempenhoFazendaTotais {
+  final int pendentes;
+  final int emAndamento;
+  final int concluidas;
+  final int exportadas;
+  final int total;
+  DesempenhoFazendaTotais({ this.pendentes = 0, this.emAndamento = 0, this.concluidas = 0, this.exportadas = 0, this.total = 0 });
+}
+
 
 class DashboardMetricsProvider with ChangeNotifier {
   
   List<Parcela> _parcelasFiltradas = [];
-  // <<< MUDANÇA 1: A lista de cubagem agora usa o mesmo modelo da de inventário >>>
+  List<CubagemArvore> _cubagensFiltradas = [];
+
   List<DesempenhoFazenda> _desempenhoPorCubagem = [];
   Map<String, int> _progressoPorEquipe = {};
   Map<String, int> _coletasPorMes = {};
   List<DesempenhoFazenda> _desempenhoPorFazenda = [];
   List<ProgressoFazenda> _progressoPorFazenda = [];
+  DesempenhoFazendaTotais _desempenhoInventarioTotais = DesempenhoFazendaTotais();
+  DesempenhoFazendaTotais _desempenhoCubagemTotais = DesempenhoFazendaTotais();
+  
+  // <<< CORREÇÃO: Variáveis privadas para os novos KPIs >>>
+  double _volumeTotalColetado = 0.0;
+  int _totalAmostrasConcluidas = 0;
+  int _totalCubagensConcluidas = 0;
   
   List<Parcela> get parcelasFiltradas => _parcelasFiltradas;
-  // <<< MUDANÇA 2: O getter é atualizado para o novo tipo >>>
   List<DesempenhoFazenda> get desempenhoPorCubagem => _desempenhoPorCubagem;
   Map<String, int> get progressoPorEquipe => _progressoPorEquipe;
   Map<String, int> get coletasPorMes => _coletasPorMes;
   List<DesempenhoFazenda> get desempenhoPorFazenda => _desempenhoPorFazenda;
   List<ProgressoFazenda> get progressoPorFazenda => _progressoPorFazenda;
+  DesempenhoFazendaTotais get desempenhoInventarioTotais => _desempenhoInventarioTotais;
+  DesempenhoFazendaTotais get desempenhoCubagemTotais => _desempenhoCubagemTotais;
+  // <<< CORREÇÃO: Getters públicos para os novos KPIs >>>
+  double get volumeTotalColetado => _volumeTotalColetado;
+  int get totalAmostrasConcluidas => _totalAmostrasConcluidas;
+  int get totalCubagensConcluidas => _totalCubagensConcluidas;
+
 
   void update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) {
     debugPrint("METRICS PROVIDER UPDATE: Recebeu ${gerenteProvider.parcelasSincronizadas.length} parcelas para calcular.");
+    
+    final lideres = {
+      ...gerenteProvider.parcelasSincronizadas.map((p) => p.nomeLider),
+      ...gerenteProvider.cubagensSincronizadas.map((c) => c.nomeLider),
+    }.where((nome) => nome != null && nome.isNotEmpty).cast<String>().toSet().toList();
+    filterProvider.updateLideresDisponiveis(lideres);
+
     final projetosAtivos = gerenteProvider.projetos.where((p) => p.status == 'ativo').toList();
     final Map<int, String> atividadeIdToTipoMap = { for (var a in gerenteProvider.atividades) if (a.id != null) a.id!: a.tipo };
 
@@ -73,18 +102,23 @@ class DashboardMetricsProvider with ChangeNotifier {
       projetosAtivos,
       filterProvider,
     );
+    
+    _cubagensFiltradas = _filtrarCubagens(
+      gerenteProvider.cubagensSincronizadas, 
+      gerenteProvider.talhaoToProjetoMap, 
+      projetosAtivos, 
+      filterProvider
+    );
 
     _recalcularDesempenhoPorCubagem(
-      gerenteProvider.cubagensSincronizadas,
-      gerenteProvider.talhaoToProjetoMap,
       gerenteProvider.talhaoToAtividadeMap,
-      atividadeIdToTipoMap,
-      projetosAtivos,
-      filterProvider,
+      atividadeIdToTipoMap
     );
-    _recalcularProgressoPorEquipe(filterProvider);
-    _recalcularColetasPorMes(filterProvider);
-    _recalcularDesempenhoPorFazenda(filterProvider);
+
+    _recalcularKpisDeProjeto();
+    _recalcularProgressoPorEquipe();
+    _recalcularColetasPorMes();
+    _recalcularDesempenhoPorFazenda();
     _recalcularProgressoPorFazenda();
     
     notifyListeners();
@@ -93,19 +127,40 @@ class DashboardMetricsProvider with ChangeNotifier {
   void _recalcularParcelasFiltradas(List<Parcela> todasAsParcelas, List<Projeto> projetosAtivos, DashboardFilterProvider filterProvider) {
     final idsProjetosAtivos = projetosAtivos.map((p) => p.id!).toSet();
     
-    List<Parcela> parcelasVisiveis;
+    _parcelasFiltradas = todasAsParcelas.where((p) {
+      if (filterProvider.selectedProjetoIds.isNotEmpty) {
+        if (p.projetoId == null || !filterProvider.selectedProjetoIds.contains(p.projetoId)) return false;
+      } else {
+        if (p.projetoId == null || !idsProjetosAtivos.contains(p.projetoId)) return false;
+      }
 
-    if (filterProvider.selectedProjetoIds.isEmpty) {
-      parcelasVisiveis = todasAsParcelas
-          .where((p) => p.projetoId != null && idsProjetosAtivos.contains(p.projetoId))
-          .toList();
-    } else {
-      parcelasVisiveis = todasAsParcelas
-          .where((p) => p.projetoId != null && filterProvider.selectedProjetoIds.contains(p.projetoId))
-          .toList();
-    }
+      if (filterProvider.selectedFazendaNomes.isNotEmpty) {
+        if (p.nomeFazenda == null || !filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!)) return false;
+      }
+
+      if (filterProvider.lideresSelecionados.isNotEmpty) {
+        final nomeLider = p.nomeLider?.isNotEmpty == true ? p.nomeLider! : 'Gerente';
+        if (!filterProvider.lideresSelecionados.contains(nomeLider)) return false;
+      }
+
+      return _filtroDeData(p.dataColeta, filterProvider);
+    }).toList();
+  }
+
+  void _recalcularKpisDeProjeto() {
+    final parcelasConcluidas = _parcelasFiltradas.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada).toList();
     
-    _parcelasFiltradas = parcelasVisiveis;
+    _totalAmostrasConcluidas = parcelasConcluidas.length;
+    
+    // Simulação simplificada de volume. O ideal seria usar uma equação.
+    _volumeTotalColetado = parcelasConcluidas.fold(0.0, (sum, p) {
+        final areaHa = p.areaMetrosQuadrados / 10000;
+        // Um valor placeholder para volume/ha
+        final volumePorHectare = 250.0; 
+        return sum + (areaHa * volumePorHectare);
+    });
+
+    _totalCubagensConcluidas = _cubagensFiltradas.where((c) => c.alturaTotal > 0).length;
   }
   
   void _recalcularProgressoPorFazenda() {
@@ -114,20 +169,14 @@ class DashboardMetricsProvider with ChangeNotifier {
       return;
     }
 
-    final grupoPorFazenda = groupBy(
-      _parcelasFiltradas,
-      (Parcela p) => p.nomeFazenda ?? 'Fazenda Desconhecida'
-    );
+    final grupoPorFazenda = groupBy(_parcelasFiltradas, (Parcela p) => p.nomeFazenda ?? 'Fazenda Desconhecida');
 
     _progressoPorFazenda = grupoPorFazenda.entries.map((entry) {
       final nomeFazenda = entry.key;
       final parcelasDaFazenda = entry.value;
 
       final total = parcelasDaFazenda.length;
-      final concluidas = parcelasDaFazenda
-          .where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada)
-          .length;
-      
+      final concluidas = parcelasDaFazenda.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada).length;
       final progresso = (total > 0) ? concluidas / total : 0.0;
 
       return ProgressoFazenda(
@@ -139,46 +188,46 @@ class DashboardMetricsProvider with ChangeNotifier {
     }).toList();
   }
 
-  // <<< MUDANÇA 3: A função inteira é reescrita para agrupar por fazenda e usar o modelo DesempenhoFazenda >>>
-  void _recalcularDesempenhoPorCubagem(
+  List<CubagemArvore> _filtrarCubagens(
     List<CubagemArvore> todasAsCubagens,
     Map<int, int> talhaoToProjetoMap,
-    Map<int, int> talhaoToAtividadeMap,
-    Map<int, String> atividadeIdToTipoMap,
     List<Projeto> projetosAtivos,
     DashboardFilterProvider filterProvider,
   ) {
-    List<CubagemArvore> cubagensFiltradas;
+    final idsProjetosAtivos = projetosAtivos.map((p) => p.id).toSet();
+    return todasAsCubagens.where((c) {
+      final projetoId = talhaoToProjetoMap[c.talhaoId];
 
-    if (filterProvider.selectedProjetoIds.isEmpty) {
-      final idsProjetosAtivos = projetosAtivos.map((p) => p.id).toSet();
-      cubagensFiltradas = todasAsCubagens.where((c) {
-        final projetoId = talhaoToProjetoMap[c.talhaoId];
-        return projetoId != null && idsProjetosAtivos.contains(projetoId);
-      }).toList();
-    } else {
-      cubagensFiltradas = todasAsCubagens.where((c) {
-        final projetoId = talhaoToProjetoMap[c.talhaoId];
-        return projetoId != null &&
-            filterProvider.selectedProjetoIds.contains(projetoId);
-      }).toList();
-    }
+      if (filterProvider.selectedProjetoIds.isNotEmpty) {
+        if (projetoId == null || !filterProvider.selectedProjetoIds.contains(projetoId)) return false;
+      } else {
+        if (projetoId == null || !idsProjetosAtivos.contains(projetoId)) return false;
+      }
 
-    if (filterProvider.selectedFazendaNomes.isNotEmpty) {
-      cubagensFiltradas = cubagensFiltradas
-          .where((c) =>
-              filterProvider.selectedFazendaNomes.contains(c.nomeFazenda))
-          .toList();
-    }
+      if (filterProvider.selectedFazendaNomes.isNotEmpty) {
+        if (!filterProvider.selectedFazendaNomes.contains(c.nomeFazenda)) return false;
+      }
+      
+      if (filterProvider.lideresSelecionados.isNotEmpty) {
+        final nomeLider = c.nomeLider?.isNotEmpty == true ? c.nomeLider! : 'Gerente';
+        if (!filterProvider.lideresSelecionados.contains(nomeLider)) return false;
+      }
+      
+      return _filtroDeData(c.dataColeta, filterProvider);
+    }).toList();
+  }
 
-    if (cubagensFiltradas.isEmpty) {
+  void _recalcularDesempenhoPorCubagem(
+    Map<int, int> talhaoToAtividadeMap,
+    Map<int, String> atividadeIdToTipoMap,
+  ) {
+    if (_cubagensFiltradas.isEmpty) {
       _desempenhoPorCubagem = [];
+      _desempenhoCubagemTotais = DesempenhoFazendaTotais();
       return;
     }
 
-    // Agrupa por uma chave combinada de Atividade e Fazenda
-    final grupoPorAtividadeEFazenda =
-        groupBy(cubagensFiltradas, (CubagemArvore c) {
+    final grupoPorAtividadeEFazenda = groupBy(_cubagensFiltradas, (CubagemArvore c) {
       final atividadeId = talhaoToAtividadeMap[c.talhaoId];
       final tipoAtividade = atividadeId != null ? atividadeIdToTipoMap[atividadeId] : "N/A";
       return "$tipoAtividade:::${c.nomeFazenda}";
@@ -194,21 +243,27 @@ class DashboardMetricsProvider with ChangeNotifier {
         nomeAtividade: nomeAtividade,
         nomeFazenda: nomeFazenda,
         pendentes: cubagens.where((c) => c.alturaTotal == 0 && !c.exportada).length,
-        emAndamento: 0, // Cubagem não tem estado "em andamento"
+        emAndamento: 0,
         concluidas: cubagens.where((c) => c.alturaTotal > 0 && !c.exportada).length,
         exportadas: cubagens.where((c) => c.exportada).length,
         total: cubagens.length,
       );
     }).toList()
       ..sort((a, b) => '${a.nomeAtividade}-${a.nomeFazenda}'.compareTo('${b.nomeAtividade}-${b.nomeFazenda}'));
+      
+    _desempenhoCubagemTotais = _desempenhoPorCubagem.fold(
+      DesempenhoFazendaTotais(),
+      (totais, item) => DesempenhoFazendaTotais(
+        pendentes: totais.pendentes + item.pendentes,
+        concluidas: totais.concluidas + item.concluidas,
+        exportadas: totais.exportadas + item.exportadas,
+        total: totais.total + item.total,
+      )
+    );
   }
   
-  void _recalcularProgressoPorEquipe(DashboardFilterProvider filterProvider) {
-    final parcelasVisiveis = filterProvider.selectedFazendaNomes.isNotEmpty
-      ? _parcelasFiltradas.where((p) => p.nomeFazenda != null && filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!)).toList()
-      : _parcelasFiltradas;
-
-    final parcelasConcluidas = parcelasVisiveis.where((p) => p.status == StatusParcela.concluida).toList();
+  void _recalcularProgressoPorEquipe() {
+    final parcelasConcluidas = _parcelasFiltradas.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada).toList();
     if (parcelasConcluidas.isEmpty) {
       _progressoPorEquipe = {};
       return;
@@ -219,12 +274,8 @@ class DashboardMetricsProvider with ChangeNotifier {
     _progressoPorEquipe = Map.fromEntries(sortedEntries);
   }
 
-  void _recalcularColetasPorMes(DashboardFilterProvider filterProvider) {
-    final parcelasVisiveis = filterProvider.selectedFazendaNomes.isNotEmpty
-      ? _parcelasFiltradas.where((p) => p.nomeFazenda != null && filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!)).toList()
-      : _parcelasFiltradas;
-      
-    final parcelas = parcelasVisiveis.where((p) => p.status == StatusParcela.concluida && p.dataColeta != null).toList();
+  void _recalcularColetasPorMes() {
+    final parcelas = _parcelasFiltradas.where((p) => p.status == StatusParcela.concluida && p.dataColeta != null).toList();
     if (parcelas.isEmpty) {
       _coletasPorMes = {};
       return;
@@ -241,18 +292,15 @@ class DashboardMetricsProvider with ChangeNotifier {
     _coletasPorMes = {for (var key in chavesOrdenadas) key: mapaContagem[key]!};
   }
 
-  void _recalcularDesempenhoPorFazenda(DashboardFilterProvider filterProvider) {
-    final parcelasVisiveis = filterProvider.selectedFazendaNomes.isNotEmpty
-      ? _parcelasFiltradas.where((p) => p.nomeFazenda != null && filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!)).toList()
-      : _parcelasFiltradas;
-
-    if (parcelasVisiveis.isEmpty) {
+  void _recalcularDesempenhoPorFazenda() {
+    if (_parcelasFiltradas.isEmpty) {
       _desempenhoPorFazenda = [];
+      _desempenhoInventarioTotais = DesempenhoFazendaTotais();
       return;
     }
     
     final grupoPorFazendaEAtividade = groupBy(
-      parcelasVisiveis, 
+      _parcelasFiltradas, 
       (Parcela p) => "${p.atividadeTipo ?? 'N/A'}:::${p.nomeFazenda ?? 'Fazenda Desconhecida'}"
     );
 
@@ -272,5 +320,43 @@ class DashboardMetricsProvider with ChangeNotifier {
         total: parcelas.length,
       );
     }).toList()..sort((a,b) => '${a.nomeAtividade}-${a.nomeFazenda}'.compareTo('${b.nomeAtividade}-${b.nomeFazenda}'));
+    
+    _desempenhoInventarioTotais = _desempenhoPorFazenda.fold(
+      DesempenhoFazendaTotais(),
+      (totais, item) => DesempenhoFazendaTotais(
+        pendentes: totais.pendentes + item.pendentes,
+        emAndamento: totais.emAndamento + item.emAndamento,
+        concluidas: totais.concluidas + item.concluidas,
+        exportadas: totais.exportadas + item.exportadas,
+        total: totais.total + item.total,
+      )
+    );
+  }
+  
+  bool _filtroDeData(DateTime? dataColeta, DashboardFilterProvider filter) {
+    if (dataColeta == null) return filter.periodo == PeriodoFiltro.todos;
+    if (filter.periodo == PeriodoFiltro.todos) return true;
+
+    final agora = DateTime.now();
+    switch (filter.periodo) {
+      case PeriodoFiltro.hoje:
+        return dataColeta.year == agora.year && dataColeta.month == agora.month && dataColeta.day == agora.day;
+      case PeriodoFiltro.ultimos7Dias:
+        return dataColeta.isAfter(agora.subtract(const Duration(days: 7)));
+      case PeriodoFiltro.esteMes:
+        return dataColeta.year == agora.year && dataColeta.month == agora.month;
+      case PeriodoFiltro.mesPassado:
+        final primeiroDiaMesAtual = DateTime(agora.year, agora.month, 1);
+        final ultimoDiaMesPassado = primeiroDiaMesAtual.subtract(const Duration(days: 1));
+        return dataColeta.year == ultimoDiaMesPassado.year && dataColeta.month == ultimoDiaMesPassado.month;
+      case PeriodoFiltro.personalizado:
+        if (filter.periodoPersonalizado != null) {
+          final dataFim = filter.periodoPersonalizado!.end.add(const Duration(days: 1));
+          return dataColeta.isAfter(filter.periodoPersonalizado!.start.subtract(const Duration(days: 1))) && dataColeta.isBefore(dataFim);
+        }
+        return true;
+      default:
+        return true;
+    }
   }
 }

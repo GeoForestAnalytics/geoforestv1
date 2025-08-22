@@ -1,4 +1,4 @@
-// lib/pages/gerente/operacoes_dashboard_page.dart (VERSÃO COM LAYOUT DOS CARDS ATUALIZADO)
+// lib/pages/gerente/operacoes_dashboard_page.dart (VERSÃO COM TOTALIZADORES NAS TABELAS)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -65,7 +65,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
            bodyContent = ListView(
             padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
             children: [
-              // <<< CHAMADA PARA A NOVA FUNÇÃO DE CARDS >>>
               _buildKpiCards(context, provider.kpis),
               const SizedBox(height: 24),
               _buildDespesasChart(context, provider.composicaoDespesas),
@@ -105,7 +104,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
 
   Widget _buildFiltros(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0), // Removido margin bottom
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
@@ -114,9 +113,10 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
           children: [
             Row(
               children: [
-                Expanded(child: _buildPeriodoDropdown(context)),
+                // <<< 1. LAYOUT DOS FILTROS ATUALIZADO >>>
+                Expanded(flex: 2, child: _buildPeriodoDropdown(context)),
                 const SizedBox(width: 16),
-                Expanded(child: _buildLiderDropdown(context)),
+                Expanded(flex: 3, child: _buildLiderDropdown(context)),
               ],
             ),
             if (context.watch<OperacoesFilterProvider>().periodo == PeriodoFiltro.personalizado)
@@ -145,11 +145,10 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
   
-  // <<< FUNÇÃO _buildKpiGrid REMOVIDA E SUBSTITUÍDA POR _buildKpiCards >>>
   Widget _buildKpiCards(BuildContext context, KpiData kpis) {
     return Column(
       children: [
-        const SizedBox(height: 16), // Espaçamento do topo
+        const SizedBox(height: 16),
         Row(
           children: [
             Expanded(child: _buildKpiCard('Custo Total', _currencyFormat.format(kpis.custoTotalCampo), Icons.monetization_on, Colors.green)),
@@ -169,7 +168,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
-  // <<< FUNÇÃO _buildKpiCard COMPLETAMENTE REFEITA PARA O NOVO LAYOUT >>>
   Widget _buildKpiCard(String title, String value, IconData icon, Color color) {
     return Card(
       elevation: 2,
@@ -204,7 +202,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
-  // O restante do arquivo (gráficos, tabelas, etc.) permanece o mesmo.
   Widget _buildDespesasChart(BuildContext context, Map<String, double> composicaoDespesas) {
     final despesasValidas = Map.fromEntries(
       composicaoDespesas.entries.where((entry) => entry.value > 0)
@@ -273,7 +270,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         String key = despesasValidas.keys.elementAt(group.x.toInt());
                         return BarTooltipItem(
-                          '$key\n',
+                          '$key\\n',
                           const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                           children: <TextSpan>[
                             TextSpan(
@@ -287,8 +284,8 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                   ),
                   titlesData: FlTitlesData(
                     show: true,
-                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
@@ -315,7 +312,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                   gridData: FlGridData(
                     show: true, 
                     drawVerticalLine: false,
-                    getDrawingHorizontalLine: (value) => FlLine(color: Colors.black12, strokeWidth: 1),
+                    getDrawingHorizontalLine: (value) => const FlLine(color: Colors.black12, strokeWidth: 1),
                   ),
                   barGroups: barGroups,
                 ),
@@ -404,8 +401,11 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
+  // <<< 2. ATUALIZAÇÃO DA TABELA DE CUSTOS POR VEÍCULO >>>
   Widget _buildCustoVeiculoTable(BuildContext context, List<CustoPorVeiculo> custos) {
     if (custos.isEmpty) return const SizedBox.shrink();
+    final kpis = context.watch<OperacoesProvider>().kpis;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -425,12 +425,24 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                   DataColumn(label: Text('Custo (R\$)'), numeric: true),
                   DataColumn(label: Text('R\$/KM'), numeric: true),
                 ],
-                rows: custos.map((c) => DataRow(cells: [
-                  DataCell(Text(c.placa)),
-                  DataCell(Text(_numberFormat.format(c.kmRodados))),
-                  DataCell(Text(_currencyFormat.format(c.custoAbastecimento))),
-                  DataCell(Text(_currencyFormat.format(c.custoMedioPorKm))),
-                ])).toList(),
+                rows: [
+                  ...custos.map((c) => DataRow(cells: [
+                    DataCell(Text(c.placa)),
+                    DataCell(Text(_numberFormat.format(c.kmRodados))),
+                    DataCell(Text(_currencyFormat.format(c.custoAbastecimento))),
+                    DataCell(Text(_currencyFormat.format(c.custoMedioPorKm))),
+                  ])).toList(),
+                  // --- Linha de Totalizador ---
+                  DataRow(
+                    color: MaterialStateProperty.all(Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5)),
+                    cells: [
+                      const DataCell(Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(_numberFormat.format(kpis.kmRodados), style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(_currencyFormat.format(kpis.custoTotalAbastecimento), style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(_currencyFormat.format(kpis.custoMedioKmGeral), style: const TextStyle(fontWeight: FontWeight.bold))),
+                    ]
+                  ),
+                ],
               ),
             ),
           ],
@@ -439,8 +451,11 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
+  // <<< 3. ATUALIZAÇÃO DA TABELA DO HISTÓRICO DE DIÁRIOS >>>
   Widget _buildHistoricoDiariosTable(BuildContext context, List<DiarioDeCampo> diarios) {
     if (diarios.isEmpty) return const SizedBox.shrink();
+    final kpis = context.watch<OperacoesProvider>().kpis;
+    
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -449,7 +464,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Histórico de Diários", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text("Histórico Diário", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -458,17 +473,31 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                   DataColumn(label: Text('Data')),
                   DataColumn(label: Text('Líder')),
                   DataColumn(label: Text('Destino')),
+                  // --- Nova Coluna ---
                   DataColumn(label: Text('Custo Total'), numeric: true),
                 ],
-                rows: diarios.map((d) {
-                  final custoTotal = (d.abastecimentoValor ?? 0) + (d.pedagioValor ?? 0) + (d.alimentacaoRefeicaoValor ?? 0) + (d.outrasDespesasValor ?? 0);
-                  return DataRow(cells: [
-                    DataCell(Text(DateFormat('dd/MM/yy').format(DateTime.parse(d.dataRelatorio)))),
-                    DataCell(Text(d.nomeLider)),
-                    DataCell(Text(d.localizacaoDestino ?? '')),
-                    DataCell(Text(_currencyFormat.format(custoTotal))),
-                  ]);
-                }).toList(),
+                rows: [
+                  ...diarios.map((d) {
+                    final custoTotalDiario = (d.abastecimentoValor ?? 0) + (d.pedagioValor ?? 0) + (d.alimentacaoRefeicaoValor ?? 0) + (d.outrasDespesasValor ?? 0);
+                    return DataRow(cells: [
+                      DataCell(Text(DateFormat('dd/MM/yy').format(DateTime.parse(d.dataRelatorio)))),
+                      DataCell(Text(d.nomeLider)),
+                      DataCell(Text(d.localizacaoDestino ?? '')),
+                      // --- Nova Célula ---
+                      DataCell(Text(_currencyFormat.format(custoTotalDiario))),
+                    ]);
+                  }).toList(),
+                  // --- Linha de Totalizador ---
+                  DataRow(
+                    color: MaterialStateProperty.all(Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5)),
+                    cells: [
+                      DataCell(Text('${diarios.length} DIAS', style: const TextStyle(fontWeight: FontWeight.bold))),
+                      const DataCell(Text('')),
+                      const DataCell(Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                      DataCell(Text(_currencyFormat.format(kpis.custoTotalCampo), style: const TextStyle(fontWeight: FontWeight.bold))),
+                    ]
+                  ),
+                ],
               ),
             ),
           ],
