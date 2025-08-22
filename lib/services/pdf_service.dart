@@ -354,7 +354,7 @@ class PdfService {
     required BuildContext context,
     required String nomeFazenda,
     required String nomeTalhao,
-    required List<RendimentoDAP> dadosRendimento,
+    required List<DapClassResult> dadosRendimento, // <<< Usa o novo modelo
     required TalhaoAnalysisResult analiseGeral,
     required pw.ImageProvider graficoImagem,
   }) async {
@@ -367,7 +367,7 @@ class PdfService {
         build: (pw.Context context) {
           return [
             pw.Text(
-              'Relatório de Rendimento Comercial por Classe Diamétrica',
+              'Relatório de Distribuição de Indivíduos por Classe de DAP', // <<< Título corrigido
               style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
               textAlign: pw.TextAlign.center,
             ),
@@ -381,15 +381,15 @@ class PdfService {
               ),
             ),
             pw.SizedBox(height: 20),
-            _buildTabelaRendimentoPdf(dadosRendimento),
+            _buildTabelaRendimentoPdf(dadosRendimento), // <<< Chamada para a tabela corrigida
           ];
         },
       ),
     );
-    final nomeArquivo =
-        'relatorio_rendimento_${nomeTalhao.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.pdf';
+    final nomeArquivo = 'Relatorio_Distribuicao_DAP_${nomeTalhao.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.pdf';
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
+
   
   Future<void> gerarRelatorioSimulacaoPdf({
     required BuildContext context,
@@ -764,17 +764,14 @@ class PdfService {
     );
   }
   
-  pw.Widget _buildTabelaRendimentoPdf(List<RendimentoDAP> dados) {
-    final headers = ['Classe DAP', 'Volume (m³/ha)', '% do Total', 'Árv./ha'];
+  pw.Widget _buildTabelaRendimentoPdf(List<DapClassResult> dados) {
+    final headers = ['Classe DAP', 'Quantidade (árvores)', '% do Total'];
     
-    final data = dados
-        .map((item) => [
-              item.classe,
-              item.volumePorHectare.toStringAsFixed(1),
-              '${item.porcentagemDoTotal.toStringAsFixed(1)}%',
-              item.arvoresPorHectare.toString(),
-            ])
-        .toList();
+    final data = dados.map((item) => [
+          item.classe,
+          item.quantidade.toString(),
+          '${item.porcentagemDoTotal.toStringAsFixed(1)}%',
+        ]).toList();
 
     return pw.TableHelper.fromTextArray(
       headers: headers,

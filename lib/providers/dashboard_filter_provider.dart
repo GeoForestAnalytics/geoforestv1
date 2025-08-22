@@ -2,7 +2,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/models/atividade_model.dart';
+import 'package:geoforestv1/models/atividade_model.dart'; // <<< ADICIONE ESTE IMPORT
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 
@@ -19,9 +19,10 @@ class DashboardFilterProvider with ChangeNotifier {
   DateTimeRange? _periodoPersonalizado;
   List<String> _lideresDisponiveis = [];
   Set<String> _lideresSelecionados = {};
-  // --- NOVO ---
+
+  // <<< ADICIONE ESTAS DUAS LINHAS PARA O FILTRO DE ATIVIDADE >>>
   List<Atividade> _atividadesDisponiveis = [];
-  int? _selectedAtividadeId;
+  Set<int> _selectedAtividadeIds = {};
 
 
   // --- Getters ---
@@ -33,23 +34,22 @@ class DashboardFilterProvider with ChangeNotifier {
   DateTimeRange? get periodoPersonalizado => _periodoPersonalizado;
   List<String> get lideresDisponiveis => _lideresDisponiveis;
   Set<String> get lideresSelecionados => _lideresSelecionados;
-  // --- NOVO ---
-  List<Atividade> get atividadesDisponiveis => _atividadesDisponiveis;
-  int? get selectedAtividadeId => _selectedAtividadeId;
-
   
+  // <<< ADICIONE ESTES DOIS GETTERS PARA O FILTRO DE ATIVIDADE >>>
+  List<Atividade> get atividadesDisponiveis => _atividadesDisponiveis;
+  Set<int> get selectedAtividadeIds => _selectedAtividadeIds;
+
+
   // --- Métodos de atualização chamados pelo ProxyProvider ---
   void updateProjetosDisponiveis(List<Projeto> novosProjetos) {
     _projetosDisponiveis = novosProjetos;
     _selectedProjetoIds.removeWhere((id) => !_projetosDisponiveis.any((p) => p.id == id));
   }
 
-  // --- NOVO ---
+  // <<< ADICIONE ESTE NOVO MÉTODO >>>
   void updateAtividadesDisponiveis(List<Atividade> atividades) {
     _atividadesDisponiveis = atividades;
-    if (_selectedAtividadeId != null && !_atividadesDisponiveis.any((a) => a.id == _selectedAtividadeId)) {
-      _selectedAtividadeId = null; 
-    }
+    _selectedAtividadeIds.removeWhere((id) => !_atividadesDisponiveis.any((a) => a.id == id));
   }
 
   void updateFazendasDisponiveis(List<Parcela> parcelas) {
@@ -69,11 +69,23 @@ class DashboardFilterProvider with ChangeNotifier {
   }
 
   // --- Métodos de manipulação dos filtros (chamados pela UI) ---
+
   void setSelectedProjetos(Set<int> newSelection) {
     _selectedProjetoIds = newSelection;
+    _selectedAtividadeIds.clear(); // <<< ADICIONE (Limpa o filtro de atividade)
     _selectedFazendaNomes.clear();
     _lideresSelecionados.clear();
-    _selectedAtividadeId = null; // Limpa o filtro de atividade ao mudar o projeto
+    notifyListeners();
+  }
+
+  // <<< ADICIONE ESTES DOIS NOVOS MÉTODOS >>>
+  void setSelectedAtividades(Set<int> newSelection) {
+    _selectedAtividadeIds = newSelection;
+    notifyListeners();
+  }
+
+  void clearAtividadeSelection() {
+    _selectedAtividadeIds.clear();
     notifyListeners();
   }
 
@@ -81,18 +93,12 @@ class DashboardFilterProvider with ChangeNotifier {
     _selectedFazendaNomes = newSelection;
     notifyListeners();
   }
-  
-  // --- NOVO ---
-  void setSelectedAtividade(int? atividadeId) {
-    _selectedAtividadeId = atividadeId;
-    notifyListeners();
-  }
 
   void clearProjetoSelection() {
     _selectedProjetoIds.clear();
+    _selectedAtividadeIds.clear(); // <<< ADICIONE (Limpa o filtro de atividade)
     _selectedFazendaNomes.clear();
     _lideresSelecionados.clear();
-    _selectedAtividadeId = null; // Limpa o filtro de atividade
     notifyListeners();
   }
   

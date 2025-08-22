@@ -1,3 +1,5 @@
+// lib/pages/analises/rendimento_dap_page.dart (VERSÃO COM SINTAXE DA APPBAR CORRIGIDA)
+
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -10,7 +12,7 @@ import 'package:pdf/widgets.dart' as pw;
 class RendimentoDapPage extends StatefulWidget {
   final String nomeFazenda;
   final String nomeTalhao;
-  final List<RendimentoDAP> dadosRendimento;
+  final List<DapClassResult> dadosRendimento;
   final TalhaoAnalysisResult analiseGeral;
 
   const RendimentoDapPage({
@@ -31,37 +33,36 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
   bool _isExporting = false;
 
   Future<void> _exportarPdf() async {
-  if (_isExporting) return;
-  setState(() => _isExporting = true);
-  
-  try {
-    RenderRepaintBoundary boundary = _graficoKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-    ui.Image image = await boundary.toImage(pixelRatio: 2.0);
-    ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    Uint8List pngBytes = byteData!.buffer.asUint8List();
-    final graficoImagem = pw.MemoryImage(pngBytes);
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+    
+    try {
+      RenderRepaintBoundary boundary = _graficoKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      ui.Image image = await boundary.toImage(pixelRatio: 2.0);
+      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      Uint8List pngBytes = byteData!.buffer.asUint8List();
+      final graficoImagem = pw.MemoryImage(pngBytes);
 
-    // A chamada para o serviço é a mesma, mas ele agora lida com a permissão.
-    await _pdfService.gerarRelatorioRendimentoPdf(
-      context: context,
-      nomeFazenda: widget.nomeFazenda,
-      nomeTalhao: widget.nomeTalhao,
-      dadosRendimento: widget.dadosRendimento,
-      analiseGeral: widget.analiseGeral,
-      graficoImagem: graficoImagem,
-    );
-  } catch (e) {
-    if(mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao exportar PDF: $e'), backgroundColor: Colors.red),
+      await _pdfService.gerarRelatorioRendimentoPdf(
+        context: context,
+        nomeFazenda: widget.nomeFazenda,
+        nomeTalhao: widget.nomeTalhao,
+        dadosRendimento: widget.dadosRendimento,
+        analiseGeral: widget.analiseGeral,
+        graficoImagem: graficoImagem,
       );
-    }
-  } finally {
-    if(mounted) {
-      setState(() => _isExporting = false);
+    } catch (e) {
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao exportar PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if(mounted) {
+        setState(() => _isExporting = false);
+      }
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -71,24 +72,26 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
       Colors.green.shade300,
       Colors.orange.shade300,
       Colors.red.shade300,
-      Colors.purple.shade300,
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Rendimento Comercial'),
+        title: const Text('Distribuição por DAP'),
         actions: [
+          // <<< INÍCIO DA CORREÇÃO >>>
+          // A lógica if/else foi reestruturada para ser um único elemento na lista.
           if (_isExporting)
             const Padding(
               padding: EdgeInsets.only(right: 16.0),
-              child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white))),
+              child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white)))
             )
           else
             IconButton(
               icon: const Icon(Icons.picture_as_pdf_outlined),
               onPressed: _exportarPdf,
-              tooltip: 'Exportar para PDF',
+              tooltip: 'Exportar para PDF'
             ),
+          // <<< FIM DA CORREÇÃO >>>
         ],
       ),
       body: SingleChildScrollView(
@@ -96,16 +99,8 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Distribuição de Volume por Classe de DAP',
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            Text(
-              '${widget.nomeFazenda} / ${widget.nomeTalhao}',
-              style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey.shade600),
-              textAlign: TextAlign.center,
-            ),
+            Text('Distribuição de Indivíduos por Classe de DAP', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+            Text('${widget.nomeFazenda} / ${widget.nomeTalhao}', style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey.shade600), textAlign: TextAlign.center),
             const SizedBox(height: 32),
             RepaintBoundary(
               key: _graficoKey,
@@ -127,7 +122,7 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
                               const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                               children: <TextSpan>[
                                 TextSpan(
-                                  text: '${item.volumePorHectare.toStringAsFixed(1)} m³/ha\n',
+                                  text: '${item.quantidade} árvores\n',
                                   style: const TextStyle(color: Colors.white, fontSize: 12),
                                 ),
                                 TextSpan(
@@ -171,10 +166,7 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
                               toY: data.porcentagemDoTotal,
                               color: barColors[index % barColors.length],
                               width: 22,
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(6),
-                                topRight: Radius.circular(6),
-                              ),
+                              borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), topRight: Radius.circular(6)),
                             ),
                           ],
                         );
@@ -192,7 +184,7 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
     );
   }
 
-  Widget _buildResumoTable(List<RendimentoDAP> dados, ThemeData theme) {
+  Widget _buildResumoTable(List<DapClassResult> dados, ThemeData theme) {
     return Card(
       elevation: 2,
       clipBehavior: Clip.antiAlias,
@@ -202,13 +194,13 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
         headingRowColor: MaterialStateProperty.all(theme.primaryColor.withOpacity(0.1)),
         columns: const [
           DataColumn(label: Text('Classe DAP', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Volume\n(m³/ha)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-          DataColumn(label: Text('% Vol.', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+          DataColumn(label: Text('Quantidade\n(árvores)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+          DataColumn(label: Text('% do Total', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
         ],
         rows: dados.map((item) {
           return DataRow(cells: [
             DataCell(Text(item.classe, style: const TextStyle(fontSize: 14))),
-            DataCell(Text(item.volumePorHectare.toStringAsFixed(1))),
+            DataCell(Text(item.quantidade.toString())),
             DataCell(Text('${item.porcentagemDoTotal.toStringAsFixed(1)}%')),
           ]);
         }).toList(),

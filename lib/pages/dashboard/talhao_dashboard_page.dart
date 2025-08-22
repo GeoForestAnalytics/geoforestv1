@@ -1,4 +1,4 @@
-// lib/pages/dashboard/talhao_dashboard_page.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/pages/dashboard/talhao_dashboard_page.dart (VERSÃO COM ANÁLISE DE CÓDIGOS)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -10,13 +10,8 @@ import 'package:geoforestv1/widgets/grafico_distribuicao_widget.dart';
 import 'package:geoforestv1/pages/analises/simulacao_desbaste_page.dart';
 import 'package:geoforestv1/pages/analises/rendimento_dap_page.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
-
-// --- NOVO IMPORT DO REPOSITÓRIO ---
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
-// ------------------------------------
 
-// O import do database_helper foi removido.
-// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class TalhaoDashboardPage extends StatelessWidget {
   final Talhao talhao;
@@ -63,11 +58,9 @@ class TalhaoDashboardContent extends StatefulWidget {
 }
 
 class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
-  // --- INSTÂNCIAS DOS NOVOS SERVIÇOS E REPOSITÓRIOS ---
   final _analiseRepository = AnaliseRepository();
   final _analysisService = AnalysisService();
   final _exportService = ExportService();
-  // ----------------------------------------------------
 
   List<Parcela> _parcelasDoTalhao = [];
   List<Arvore> _arvoresDoTalhao = [];
@@ -118,9 +111,7 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     );
   }
 
-  // --- MÉTODO ATUALIZADO ---
   Future<void> _carregarEAnalisarTalhao() async {
-    // Usa o AnaliseRepository para buscar os dados agregados
     final dadosAgregados = await _analiseRepository.getDadosAgregadosDoTalhao(widget.talhao.id!);
     
     _parcelasDoTalhao = dadosAgregados['parcelas'] as List<Parcela>;
@@ -133,8 +124,6 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     }
   }
   
-  // O restante dos métodos (navegação, build, etc.) não precisa de alterações.
-
   void _navegarParaSimulacao() {
     if (_analysisResult == null) return;
     Navigator.push(
@@ -149,8 +138,10 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     );
   }
 
+  // <<< MÉTODO ATUALIZADO PARA USAR O NOVO MODELO DE DADOS >>>
   void _analisarRendimento() {
     if (_analysisResult == null) return;
+    // A chamada do serviço agora retorna o novo tipo de objeto
     final resultadoRendimento = _analysisService.analisarRendimentoPorDAP(_parcelasDoTalhao, _arvoresDoTalhao);
     if (resultadoRendimento.isEmpty && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -164,7 +155,7 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
         builder: (context) => RendimentoDapPage(
           nomeFazenda: widget.talhao.fazendaNome ?? 'Fazenda não informada',
           nomeTalhao: widget.talhao.nome,
-          dadosRendimento: resultadoRendimento,
+          dadosRendimento: resultadoRendimento, // Passa a nova lista de objetos
           analiseGeral: _analysisResult!,
         ),
       ),
@@ -194,6 +185,10 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildResumoCard(result),
+              const SizedBox(height: 16),
+              // <<< CHAMADA PARA O NOVO CARD DE ANÁLISE DE CÓDIGOS >>>
+              if (result.analiseDeCodigos != null)
+                _buildCodeAnalysisCard(result.analiseDeCodigos!),
               const SizedBox(height: 16),
               Card(
                 elevation: 2,
@@ -226,7 +221,7 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
               ElevatedButton.icon(
                 onPressed: _analisarRendimento,
                 icon: const Icon(Icons.bar_chart_outlined),
-                label: const Text('Analisar Rendimento Comercial'),
+                label: const Text('Analisar Distribuição por DAP'),
                 style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
               ),
             ],
@@ -236,6 +231,58 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     );
   }
 
+  // <<< NOVO WIDGET COMPLETO PARA O CARD DE ANÁLISE DE CÓDIGOS >>>
+  Widget _buildCodeAnalysisCard(CodeAnalysisResult codeAnalysis) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Composição do Povoamento', style: Theme.of(context).textTheme.titleLarge),
+            const Divider(height: 20),
+            // Resumo de contagens
+            _buildStatRow('Total de Fustes Amostrados:', codeAnalysis.totalFustes.toString()),
+            _buildStatRow('Total de Covas Amostradas:', codeAnalysis.totalCovasAmostradas.toString()),
+            _buildStatRow('Covas Ocupadas (Sobrevivência):', '${codeAnalysis.totalCovasOcupadas} (${(codeAnalysis.totalCovasOcupadas / codeAnalysis.totalCovasAmostradas * 100).toStringAsFixed(1)}%)'),
+            const SizedBox(height: 16),
+            Text('Estatísticas por Código', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            // Tabela de estatísticas
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columnSpacing: 18.0,
+                headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+                columns: const [
+                  DataColumn(label: Text('Código')),
+                  DataColumn(label: Text('Qtd.'), numeric: true),
+                  DataColumn(label: Text('Média\nCAP'), numeric: true),
+                  DataColumn(label: Text('Mediana\nCAP'), numeric: true),
+                  DataColumn(label: Text('Média\nAltura'), numeric: true),
+                  DataColumn(label: Text('Mediana\nAltura'), numeric: true),
+                ],
+                rows: codeAnalysis.estatisticasPorCodigo.entries.map((entry) {
+                  final stats = entry.value;
+                  return DataRow(cells: [
+                    DataCell(Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold))),
+                    DataCell(Text(codeAnalysis.contagemPorCodigo[entry.key]?.toString() ?? '0')),
+                    DataCell(Text(stats.mediaCap.toStringAsFixed(1))),
+                    DataCell(Text(stats.medianaCap.toStringAsFixed(1))),
+                    DataCell(Text(stats.mediaAltura.toStringAsFixed(1))),
+                    DataCell(Text(stats.medianaAltura.toStringAsFixed(1))),
+                  ]);
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ... (O restante dos widgets de build permanece o mesmo)
   Widget _buildResumoCard(TalhaoAnalysisResult result) {
     return Card(
       elevation: 2,

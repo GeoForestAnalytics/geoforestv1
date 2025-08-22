@@ -32,6 +32,7 @@ import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 import 'package:geoforestv1/providers/operacoes_provider.dart';
 import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
+import 'package:geoforestv1/models/atividade_model.dart';
 
 
 void initializeProj4Definitions() {
@@ -153,15 +154,43 @@ class MyApp extends StatelessWidget {
         // 2. Providers de Filtro (dependem dos dados brutos)
         ChangeNotifierProxyProvider<GerenteProvider, DashboardFilterProvider>(
           create: (_) => DashboardFilterProvider(),
+          // <<< INÍCIO DA LÓGICA ATUALIZADA >>>
           update: (_, gerenteProvider, previous) {
             final filter = previous ?? DashboardFilterProvider();
+            
+            // 1. Atualiza projetos disponíveis (sem alteração)
             filter.updateProjetosDisponiveis(gerenteProvider.projetos);
-            List<Parcela> parcelasParaFiltroDeFazenda = filter.selectedProjetoIds.isEmpty
-                ? gerenteProvider.parcelasSincronizadas
-                : gerenteProvider.parcelasSincronizadas.where((p) => filter.selectedProjetoIds.contains(p.projetoId)).toList();
+
+            // 2. ATUALIZA ATIVIDADES DISPONÍVEIS (NOVA LÓGICA)
+            // Filtra as atividades com base nos projetos selecionados.
+            List<Atividade> atividadesParaFiltro = filter.selectedProjetoIds.isEmpty
+                ? gerenteProvider.atividades
+                : gerenteProvider.atividades.where((a) => filter.selectedProjetoIds.contains(a.projetoId)).toList();
+            filter.updateAtividadesDisponiveis(atividadesParaFiltro);
+
+            // 3. ATUALIZA FAZENDAS DISPONÍVEIS (LÓGICA REFINADA)
+            // Agora, o filtro de fazendas depende tanto do projeto quanto da atividade.
+            List<Parcela> parcelasParaFiltroDeFazenda = gerenteProvider.parcelasSincronizadas;
+            
+            // Filtra por projetos selecionados
+            if (filter.selectedProjetoIds.isNotEmpty) {
+              parcelasParaFiltroDeFazenda = parcelasParaFiltroDeFazenda
+                  .where((p) => filter.selectedProjetoIds.contains(p.projetoId)).toList();
+            }
+
+            // Filtra por atividades selecionadas
+            if (filter.selectedAtividadeIds.isNotEmpty) {
+              parcelasParaFiltroDeFazenda = parcelasParaFiltroDeFazenda.where((p) {
+                final atividadeId = gerenteProvider.talhaoToAtividadeMap[p.talhaoId];
+                return atividadeId != null && filter.selectedAtividadeIds.contains(atividadeId);
+              }).toList();
+            }
+            
             filter.updateFazendasDisponiveis(parcelasParaFiltroDeFazenda);
+            
             return filter;
           },
+          // <<< FIM DA LÓGICA ATUALIZADA >>>
         ),
         ChangeNotifierProxyProvider<GerenteProvider, OperacoesFilterProvider>(
           create: (_) => OperacoesFilterProvider(),

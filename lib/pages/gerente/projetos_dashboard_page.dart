@@ -11,6 +11,7 @@ import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:geoforestv1/providers/operacoes_provider.dart';
+import 'package:geoforestv1/models/atividade_model.dart';
 
 class ProjetosDashboardPage extends StatefulWidget {
   const ProjetosDashboardPage({super.key});
@@ -127,7 +128,8 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
           children: [
             _buildMultiSelectProjectFilter(context, filterProvider),
             const SizedBox(height: 8),
-            _buildAtividadeFilter(context, filterProvider),
+            // <<< ADICIONE A CHAMADA PARA O NOVO WIDGET DE FILTRO DE ATIVIDADE AQUI >>>
+            _buildMultiSelectAtividadeFilter(context, filterProvider),
             const SizedBox(height: 8),
             _buildMultiSelectFazendaFilter(context, filterProvider),
             const SizedBox(height: 16),
@@ -146,32 +148,42 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
-  Widget _buildAtividadeFilter(BuildContext context, DashboardFilterProvider provider) {
-    final atividadesDisponiveis = provider.atividadesDisponiveis;
-    if (atividadesDisponiveis.isEmpty && provider.selectedProjetoIds.isNotEmpty) {
-      return const SizedBox.shrink();
+  // <<< ADICIONE ESTE NOVO WIDGET COMPLETO PARA O FILTRO DE ATIVIDADE >>>
+  Widget _buildMultiSelectAtividadeFilter(BuildContext context, DashboardFilterProvider provider) {
+    if (provider.atividadesDisponiveis.isEmpty) return const SizedBox.shrink();
+
+    String displayText;
+    if (provider.selectedAtividadeIds.isEmpty) {
+      displayText = 'Todas as Atividades';
+    } else if (provider.selectedAtividadeIds.length == 1) {
+      displayText = provider.atividadesDisponiveis.firstWhere((a) => a.id == provider.selectedAtividadeIds.first, orElse: () => Atividade(id: 0, projetoId: 0, tipo: '1 atividade', descricao: '', dataCriacao: DateTime.now())).tipo;
+    } else {
+      displayText = '${provider.selectedAtividadeIds.length} atividades selecionadas';
     }
 
-    return DropdownButtonFormField<int>(
-      value: provider.selectedAtividadeId,
-      hint: const Text("Todas as Atividades"),
-      isExpanded: true,
-      decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0)),
-      items: [
-        const DropdownMenuItem<int>(
-          value: null,
-          child: Text("Todas as Atividades"),
+    return InkWell(
+      onTap: () => _showMultiSelectDialog(
+        context: context,
+        title: 'Filtrar por Atividade',
+        items: provider.atividadesDisponiveis.map((a) => {'id': a.id, 'label': a.tipo}).toList(),
+        selectedItems: provider.selectedAtividadeIds.map((id) => id as dynamic).toSet(),
+        onConfirm: (selected) => context.read<DashboardFilterProvider>().setSelectedAtividades(selected.cast<int>()),
+        onClear: () => context.read<DashboardFilterProvider>().clearAtividadeSelection(),
+      ),
+      child: InputDecorator(
+        decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Expanded(child: Text(displayText, overflow: TextOverflow.ellipsis)),
+            const Icon(Icons.arrow_drop_down),
+          ],
         ),
-        ...atividadesDisponiveis.map((atividade) => DropdownMenuItem(
-          value: atividade.id,
-          child: Text(atividade.tipo, overflow: TextOverflow.ellipsis),
-        )),
-      ],
-      onChanged: (value) {
-        context.read<DashboardFilterProvider>().setSelectedAtividade(value);
-      },
+      ),
     );
   }
+
+ 
 
   Widget _buildKpiGrid(BuildContext context, DashboardMetricsProvider metrics) {
     return GridView.count(

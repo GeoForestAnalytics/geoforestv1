@@ -1,6 +1,7 @@
-// lib/services/analysis_service.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/services/analysis_service.dart (VERSÃO COM NOMES DE CLASSE CORRIGIDOS)
 
 import 'dart:math';
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
@@ -13,20 +14,16 @@ import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/sortimento_model.dart';
 import 'package:ml_linalg/linalg.dart';
 
-// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
-// ------------------------------------
 
 class AnalysisService {
-  // --- INSTÂNCIAS DOS REPOSITÓRIOS ---
   final _cubagemRepository = CubagemRepository();
   final _analiseRepository = AnaliseRepository();
   final _projetoRepository = ProjetoRepository();
   final _atividadeRepository = AtividadeRepository();
-  // ------------------------------------
 
   static const double FATOR_DE_FORMA = 0.45;
 
@@ -46,15 +43,11 @@ class AnalysisService {
     for (int i = 0; i < secoes.length - 1; i++) {
         final secao1 = secoes[i];
         final secao2 = secoes[i+1];
-
         final diametro1_m = secao1.diametroSemCasca / 100;
         final diametro2_m = secao2.diametroSemCasca / 100;
-
         final area1 = (pi * pow(diametro1_m, 2)) / 4;
         final area2 = (pi * pow(diametro2_m, 2)) / 4;
-        
         final comprimentoTora = secao2.alturaMedicao - secao1.alturaMedicao;
-
         final volumeTora = ((area1 + area2) / 2) * comprimentoTora;
         volumeTotal += volumeTora;
     }
@@ -67,22 +60,17 @@ class AnalysisService {
 
     for (final arvoreCubada in arvoresCubadas) {
       if (arvoreCubada.id == null) continue;
-
-      // Usa o CubagemRepository para buscar as seções
       final secoes = await _cubagemRepository.getSecoesPorArvoreId(arvoreCubada.id!);
       final volumeReal = calcularVolumeComercialSmalian(secoes);
 
       if (volumeReal <= 0 || arvoreCubada.valorCAP <= 0 || arvoreCubada.alturaTotal <= 0) {
         continue;
       }
-
       final dap = arvoreCubada.valorCAP / pi;
       final altura = arvoreCubada.alturaTotal;
-      
       final lnVolume = log(volumeReal);
       final lnDAP = log(dap);
       final lnAltura = log(altura);
-
       xData.add(Vector.fromList([1.0, lnDAP, lnAltura]));
       yData.add(lnVolume);
     }
@@ -90,26 +78,19 @@ class AnalysisService {
     if (xData.length < 3) {
       return {'error': 'Dados insuficientes para a regressão. Pelo menos 3 árvores cubadas com dados completos são necessárias.'};
     }
-
     final features = Matrix.fromRows(xData);
     final labels = Vector.fromList(yData);
-
     try {
       final coefficients = (features.transpose() * features).inverse() * features.transpose() * labels;
-    
       final double b0 = coefficients.elementAt(0).first;
       final double b1 = coefficients.elementAt(1).first;
       final double b2 = coefficients.elementAt(2).first;
-      
       final predictedValues = features * coefficients;
       final yMean = labels.mean();
       final totalSumOfSquares = labels.fold(0.0, (sum, val) => sum + pow(val - yMean, 2));
       final residualSumOfSquares = (labels - predictedValues).fold(0.0, (sum, val) => sum + pow(val, 2));
-      
       if (totalSumOfSquares == 0) return {'error': 'Não foi possível calcular R², variação nula nos dados.'};
-
       final rSquared = 1 - (residualSumOfSquares / totalSumOfSquares);
-
       return {
         'b0': b0, 'b1': b1, 'b2': b2, 'R2': rSquared,
         'equacao': 'ln(V) = ${b0.toStringAsFixed(5)} + ${b1.toStringAsFixed(5)}*ln(DAP) + ${b2.toStringAsFixed(5)}*ln(H)',
@@ -129,19 +110,16 @@ class AnalysisService {
     final List<Arvore> arvoresComVolume = [];
     final List<double> alturasValidas = arvoresDoInventario.where((a) => a.altura != null && a.altura! > 0).map((a) => a.altura!).toList();
     final double mediaAltura = alturasValidas.isNotEmpty ? alturasValidas.reduce((a, b) => a + b) / alturasValidas.length : 0.0;
-
     for (final arvore in arvoresDoInventario) {
       if (arvore.cap <= 0 || arvore.codigo != Codigo.normal) {
         arvoresComVolume.add(arvore.copyWith(volume: 0));
         continue;
       }
-      
       final alturaParaCalculo = (arvore.altura == null || arvore.altura! <= 0) ? mediaAltura : arvore.altura!;
       if (alturaParaCalculo <= 0) {
         arvoresComVolume.add(arvore.copyWith(volume: 0));
         continue;
       }
-      
       final dap = arvore.cap / pi;
       final lnVolume = b0 + (b1 * log(dap)) + (b2 * log(alturaParaCalculo));
       final volumeEstimado = exp(lnVolume);
@@ -153,24 +131,17 @@ class AnalysisService {
   Map<String, double> classificarSortimentos(List<CubagemSecao> secoes) {
     Map<String, double> volumesPorSortimento = {};
     if (secoes.length < 2) return volumesPorSortimento;
-
     secoes.sort((a, b) => a.alturaMedicao.compareTo(b.alturaMedicao));
-
     for (int i = 0; i < secoes.length - 1; i++) {
         final secaoBase = secoes[i];
         final secaoPonta = secoes[i+1];
-        
         final diametroBase = secaoBase.diametroSemCasca;
         final diametroPonta = secaoPonta.diametroSemCasca;
-
         if (diametroBase < _sortimentosFixos.last.diametroMinimo) continue;
-
         final comprimentoTora = secaoPonta.alturaMedicao - secaoBase.alturaMedicao;
-        
         final areaBaseM2 = (pi * pow(diametroBase / 100, 2)) / 4;
         final areaPontaM2 = (pi * pow(diametroPonta / 100, 2)) / 4;
         final volumeTora = ((areaBaseM2 + areaPontaM2) / 2) * comprimentoTora;
-
         SortimentoModel? sortimentoEncontrado;
         for (final sortimentoDef in _sortimentosFixos) {
             if (diametroPonta >= sortimentoDef.diametroMinimo && diametroPonta < sortimentoDef.diametroMaximo) {
@@ -178,7 +149,6 @@ class AnalysisService {
                 break;
             }
         }
-
         if (sortimentoEncontrado != null) {
             volumesPorSortimento.update(
                 sortimentoEncontrado.nome, 
@@ -189,7 +159,6 @@ class AnalysisService {
     }
     return volumesPorSortimento;
   }
-
     
   TalhaoAnalysisResult getTalhaoInsights(List<Parcela> parcelasDoTalhao, List<Arvore> todasAsArvores) {
     if (parcelasDoTalhao.isEmpty) return TalhaoAnalysisResult();
@@ -198,11 +167,18 @@ class AnalysisService {
     if (areaTotalAmostradaM2 == 0) return TalhaoAnalysisResult();
     
     final double areaTotalAmostradaHa = areaTotalAmostradaM2 / 10000;
+    
+    final codeAnalysis = getTreeCodeAnalysis(todasAsArvores);
 
-    return _analisarListaDeArvores(todasAsArvores, areaTotalAmostradaHa, parcelasDoTalhao.length);
+    return _analisarListaDeArvores(
+      todasAsArvores, 
+      areaTotalAmostradaHa, 
+      parcelasDoTalhao.length,
+      codeAnalysis,
+    );
   }
 
-  TalhaoAnalysisResult _analisarListaDeArvores(List<Arvore> arvoresDoConjunto, double areaAmostradaHa, int numeroDeParcelas) {
+  TalhaoAnalysisResult _analisarListaDeArvores(List<Arvore> arvoresDoConjunto, double areaAmostradaHa, int numeroDeParcelas, CodeAnalysisResult? codeAnalysis) {
     if (arvoresDoConjunto.isEmpty || areaAmostradaHa <= 0) {
       return TalhaoAnalysisResult();
     }
@@ -228,8 +204,8 @@ class AnalysisService {
     List<String> insights = [];
     List<String> recommendations = [];
     
-    final int arvoresMortas = arvoresDoConjunto.length - arvoresVivas.length;
-    final double taxaMortalidade = arvoresVivas.isNotEmpty ? (arvoresMortas / arvoresDoConjunto.length) * 100 : 0.0;
+    final int arvoresMortas = (codeAnalysis?.contagemPorCodigo['morta'] ?? 0) + (codeAnalysis?.contagemPorCodigo['caida'] ?? 0);
+    final taxaMortalidade = (codeAnalysis?.totalFustes ?? 0) > 0 ? (arvoresMortas / codeAnalysis!.totalFustes) * 100 : 0.0;
     if (taxaMortalidade > 15) {
       warnings.add("Mortalidade de ${taxaMortalidade.toStringAsFixed(1)}% detectada, valor considerado alto.");
     }
@@ -253,9 +229,50 @@ class AnalysisService {
       volumePorHectare: volumePorHectare,
       arvoresPorHectare: arvoresPorHectare,
       distribuicaoDiametrica: distribuicao, 
+      analiseDeCodigos: codeAnalysis,
       warnings: warnings,
       insights: insights,
       recommendations: recommendations,
+    );
+  }
+  
+  CodeAnalysisResult getTreeCodeAnalysis(List<Arvore> arvores) {
+    if (arvores.isEmpty) return CodeAnalysisResult();
+
+    final contagemPorCodigo = arvores.groupFoldBy<String, int>((arvore) => arvore.codigo.name, (prev, arvore) => (prev ?? 0) + 1);
+    
+    final covasUnicas = <String>{};
+    for (final arvore in arvores) {
+      covasUnicas.add('${arvore.linha}-${arvore.posicaoNaLinha}');
+    }
+    final totalCovasAmostradas = covasUnicas.length;
+    final totalCovasOcupadas = arvores.where((a) => a.codigo != Codigo.falha).map((a) => '${a.linha}-${a.posicaoNaLinha}').toSet().length;
+
+    final Map<String, CodeStatDetails> estatisticas = {};
+    final arvoresAgrupadas = groupBy(arvores, (Arvore a) => a.codigo.name);
+
+    arvoresAgrupadas.forEach((codigo, listaDeArvores) {
+      final caps = listaDeArvores.map((a) => a.cap).where((cap) => cap > 0).toList();
+      final alturas = listaDeArvores.map((a) => a.altura).whereType<double>().where((h) => h > 0).toList();
+
+      estatisticas[codigo] = CodeStatDetails(
+        mediaCap: _calculateAverage(caps),
+        medianaCap: _calculateMedian(caps),
+        modaCap: _calculateMode(caps),
+        desvioPadraoCap: _calculateStdDev(caps),
+        mediaAltura: _calculateAverage(alturas),
+        medianaAltura: _calculateMedian(alturas),
+        modaAltura: _calculateMode(alturas),
+        desvioPadraoAltura: _calculateStdDev(alturas),
+      );
+    });
+
+    return CodeAnalysisResult(
+      contagemPorCodigo: contagemPorCodigo,
+      estatisticasPorCodigo: estatisticas,
+      totalFustes: arvores.length,
+      totalCovasAmostradas: totalCovasAmostradas,
+      totalCovasOcupadas: totalCovasOcupadas,
     );
   }
 
@@ -276,54 +293,42 @@ class AnalysisService {
     
     final double areaTotalAmostradaM2 = parcelasOriginais.map((p) => p.areaMetrosQuadrados).reduce((a, b) => a + b);
     final double areaTotalAmostradaHa = areaTotalAmostradaM2 / 10000;
+    
+    final codeAnalysisRemanescente = getTreeCodeAnalysis(arvoresRemanescentes);
 
-    return _analisarListaDeArvores(arvoresRemanescentes, areaTotalAmostradaHa, parcelasOriginais.length);
+    return _analisarListaDeArvores(arvoresRemanescentes, areaTotalAmostradaHa, parcelasOriginais.length, codeAnalysisRemanescente);
   }
   
-  List<RendimentoDAP> analisarRendimentoPorDAP(List<Parcela> parcelasDoTalhao, List<Arvore> todasAsArvores) {
+  // <<< INÍCIO DA CORREÇÃO >>>
+  // O nome da classe retornada foi corrigido de RendimentoDAP para DapClassResult.
+  List<DapClassResult> analisarRendimentoPorDAP(List<Parcela> parcelasDoTalhao, List<Arvore> todasAsArvores) {
+  // <<< FIM DA CORREÇÃO >>>
     if (parcelasDoTalhao.isEmpty || todasAsArvores.isEmpty) {
       return [];
     }
     
-    final double areaTotalAmostradaM2 = parcelasDoTalhao.map((p) => p.areaMetrosQuadrados).reduce((a, b) => a + b);
-    if (areaTotalAmostradaM2 == 0) return [];
-    
-    final double areaTotalAmostradaHa = areaTotalAmostradaM2 / 10000;
-    final List<Arvore> arvoresVivas = todasAsArvores.where((a) => a.codigo == Codigo.normal).toList();
-    final List<double> alturasValidas = arvoresVivas.where((a) => a.altura != null && a.altura! > 0).map((a) => a.altura!).toList();
-    final double mediaAltura = alturasValidas.isNotEmpty ? _calculateAverage(alturasValidas) : 0.0;
+    final List<Arvore> arvoresVivas = todasAsArvores.where((a) => a.codigo == Codigo.normal && a.cap > 0).toList();
+    if (arvoresVivas.isEmpty) return [];
 
-    for (var arv in arvoresVivas) {
-      arv.volume = _estimateVolume(arv.cap, arv.altura ?? mediaAltura);
-    }
-    
     final Map<String, List<Arvore>> arvoresPorClasse = {
-      '8-18cm': [],
-      '18-23cm': [],
-      '23-35cm': [],
-      '> 35cm': [],
+      '8-18cm': [], '18-23cm': [], '23-35cm': [], '> 35cm': [],
     };
 
     for (var arv in arvoresVivas) {
       final double dap = arv.cap / pi;
-      if (dap >= 8 && dap < 18) {
-        arvoresPorClasse['8-18cm']!.add(arv);
-      } else if (dap >= 18 && dap < 23) {
-        arvoresPorClasse['18-23cm']!.add(arv);
-      } else if (dap >= 23 && dap < 35) {
-        arvoresPorClasse['23-35cm']!.add(arv);
-      } else if (dap >= 35) {
-        arvoresPorClasse['> 35cm']!.add(arv);
-      }
+      if (dap >= 8 && dap < 18) arvoresPorClasse['8-18cm']!.add(arv);
+      else if (dap >= 18 && dap < 23) arvoresPorClasse['18-23cm']!.add(arv);
+      else if (dap >= 23 && dap < 35) arvoresPorClasse['23-35cm']!.add(arv);
+      else if (dap >= 35) arvoresPorClasse['> 35cm']!.add(arv);
     }
+    
+    final double totalArvoresVivas = arvoresVivas.length.toDouble();
+    if (totalArvoresVivas == 0) return [];
 
-    final double volumeTotal = arvoresPorClasse.values
-        .expand((arvores) => arvores)
-        .map((arv) => arv.volume ?? 0)
-        .fold(0.0, (a, b) => a + b);
-
-    final List<RendimentoDAP> resultadoFinal = [];
-
+    // <<< INÍCIO DA CORREÇÃO >>>
+    // O nome da classe retornada foi corrigido de RendimentoDAP para DapClassResult.
+    final List<DapClassResult> resultadoFinal = [];
+    // <<< FIM DA CORREÇÃO >>>
     final sortedKeys = arvoresPorClasse.keys.toList()..sort((a,b) {
       final numA = double.tryParse(a.split('-').first.replaceAll('>', '')) ?? 99;
       final numB = double.tryParse(b.split('-').first.replaceAll('>', '')) ?? 99;
@@ -333,20 +338,17 @@ class AnalysisService {
     for(var classe in sortedKeys) {
       final arvores = arvoresPorClasse[classe]!;
       if (arvores.isNotEmpty) {
-        final double volumeClasse = arvores.map((a) => a.volume ?? 0).reduce((a, b) => a + b);
-        final double volumeHa = volumeClasse / areaTotalAmostradaHa;
-        final double porcentagem = (volumeTotal > 0) ? (volumeClasse / volumeTotal) * 100 : 0;
-        final int arvoresHa = (arvores.length / areaTotalAmostradaHa).round();
-        
-        resultadoFinal.add(RendimentoDAP(
+        final double porcentagem = (arvores.length / totalArvoresVivas) * 100;
+        // <<< INÍCIO DA CORREÇÃO >>>
+        // O nome do construtor foi corrigido de RendimentoDAP para DapClassResult.
+        resultadoFinal.add(DapClassResult(
           classe: classe,
-          volumePorHectare: volumeHa,
+          quantidade: arvores.length,
           porcentagemDoTotal: porcentagem,
-          arvoresPorHectare: arvoresHa,
         ));
+        // <<< FIM DA CORREÇÃO >>>
       }
     }
-
     return resultadoFinal;
   }
 
@@ -357,60 +359,46 @@ class AnalysisService {
     {int larguraClasse = 5}
   ) {
     if (totalArvoresAmostradas == 0 || totalArvoresParaCubar == 0) return {};
-
     final Map<String, int> plano = {};
-
     for (var entry in distribuicaoAmostrada.entries) {
       final pontoMedio = entry.key;
       final contagemNaClasse = entry.value;
-
       final double proporcao = contagemNaClasse / totalArvoresAmostradas;
-      
       final int arvoresParaCubarNestaClasse = (proporcao * totalArvoresParaCubar).round();
-      
       final inicioClasse = pontoMedio - (larguraClasse / 2);
       final fimClasse = pontoMedio + (larguraClasse / 2) - 0.1;
       final String rotuloClasse = "${inicioClasse.toStringAsFixed(1)} - ${fimClasse.toStringAsFixed(1)} cm";
-
       if (arvoresParaCubarNestaClasse > 0) {
         plano[rotuloClasse] = arvoresParaCubarNestaClasse;
       }
     }
-    
     int somaAtual = plano.values.fold(0, (a, b) => a + b);
     int diferenca = totalArvoresParaCubar - somaAtual;
-    
     if (diferenca != 0 && plano.isNotEmpty) {
       String classeParaAjustar = plano.entries.reduce((a, b) => a.value > b.value ? a : b).key;
       plano.update(classeParaAjustar, (value) => value + diferenca, ifAbsent: () => diferenca);
-      
       if (plano[classeParaAjustar]! <= 0) {
         plano.remove(classeParaAjustar);
       }
     }
-
     return plano;
   }
   
   Map<double, int> getDistribuicaoDiametrica(List<Arvore> arvores, {int larguraClasse = 5}) {
     if (arvores.isEmpty) return {};
-
     final Map<int, int> contagemPorClasse = {};
-    
     for (final arvore in arvores) {
       if (arvore.codigo == Codigo.normal && arvore.cap > 0) {
         final int classeBase = (arvore.cap / larguraClasse).floor() * larguraClasse;
         contagemPorClasse.update(classeBase, (value) => value + 1, ifAbsent: () => 1);
       }
     }
-    
     final sortedKeys = contagemPorClasse.keys.toList()..sort();
     final Map<double, int> resultadoFinal = {};
     for (final key in sortedKeys) {
       final double pontoMedio = key.toDouble() + (larguraClasse / 2.0);
       resultadoFinal[pontoMedio] = contagemPorClasse[key]!;
     }
-
     return resultadoFinal;
   }
 
@@ -425,10 +413,37 @@ class AnalysisService {
     final areaBasal = _areaBasalPorArvore(cap);
     return areaBasal * altura * FATOR_DE_FORMA;
   }
-
+  
   double _calculateAverage(List<double> numbers) {
     if (numbers.isEmpty) return 0.0;
     return numbers.reduce((a, b) => a + b) / numbers.length;
+  }
+
+  double _calculateMedian(List<double> numbers) {
+    if (numbers.isEmpty) return 0.0;
+    final sortedList = List<double>.from(numbers)..sort();
+    final middle = sortedList.length ~/ 2;
+    if (sortedList.length % 2 == 1) {
+      return sortedList[middle];
+    } else {
+      return (sortedList[middle - 1] + sortedList[middle]) / 2.0;
+    }
+  }
+
+  double _calculateMode(List<double> numbers) {
+    if (numbers.isEmpty) return 0.0;
+    final frequencyMap = <double, int>{};
+    for (var number in numbers) {
+      frequencyMap[number] = (frequencyMap[number] ?? 0) + 1;
+    }
+    return frequencyMap.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+  }
+
+  double _calculateStdDev(List<double> numbers) {
+    if (numbers.length < 2) return 0.0;
+    final mean = _calculateAverage(numbers);
+    final variance = numbers.map((x) => pow(x - mean, 2)).reduce((a, b) => a + b) / (numbers.length - 1);
+    return sqrt(variance);
   }
 
   Future<Map<Talhao, Map<String, int>>> criarMultiplasAtividadesDeCubagem({
