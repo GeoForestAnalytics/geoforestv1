@@ -1,11 +1,10 @@
-// lib/models/diario_de_campo_model.dart (VERSÃO AJUSTADA)
+// lib/models/diario_de_campo_model.dart (VERSÃO COM OUTROS GASTOS)
 
 class DiarioDeCampo {
   final int? id;
   final String dataRelatorio;
   final String nomeLider;
   final int projetoId;
-  // <<< ALTERAÇÃO 1: talhaoId agora é opcional >>>
   final int? talhaoId;
   final double? kmInicial;
   final double? kmFinal;
@@ -15,11 +14,15 @@ class DiarioDeCampo {
   final int? alimentacaoMarmitasQtd;
   final double? alimentacaoRefeicaoValor;
   final String? alimentacaoDescricao;
+
+  // <<< NOVOS CAMPOS ADICIONADOS >>>
+  final double? outrasDespesasValor;
+  final String? outrasDespesasDescricao;
+  
   final String? veiculoPlaca;
   final String? veiculoModelo;
   final String? equipeNoCarro;
   final String lastModified;
-  // <<< ALTERAÇÃO 2: Novo campo para futura consolidação >>>
   final String? locaisTrabalhadosJson;
 
   DiarioDeCampo({
@@ -27,7 +30,7 @@ class DiarioDeCampo {
     required this.dataRelatorio,
     required this.nomeLider,
     required this.projetoId,
-    this.talhaoId, // Agora opcional
+    this.talhaoId,
     this.kmInicial,
     this.kmFinal,
     this.localizacaoDestino,
@@ -36,11 +39,13 @@ class DiarioDeCampo {
     this.alimentacaoMarmitasQtd,
     this.alimentacaoRefeicaoValor,
     this.alimentacaoDescricao,
+    this.outrasDespesasValor,       // Adicionado ao construtor
+    this.outrasDespesasDescricao,   // Adicionado ao construtor
     this.veiculoPlaca,
     this.veiculoModelo,
     this.equipeNoCarro,
     required this.lastModified,
-    this.locaisTrabalhadosJson, // Novo
+    this.locaisTrabalhadosJson,
   });
 
   Map<String, dynamic> toMap() {
@@ -58,11 +63,12 @@ class DiarioDeCampo {
       'alimentacao_marmitas_qtd': alimentacaoMarmitasQtd,
       'alimentacao_refeicao_valor': alimentacaoRefeicaoValor,
       'alimentacao_descricao': alimentacaoDescricao,
+      'outras_despesas_valor': outrasDespesasValor,       // Adicionado ao mapa
+      'outras_despesas_descricao': outrasDespesasDescricao, // Adicionado ao mapa
       'veiculo_placa': veiculoPlaca,
       'veiculo_modelo': veiculoModelo,
       'equipe_no_carro': equipeNoCarro,
       'lastModified': lastModified,
-      // 'locais_trabalhados_json': locaisTrabalhadosJson, // Campo ainda não está no DB, será adicionado depois
     };
   }
 
@@ -81,6 +87,8 @@ class DiarioDeCampo {
       alimentacaoMarmitasQtd: map['alimentacao_marmitas_qtd'],
       alimentacaoRefeicaoValor: map['alimentacao_refeicao_valor'],
       alimentacaoDescricao: map['alimentacao_descricao'],
+      outrasDespesasValor: map['outras_despesas_valor'],         // Lido do mapa
+      outrasDespesasDescricao: map['outras_despesas_descricao'], // Lido do mapa
       veiculoPlaca: map['veiculo_placa'],
       veiculoModelo: map['veiculo_modelo'],
       equipeNoCarro: map['equipe_no_carro'],

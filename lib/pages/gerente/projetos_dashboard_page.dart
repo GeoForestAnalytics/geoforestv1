@@ -10,14 +10,14 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 
-class GerenteDashboardPage extends StatefulWidget {
-  const GerenteDashboardPage({super.key});
+class ProjetosDashboardPage extends StatefulWidget {
+  const ProjetosDashboardPage({super.key});
 
   @override
-  State<GerenteDashboardPage> createState() => _GerenteDashboardPageState();
+  State<ProjetosDashboardPage> createState() => _ProjetosDashboardPageState();
 }
 
-class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
+class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
   final _exportService = ExportService();
 
   @override

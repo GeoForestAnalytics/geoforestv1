@@ -1,4 +1,4 @@
-// lib/data/datasources/local/database_helper.dart (VERSÃO AJUSTADA PARA DIÁRIO CONSOLIDADO)
+// lib/data/datasources/local/database_helper.dart (VERSÃO COM OUTROS GASTOS NO DIÁRIO)
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
@@ -29,8 +29,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      // <<< VERSÃO DO BANCO INCREMENTADA PARA 46 >>>
-      version: 46,
+      // <<< VERSÃO DO BANCO INCREMENTADA PARA 47 >>>
+      version: 47,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -40,7 +40,7 @@ class DatabaseHelper {
   Future<void> _onConfigure(Database db) async => await db.execute('PRAGMA foreign_keys = ON');
 
   Future<void> _onCreate(Database db, int version) async {
-    // ... (CREATE TABLE projetos)
+    // ... (CREATEs de projetos, atividades, fazendas, talhoes, parcelas, arvores, cubagens_arvores, cubagens_secoes, sortimentos permanecem os mesmos)
     await db.execute('''
       CREATE TABLE projetos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,7 +55,6 @@ class DatabaseHelper {
         lastModified TEXT NOT NULL 
       )
     ''');
-    // ... (CREATE TABLE atividades)
     await db.execute('''
       CREATE TABLE atividades (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +67,6 @@ class DatabaseHelper {
         FOREIGN KEY (projetoId) REFERENCES projetos (id) ON DELETE CASCADE
       )
     ''');
-    // ... (CREATE TABLE fazendas)
     await db.execute('''
       CREATE TABLE fazendas (
         id TEXT NOT NULL,
@@ -81,8 +79,6 @@ class DatabaseHelper {
         FOREIGN KEY (atividadeId) REFERENCES atividades (id) ON DELETE CASCADE
       )
     ''');
-    
-    // ... (CREATE TABLE talhoes)
     await db.execute('''
       CREATE TABLE talhoes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,8 +98,6 @@ class DatabaseHelper {
         FOREIGN KEY (fazendaId, fazendaAtividadeId) REFERENCES fazendas (id, atividadeId) ON DELETE CASCADE
       )
     ''');
-
-    // ... (CREATE TABLE parcelas)
     await db.execute('''
       CREATE TABLE parcelas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -139,8 +133,6 @@ class DatabaseHelper {
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
     ''');
-
-    // ... (CREATE TABLE arvores)
     await db.execute('''
       CREATE TABLE arvores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,8 +155,6 @@ class DatabaseHelper {
         FOREIGN KEY (parcelaId) REFERENCES parcelas (id) ON DELETE CASCADE
       )
     ''');
-    
-    // <<< ADICIONADA A COLUNA dataColeta >>>
     await db.execute('''
       CREATE TABLE cubagens_arvores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -191,8 +181,6 @@ class DatabaseHelper {
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
     ''');
-    
-    // ... (CREATE TABLE cubagens_secoes e o restante)
     await db.execute('''
       CREATE TABLE cubagens_secoes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -215,7 +203,7 @@ class DatabaseHelper {
       )
     ''');
     
-    // <<< UNIQUE ALTERADO E TALHAO_ID NÃO É MAIS OBRIGATÓRIO >>>
+    // <<< ADICIONADAS AS 2 NOVAS COLUNAS PARA "OUTROS GASTOS" >>>
     await db.execute('''
       CREATE TABLE diario_de_campo (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -231,6 +219,8 @@ class DatabaseHelper {
         alimentacao_marmitas_qtd INTEGER,
         alimentacao_refeicao_valor REAL,
         alimentacao_descricao TEXT,
+        outras_despesas_valor REAL,
+        outras_despesas_descricao TEXT,
         veiculo_placa TEXT,
         veiculo_modelo TEXT,
         equipe_no_carro TEXT,
@@ -248,7 +238,7 @@ class DatabaseHelper {
     for (var v = oldVersion + 1; v <= newVersion; v++) {
       debugPrint("Executando migração de banco de dados para a versão $v...");
       switch (v) {
-        // ... (casos de 25 a 44 permanecem os mesmos)
+        // ... (casos de 25 a 46 permanecem os mesmos)
         case 25:
           await db.execute('ALTER TABLE parcelas ADD COLUMN uuid TEXT');
           final parcelasSemUuid = await db.query('parcelas', where: 'uuid IS NULL');
@@ -397,9 +387,7 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN rf TEXT');
           break;
           
-        // <<< NOVA MIGRAÇÃO PARA O DIÁRIO DE CAMPO CONSOLIDADO >>>
         case 45:
-          // Recria a tabela 'diario_de_campo' com a nova chave única e campos ajustados.
           await db.execute('''
             CREATE TABLE diario_de_campo_temp (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -415,7 +403,6 @@ class DatabaseHelper {
               UNIQUE(data_relatorio, nome_lider)
             )
           ''');
-          // Copia os dados, agrupando para evitar duplicatas na nova chave única.
           await db.execute('''
             INSERT INTO diario_de_campo_temp (id, data_relatorio, nome_lider, projeto_id, talhao_id, km_inicial, km_final, localizacao_destino, pedagio_valor, abastecimento_valor, alimentacao_marmitas_qtd, alimentacao_refeicao_valor, alimentacao_descricao, veiculo_placa, veiculo_modelo, equipe_no_carro, lastModified)
             SELECT id, data_relatorio, nome_lider, projeto_id, talhao_id, km_inicial, km_final, localizacao_destino, pedagio_valor, abastecimento_valor, alimentacao_marmitas_qtd, alimentacao_refeicao_valor, alimentacao_descricao, veiculo_placa, veiculo_modelo, equipe_no_carro, lastModified
@@ -426,11 +413,15 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE diario_de_campo_temp RENAME TO diario_de_campo');
           break;
           
-        // <<< NOVA MIGRAÇÃO PARA ADICIONAR DATA DE COLETA ÀS CUBAGENS >>>
         case 46:
           await db.execute('ALTER TABLE cubagens_arvores ADD COLUMN dataColeta TEXT');
-          // Preenche a nova coluna com a data de modificação para dados existentes.
           await db.execute('UPDATE cubagens_arvores SET dataColeta = lastModified WHERE dataColeta IS NULL');
+          break;
+
+        // <<< NOVA MIGRAÇÃO PARA "OUTROS GASTOS" >>>
+        case 47:
+          await db.execute('ALTER TABLE diario_de_campo ADD COLUMN outras_despesas_valor REAL');
+          await db.execute('ALTER TABLE diario_de_campo ADD COLUMN outras_despesas_descricao TEXT');
           break;
       }
     }

@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO COM RELATÓRIO DIÁRIO CONSOLIDADO)
+// lib/services/export_service.dart (VERSÃO COM NOVO FORMATO CONSOLIDADO)
 
 import 'dart:io';
 import 'dart:convert';
@@ -34,8 +34,9 @@ import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 
-// PAYLOADS PARA ISOLATES...
+// PAYLOADS ...
 class _CsvParcelaPayload {
+  // ... (sem alterações)
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
   final Map<int, Map<String, dynamic>> talhoesMap;
@@ -56,6 +57,7 @@ class _CsvParcelaPayload {
 }
 
 class _CsvCubagemPayload {
+  // ... (sem alterações)
   final List<Map<String, dynamic>> cubagensMap;
   final Map<int, List<Map<String, dynamic>>> secoesPorCubagemMap;
   final Map<int, Map<String, dynamic>> talhoesMap;
@@ -76,6 +78,7 @@ class _CsvCubagemPayload {
 }
 
 class _DevEquipePayload {
+  // ... (sem alterações)
   final List<Map<String, dynamic>> coletasData;
   final String nomeZona;
   final Map<int, String> proj4Defs;
@@ -87,7 +90,13 @@ class _DevEquipePayload {
   });
 }
 
-// <<< NOVO PAYLOAD PARA O RELATÓRIO CONSOLIDADO >>>
+class _CsvOperacoesPayload {
+    // ... (sem alterações)
+  final List<Map<String, dynamic>> diariosMap;
+  _CsvOperacoesPayload({ required this.diariosMap });
+}
+
+// <<< PAYLOAD ATUALIZADO PARA O NOVO FORMATO >>>
 class _CsvConsolidadoPayload {
   final Map<String, dynamic> diarioMap;
   final List<Map<String, dynamic>> parcelasMap;
@@ -95,6 +104,8 @@ class _CsvConsolidadoPayload {
   final Map<int, Map<String, dynamic>> projetosMap;
   final Map<int, Map<String, dynamic>> atividadesMap;
   final Map<int, Map<String, dynamic>> talhoesMap;
+  final Map<int, int> totaisAmostrasPorTalhao;
+  final Map<int, int> totaisCubagensPorTalhao;
 
   _CsvConsolidadoPayload({
     required this.diarioMap,
@@ -103,10 +114,13 @@ class _CsvConsolidadoPayload {
     required this.projetosMap,
     required this.atividadesMap,
     required this.talhoesMap,
+    required this.totaisAmostrasPorTalhao,
+    required this.totaisCubagensPorTalhao,
   });
 }
 
-// ... FUNÇÕES DE ISOLATE EXISTENTES ...
+
+// FUNÇÕES DE ISOLATE...
 Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
@@ -154,6 +168,7 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 }
 
 Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) async {
+  // ... (código existente sem alterações)
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
     proj4.Projection.add('EPSG:$epsg', def);
@@ -169,7 +184,7 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
 
   List<List<dynamic>> rows = [];
   rows.add([
-    'Atividade', 'Lider_Equipe', 'Ajudantes', 'id_db_arvore', 'id_fazenda', 'fazenda', 'UP', 'talhao', 'area_talhao_ha', 'especie', 'espacamento', 'idade_anos', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'Easting_Cubagem', 'Northing_Cubagem', 'Observacao_Cubagem', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm'
+    'Atividade', 'Lider_Equipe', 'Ajudantes', 'id_db_arvore', 'id_fazenda', 'fazenda', 'UP', 'talhao', 'area_talhao_ha', 'especie', 'espacamento', 'idade_anos', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'Data_Coleta', 'Easting_Cubagem', 'Northing_Cubagem', 'Observacao_Cubagem', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm'
   ]);
 
   for (var cMap in payload.cubagensMap) {
@@ -188,13 +203,19 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
     final secoes = secoesMap.map((sMap) => CubagemSecao.fromMap(sMap)).toList();
     
     final liderDaColeta = arvore.nomeLider ?? payload.nomeLider;
+    final dataColetaFormatada = arvore.dataColeta != null 
+        ? DateFormat('dd/MM/yyyy HH:mm').format(arvore.dataColeta!) 
+        : '';
+        
     if (secoes.isEmpty) {
       rows.add([
         'CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, 
         arvore.nomeFazenda, rf, arvore.nomeTalhao, talhaoData['areaHa'], 
         talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], 
         arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, 
-        arvore.valorCAP, arvore.alturaBase, easting, northing, arvore.observacao,
+        arvore.valorCAP, arvore.alturaBase, 
+        dataColetaFormatada,
+        easting, northing, arvore.observacao,
         null, null, null, null, null
       ]);
     } else {
@@ -204,7 +225,9 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
           arvore.nomeFazenda, rf, arvore.nomeTalhao, talhaoData['areaHa'], 
           talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], 
           arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, 
-          arvore.valorCAP, arvore.alturaBase, easting, northing, arvore.observacao,
+          arvore.valorCAP, arvore.alturaBase, 
+          dataColetaFormatada,
+          easting, northing, arvore.observacao,
           secao.alturaMedicao, secao.circunferencia, secao.casca1_mm, 
           secao.casca2_mm, secao.diametroSemCasca.toStringAsFixed(2)
         ]);
@@ -215,6 +238,7 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
 }
 
 Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
+  // ... (código existente sem alterações)
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
     proj4.Projection.add('EPSG:$epsg', def);
@@ -276,36 +300,128 @@ Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
   return const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
 }
 
-// <<< NOVA FUNÇÃO DE ISOLATE PARA O RELATÓRIO CONSOLIDADO >>>
+Future<String> _generateCsvOperacoesInIsolate(_CsvOperacoesPayload payload) async {
+  // ... (código existente sem alterações)
+    final List<List<dynamic>> rows = [];
+  final nf = NumberFormat("#,##0.00", "pt_BR");
+  final nfKm = NumberFormat("#,##0.0", "pt_BR");
+
+  // Cabeçalho idêntico ao da imagem
+  rows.add([
+    'Data', 'Líder', 'Equipe', 'Veículo (Placa)', 'KM Rodados',
+    'Custo Abastecimento (R\$)', 'Custo Alimentação (R\$)', 'Custo Pedágio (R\$)',
+    'Outros Gastos (R\$)', 'Descrição Outros Gastos',
+    'Custo Total (R\$)', 'Destino'
+  ]);
+  
+  // Função interna para formatar valores nulos para o CSV
+  String formatValue(dynamic value) {
+    if (value == null) return '';
+    if (value is double) return nf.format(value).replaceAll('.', ',');
+    return value.toString();
+  }
+  
+  String formatKm(dynamic value) {
+    if (value == null || value <= 0) return '0,0';
+    return nfKm.format(value).replaceAll('.', ',');
+  }
+
+  // Itera sobre cada diário para criar uma linha
+  for (final diarioMap in payload.diariosMap) {
+    final d = DiarioDeCampo.fromMap(diarioMap);
+    final distancia = (d.kmFinal ?? 0) - (d.kmInicial ?? 0);
+    final custoTotal = (d.abastecimentoValor ?? 0) + (d.pedagioValor ?? 0) + (d.alimentacaoRefeicaoValor ?? 0) + (d.outrasDespesasValor ?? 0);
+
+    rows.add([
+      DateFormat('dd/MM/yyyy').format(DateTime.parse(d.dataRelatorio)),
+      d.nomeLider,
+      d.equipeNoCarro,
+      d.veiculoPlaca,
+      formatKm(distancia),
+      formatValue(d.abastecimentoValor),
+      formatValue(d.alimentacaoRefeicaoValor),
+      formatValue(d.pedagioValor),
+      formatValue(d.outrasDespesasValor),
+      d.outrasDespesasDescricao,
+      formatValue(custoTotal),
+      d.localizacaoDestino
+    ]);
+  }
+
+  return const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
+}
+
+// <<< FUNÇÃO _generateCsvConsolidadoInIsolate COMPLETAMENTE SUBSTITUÍDA >>>
 Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) async {
   List<List<dynamic>> rows = [];
+  final nf = NumberFormat("#,##0.00", "pt_BR");
+  final nfKm = NumberFormat("#,##0.0", "pt_BR");
 
   // Cabeçalho do CSV
   rows.add([
-    'Data_Relatorio', 'Lider_Equipe', 'Ajudantes', 'Projeto', 'Atividade', 'Fazenda', 'Talhao', 
-    'Tipo_Coleta', 'ID_Amostra', 'Status_Coleta', 'UP_RF',
-    'KM_Inicial', 'KM_Final', 'Destino', 'Pedagio_RS', 'Abastecimento_RS', 'Qtd_Marmitas', 'Refeicao_RS', 'Descricao_Alimentacao',
-    'Placa_Veiculo', 'Modelo_Veiculo'
+    'Data_Relatorio', 'Lider_Equipe', 'Ajudantes', 'Projeto', 'Atividade', 'Fazenda', 'Talhao',
+    'Tipo_Coleta', 'ID_Amostra', 'Indicador_Amostra', 'Total_Amostras', 'Indicador_Cubagem', 'Total_Cubagens',
+    'Status_Coleta', 'UP_RF', 'KM_Inicial', 'KM_Final', 'Total_KM', 'Destino',
+    'Pedagio_RS', 'Abastecimento_RS', 'Qtd_Marmitas', 'Refeicao_RS', 'Total_Gastos',
+    'Descricao_Alimentacao', 'Placa_Veiculo', 'Modelo_Veiculo'
   ]);
 
   final diario = DiarioDeCampo.fromMap(payload.diarioMap);
   final projetos = payload.projetosMap.map((k, v) => MapEntry(k, Projeto.fromMap(v)));
   final atividades = payload.atividadesMap.map((k, v) => MapEntry(k, Atividade.fromMap(v)));
   final talhoes = payload.talhoesMap.map((k, v) => MapEntry(k, Talhao.fromMap(v)));
-
-  // Adiciona as linhas de PARCELAS
+  
+  String formatValue(dynamic value) {
+    if (value == null) return '';
+    if (value is double) return nf.format(value).replaceAll('.', ',');
+    return value.toString();
+  }
+  
+  String formatKm(dynamic value) {
+    if (value == null || value <= 0) return '0.0';
+    return nfKm.format(value).replaceAll('.', '.'); // CSV usa ponto como decimal
+  }
+  
+  final distancia = (diario.kmFinal ?? 0) - (diario.kmInicial ?? 0);
+  final totalGastos = (diario.abastecimentoValor ?? 0) + (diario.pedagioValor ?? 0) + (diario.alimentacaoRefeicaoValor ?? 0);
+  
+  // Adiciona as linhas de PARCELAS (Inventário)
   for (var pMap in payload.parcelasMap) {
     final p = Parcela.fromMap(pMap);
     final talhao = talhoes[p.talhaoId];
     final atividade = atividades[talhao?.fazendaAtividadeId];
     final projeto = projetos[atividade?.projetoId];
+    final totaisAmostras = payload.totaisAmostrasPorTalhao[p.talhaoId] ?? 0;
+    final totaisCubagens = payload.totaisCubagensPorTalhao[p.talhaoId] ?? 0;
 
     rows.add([
-      diario.dataRelatorio, diario.nomeLider, diario.equipeNoCarro, projeto?.nome, atividade?.tipo,
-      p.nomeFazenda, p.nomeTalhao, 'Inventario', p.idParcela, p.status.name, p.up,
-      diario.kmInicial, diario.kmFinal, diario.localizacaoDestino, diario.pedagioValor, diario.abastecimentoValor,
-      diario.alimentacaoMarmitasQtd, diario.alimentacaoRefeicaoValor, diario.alimentacaoDescricao,
-      diario.veiculoPlaca, diario.veiculoModelo
+      DateFormat('dd/MM/yyyy').format(DateTime.parse(diario.dataRelatorio)),
+      diario.nomeLider,
+      diario.equipeNoCarro,
+      projeto?.nome,
+      atividade?.tipo,
+      p.nomeFazenda,
+      p.nomeTalhao,
+      'Inventario',
+      p.idParcela,
+      1, // Indicador_Amostra
+      totaisAmostras, // Total_Amostras
+      0, // Indicador_Cubagem
+      totaisCubagens, // Total_Cubagens
+      p.status.name,
+      p.up,
+      diario.kmInicial,
+      diario.kmFinal,
+      formatKm(distancia),
+      diario.localizacaoDestino,
+      formatValue(diario.pedagioValor),
+      formatValue(diario.abastecimentoValor),
+      diario.alimentacaoMarmitasQtd,
+      formatValue(diario.alimentacaoRefeicaoValor),
+      formatValue(totalGastos),
+      diario.alimentacaoDescricao,
+      diario.veiculoPlaca,
+      diario.veiculoModelo
     ]);
   }
 
@@ -315,13 +431,37 @@ Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) 
     final talhao = talhoes[c.talhaoId];
     final atividade = atividades[talhao?.fazendaAtividadeId];
     final projeto = projetos[atividade?.projetoId];
+    final totaisAmostras = payload.totaisAmostrasPorTalhao[c.talhaoId] ?? 0;
+    final totaisCubagens = payload.totaisCubagensPorTalhao[c.talhaoId] ?? 0;
 
     rows.add([
-      diario.dataRelatorio, diario.nomeLider, diario.equipeNoCarro, projeto?.nome, atividade?.tipo,
-      c.nomeFazenda, c.nomeTalhao, 'Cubagem', c.identificador, c.alturaTotal > 0 ? 'Concluida' : 'Pendente', c.rf,
-      diario.kmInicial, diario.kmFinal, diario.localizacaoDestino, diario.pedagioValor, diario.abastecimentoValor,
-      diario.alimentacaoMarmitasQtd, diario.alimentacaoRefeicaoValor, diario.alimentacaoDescricao,
-      diario.veiculoPlaca, diario.veiculoModelo
+      DateFormat('dd/MM/yyyy').format(DateTime.parse(diario.dataRelatorio)),
+      diario.nomeLider,
+      diario.equipeNoCarro,
+      projeto?.nome,
+      atividade?.tipo,
+      c.nomeFazenda,
+      c.nomeTalhao,
+      'Cubagem',
+      c.identificador,
+      0, // Indicador_Amostra
+      totaisAmostras, // Total_Amostras
+      1, // Indicador_Cubagem
+      totaisCubagens, // Total_Cubagens
+      c.alturaTotal > 0 ? 'concluida' : 'pendente',
+      c.rf,
+      diario.kmInicial,
+      diario.kmFinal,
+      formatKm(distancia),
+      diario.localizacaoDestino,
+      formatValue(diario.pedagioValor),
+      formatValue(diario.abastecimentoValor),
+      diario.alimentacaoMarmitasQtd,
+      formatValue(diario.alimentacaoRefeicaoValor),
+      formatValue(totalGastos),
+      diario.alimentacaoDescricao,
+      diario.veiculoPlaca,
+      diario.veiculoModelo
     ]);
   }
 
@@ -330,13 +470,14 @@ Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) 
 
 
 class ExportService {
+  // ... (repositórios)
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
   final _projetoRepository = ProjetoRepository();
   final _atividadeRepository = AtividadeRepository();
   final _talhaoRepository = TalhaoRepository();
 
-  // <<< NOVO MÉTODO PRINCIPAL PARA O RELATÓRIO CONSOLIDADO >>>
+  // <<< FUNÇÃO PRINCIPAL ATUALIZADA >>>
   Future<void> exportarRelatorioDiarioConsolidadoCsv({
     required BuildContext context,
     required DiarioDeCampo diario,
@@ -347,8 +488,8 @@ class ExportService {
       if (!await _requestPermission(context)) return;
       ProgressDialog.show(context, 'Gerando CSV consolidado...');
 
-      // Coleta todos os IDs necessários para buscar os dados de hierarquia
       final Set<int> talhaoIds = {...parcelas.map((p) => p.talhaoId), ...cubagens.map((c) => c.talhaoId)}.whereType<int>().toSet();
+      
       final talhoes = (await Future.wait(talhaoIds.map((id) => _talhaoRepository.getTalhaoById(id)))).whereType<Talhao>().toList();
       final talhoesMap = {for (var t in talhoes) t.id!: t.toMap()};
 
@@ -359,8 +500,24 @@ class ExportService {
       final Set<int> projetoIds = atividades.map((a) => a.projetoId).toSet();
       final projetos = (await _projetoRepository.getTodosOsProjetosParaGerente()).where((p) => projetoIds.contains(p.id)).toList();
       final projetosMap = {for (var p in projetos) p.id!: p.toMap()};
+      
+      // <<< LÓGICA DE CONTAGEM ATUALIZADA >>>
+      final Map<int, int> totaisAmostrasPorTalhao = {};
+      final Map<int, int> totaisCubagensPorTalhao = {};
+      
+      final todosTalhoesTrabalhados = {...parcelas.map((p) => p.talhaoId), ...cubagens.map((c) => c.talhaoId)}.whereType<int>();
 
-      // Monta o payload para o isolate
+      for (final talhaoId in todosTalhoesTrabalhados) {
+        if (!totaisAmostrasPorTalhao.containsKey(talhaoId)) {
+          final todasAsParcelasDoTalhao = await _parcelaRepository.getParcelasDoTalhao(talhaoId);
+          totaisAmostrasPorTalhao[talhaoId] = todasAsParcelasDoTalhao.length;
+        }
+        if (!totaisCubagensPorTalhao.containsKey(talhaoId)) {
+          final todasAsCubagensDoTalhao = await _cubagemRepository.getTodasCubagensDoTalhao(talhaoId);
+          totaisCubagensPorTalhao[talhaoId] = todasAsCubagensDoTalhao.length;
+        }
+      }
+
       final payload = _CsvConsolidadoPayload(
         diarioMap: diario.toMap(),
         parcelasMap: parcelas.map((p) => p.toMap()).toList(),
@@ -368,9 +525,10 @@ class ExportService {
         projetosMap: projetosMap,
         atividadesMap: atividadesMap,
         talhoesMap: talhoesMap,
+        totaisAmostrasPorTalhao: totaisAmostrasPorTalhao,
+        totaisCubagensPorTalhao: totaisCubagensPorTalhao,
       );
 
-      // Gera o CSV em um isolate
       final String csvData = await compute(_generateCsvConsolidadoInIsolate, payload);
       
       final nomeLiderFmt = diario.nomeLider.replaceAll(RegExp(r'\s+'), '_');
@@ -386,14 +544,49 @@ class ExportService {
     }
   }
 
-  /// Exporta apenas o diário de campo (sem as coletas).
+  // ... (O restante do arquivo continua o mesmo)
+    Future<void> exportarOperacoesCsv({
+    required BuildContext context,
+    required List<DiarioDeCampo> diarios,
+    required String tipoRelatorio,
+  }) async {
+    if (diarios.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Nenhum dado de diário para exportar.'),
+          backgroundColor: Colors.orange,
+        ));
+      }
+      return;
+    }
+    
+    try {
+      if (!await _requestPermission(context)) return;
+      ProgressDialog.show(context, 'Gerando CSV de Operações...');
+
+      final payload = _CsvOperacoesPayload(
+        diariosMap: diarios.map((d) => d.toMap()).toList(),
+      );
+
+      final String csvData = await compute(_generateCsvOperacoesInIsolate, payload);
+      
+      final dataFmt = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final fName = 'relatorio_operacoes_${tipoRelatorio}_${dataFmt}.csv';
+      
+      await _salvarECompartilharCsv(context, csvData, fName, 'Relatório de Operações - GeoForest');
+
+    } catch (e, s) {
+      _handleExportError(context, 'exportar relatório de operações', e, s);
+    } finally {
+      if(context.mounted) ProgressDialog.hide(context);
+    }
+  }
+  
   Future<void> exportarDiarioDeCampoCsv({required BuildContext context, required DiarioDeCampo diario}) async {
-    // ... (código existente permanece igual)
     try {
       if (!await _requestPermission(context)) return;
 
       final projeto = await _projetoRepository.getProjetoById(diario.projetoId);
-      // O talhaoId agora é opcional, então tratamos o caso nulo
       final talhao = diario.talhaoId != null ? await _talhaoRepository.getTalhaoById(diario.talhaoId!) : null;
 
       List<List<dynamic>> rows = [
@@ -414,6 +607,8 @@ class ExportService {
         ['Qtd. Marmitas', diario.alimentacaoMarmitasQtd],
         ['Valor Refeição (R\$)', diario.alimentacaoRefeicaoValor?.toStringAsFixed(2).replaceAll('.', ',')],
         ['Descrição Alimentação', diario.alimentacaoDescricao],
+        ['Outras Despesas (R\$)', diario.outrasDespesasValor?.toStringAsFixed(2).replaceAll('.', ',')],
+        ['Descrição Outras Despesas', diario.outrasDespesasDescricao],
       ];
 
       final csvData = const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
@@ -427,18 +622,7 @@ class ExportService {
       _handleExportError(context, 'exportar diário de campo', e, s);
     }
   }
-
-  // <<< ESTE MÉTODO FOI REMOVIDO POIS AGORA USAMOS O CONSOLIDADO >>>
-  /*
-  Future<void> exportarRelatorioDiarioCsv({
-    required BuildContext context,
-    required List<Parcela> parcelas,
-    required String lider,
-    required String ajudantes
-  }) async { ... }
-  */
   
-  // ... (TODOS OS OUTROS MÉTODOS EXISTENTES PERMANECEM IGUAIS) ...
   Future<void> exportarDesenvolvimentoEquipes(BuildContext context, {Set<int>? projetoIdsFiltrados}) async {
     try {
       if (!await _requestPermission(context)) return;
@@ -763,48 +947,88 @@ class ExportService {
   }
   
   Future<void> exportarNovasCubagens(BuildContext context) async {
-  try {
-    if (!await _requestPermission(context)) return;
-    
-    // Pega todas as cubagens não exportadas
-    final cubagens = await _cubagemRepository.getUnexportedCubagens();
-    
-    // <<< CORREÇÃO APLICADA AQUI >>>
-    // Filtra a lista para incluir apenas as que foram preenchidas (altura > 0)
-    final cubagensConcluidas = cubagens.where((c) => c.alturaTotal > 0).toList();
-    
-    final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
-    final nomeArquivo = 'geoforest_export_cubagens_$hoje.csv';
-    
-    // Passa a lista filtrada para a função que gera o CSV
-    await _gerarCsvCubagem(context, cubagensConcluidas, nomeArquivo, true);
-    
-  } catch (e, s) {
-    _handleExportError(context, 'exportar cubagens', e, s);
+    try {
+      if (!await _requestPermission(context)) return;
+      
+      final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
+      final cargo = licenseProvider.licenseData?.cargo;
+      
+      if (cargo == 'gerente') {
+        await _showManagerCubagemExportDialog(context, isBackup: false);
+      } else {
+        final cubagens = await _cubagemRepository.getUnexportedCubagens();
+        final cubagensConcluidas = cubagens.where((c) => c.alturaTotal > 0).toList();
+        final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
+        final nomeArquivo = 'geoforest_export_cubagens_$hoje.csv';
+        await _gerarCsvCubagem(context, cubagensConcluidas, nomeArquivo, true);
+      }
+      
+    } catch (e, s) {
+      _handleExportError(context, 'exportar cubagens', e, s);
+    }
   }
-}
 
-Future<void> exportarTodasCubagensBackup(BuildContext context) async {
-  try {
-    if (!await _requestPermission(context)) return;
-    
-    // Pega todas as cubagens para o backup
-    final cubagens = await _cubagemRepository.getTodasCubagensParaBackup();
-    
-    // <<< CORREÇÃO APLICADA AQUI TAMBÉM >>>
-    // Aplica o mesmo filtro para o backup, garantindo que só dados reais sejam salvos
-    final cubagensConcluidas = cubagens.where((c) => c.alturaTotal > 0).toList();
-    
-    final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
-    final nomeArquivo = 'geoforest_BACKUP_CUBAGENS_$hoje.csv';
-    
-    // Passa a lista filtrada
-    await _gerarCsvCubagem(context, cubagensConcluidas, nomeArquivo, false);
-    
-  } catch (e, s) {
-    _handleExportError(context, 'backup de cubagens', e, s);
+  Future<void> exportarTodasCubagensBackup(BuildContext context) async {
+    try {
+      if (!await _requestPermission(context)) return;
+      
+      final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
+      final cargo = licenseProvider.licenseData?.cargo;
+
+      if (cargo == 'gerente') {
+        await _showManagerCubagemExportDialog(context, isBackup: true);
+      } else {
+        final cubagens = await _cubagemRepository.getTodasCubagensParaBackup();
+        final cubagensConcluidas = cubagens.where((c) => c.alturaTotal > 0).toList();
+        final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
+        final nomeArquivo = 'geoforest_BACKUP_CUBAGENS_$hoje.csv';
+        await _gerarCsvCubagem(context, cubagensConcluidas, nomeArquivo, false);
+      }
+      
+    } catch (e, s) {
+      _handleExportError(context, 'backup de cubagens', e, s);
+    }
   }
-}
+
+  Future<void> _showManagerCubagemExportDialog(BuildContext context, {required bool isBackup}) async {
+    final todosProjetos = await _projetoRepository.getTodosOsProjetosParaGerente();
+    final todosLideres = await _cubagemRepository.getDistinctLideres(); 
+    
+    if (context.mounted) {
+      final result = await showDialog<ExportFilters>(
+        context: context,
+        builder: (dialogContext) => ManagerExportDialog(
+          isBackup: isBackup,
+          projetosDisponiveis: todosProjetos,
+          lideresDisponiveis: todosLideres,
+        ),
+      );
+
+      if (result != null && context.mounted) {
+        await _executarExportacaoGerenteCubagem(context, result);
+      }
+    }
+  }
+
+  Future<void> _executarExportacaoGerenteCubagem(BuildContext context, ExportFilters filters) async {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando cubagens com base nos filtros...')));
+    
+    final List<CubagemArvore> cubagensParaExportar = await _cubagemRepository.getConcludedCubagensFiltrado(
+      projetoIds: filters.selectedProjetoIds.isNotEmpty ? filters.selectedProjetoIds : null,
+      lideresNomes: filters.selectedLideres.isNotEmpty ? filters.selectedLideres : null,
+    );
+    
+    if (cubagensParaExportar.isEmpty && context.mounted) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma cubagem encontrada para os filtros selecionados.')));
+      return;
+    }
+
+    final tipo = filters.isBackup ? "BACKUP_CUBAGEM_GERENTE" : "EXPORT_CUBAGEM_GERENTE";
+    final String fName = 'geoforest_${tipo}_${DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now())}.csv';
+    
+    await _gerarCsvCubagem(context, cubagensParaExportar, fName, !filters.isBackup);
+  }
 
   Future<void> _gerarCsvCubagem(BuildContext context, List<CubagemArvore> cubagens, String nomeArquivoOuCaminhoCompleto, bool marcarComoExportado) async {
     if (cubagens.isEmpty) {
@@ -831,7 +1055,6 @@ Future<void> exportarTodasCubagensBackup(BuildContext context) async {
     }
     
     final teamProvider = Provider.of<TeamProvider>(context, listen: false);
-    // <<< CORREÇÃO 2: LER AS PREFERÊNCIAS E PASSAR PARA O PAYLOAD >>>
     final prefs = await SharedPreferences.getInstance();
     final payload = _CsvCubagemPayload(
       cubagensMap: cubagens.map((c) => c.toMap()).toList(),
@@ -917,7 +1140,7 @@ Future<void> exportarTodasCubagensBackup(BuildContext context) async {
     required List<int> parcelaIds,
   }) async {
     if (parcelaIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum plano de amostragem para exportar.'), backgroundColor: Colors.orange));
+      if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum plano de amostragem para exportar.'), backgroundColor: Colors.orange));
       return;
     }
     ProgressDialog.show(context, 'Gerando GeoJSON...');
@@ -951,49 +1174,48 @@ Future<void> exportarTodasCubagensBackup(BuildContext context) async {
       final zonaUtmStr = nomeZona.split(' ').last;
 
       for (final parcela in allParcelas) {
-    final talhao = allTalhoes[parcela.talhaoId];
-    
-    if (parcela.latitude != null && parcela.longitude != null) {
-      
-      var pUtm = projWGS84.transform(projUTM, proj4.Point(x: parcela.longitude!, y: parcela.latitude!));
+        final talhao = allTalhoes[parcela.talhaoId];
+        
+        if (parcela.latitude != null && parcela.longitude != null) {
+          
+          var pUtm = projWGS84.transform(projUTM, proj4.Point(x: parcela.longitude!, y: parcela.latitude!));
 
-      features.add({
-        'type': 'Feature',
-        'geometry': {'type': 'Point', 'coordinates': [parcela.longitude, parcela.latitude]},
-        // <<< CORREÇÃO PRINCIPAL AQUI >>>
-        'properties': {
-          'atividade': parcela.atividadeTipo ?? 'N/A', // Chave padronizada
-          'bloco': talhao?.bloco,
-          'fazenda_nome': parcela.nomeFazenda,         // Chave padronizada
-          'fazenda_id': parcela.idFazenda,           // Chave padronizada
-          'rf': parcela.up,
-          'talhao_nome': parcela.nomeTalhao,          // Chave padronizada
-          'parcela': parcela.idParcela,
-          'area_talhao_ha': talhao?.areaHa,           // Chave padronizada
-          'especie': talhao?.especie,
-          'material': talhao?.materialGenetico,
-          'espacamento': talhao?.espacamento,
-          'plantio': talhao?.dataPlantio,
-          'regime': null,
-          'lado1': parcela.lado1,
-          'lado2': parcela.lado2,
-          'area_parcela_m2': parcela.areaMetrosQuadrados, // Chave padronizada
-          'tipo': parcela.tipoParcela,
-          'ciclo': parcela.ciclo,
-          'rotacao': parcela.rotacao,
-          'situacao': null,
-          'medir_?': 'SIM',                             // Chave padronizada
-          'status': parcela.status.name,
-          'data_realizacao': parcela.status == StatusParcela.concluida ? DateFormat('dd/MM/yyyy').format(parcela.dataColeta!) : null,
-          'observacao': parcela.observacao,
-          'zona_utm': zonaUtmStr,                        // Chave padronizada
-          'long_x': pUtm.x.toStringAsFixed(0),          // Chave padronizada
-          'lat_y': pUtm.y.toStringAsFixed(0),           // Chave padronizada
-          'alt_z': parcela.altitude,                    // Chave padronizada
+          features.add({
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [parcela.longitude, parcela.latitude]},
+            'properties': {
+              'atividade': parcela.atividadeTipo ?? 'N/A', 
+              'bloco': talhao?.bloco,
+              'fazenda_nome': parcela.nomeFazenda,         
+              'fazenda_id': parcela.idFazenda,           
+              'rf': parcela.up,
+              'talhao_nome': parcela.nomeTalhao,          
+              'parcela': parcela.idParcela,
+              'area_talhao_ha': talhao?.areaHa,           
+              'especie': talhao?.especie,
+              'material': talhao?.materialGenetico,
+              'espacamento': talhao?.espacamento,
+              'plantio': talhao?.dataPlantio,
+              'regime': null,
+              'lado1': parcela.lado1,
+              'lado2': parcela.lado2,
+              'area_parcela_m2': parcela.areaMetrosQuadrados, 
+              'tipo': parcela.tipoParcela,
+              'ciclo': parcela.ciclo,
+              'rotacao': parcela.rotacao,
+              'situacao': null,
+              'medir_?': 'SIM',                             
+              'status': parcela.status.name,
+              'data_realizacao': parcela.status == StatusParcela.concluida ? DateFormat('dd/MM/yyyy').format(parcela.dataColeta!) : null,
+              'observacao': parcela.observacao,
+              'zona_utm': zonaUtmStr,                        
+              'long_x': pUtm.x.toStringAsFixed(0),          
+              'lat_y': pUtm.y.toStringAsFixed(0),           
+              'alt_z': parcela.altitude,                    
+            }
+          });
         }
-      });
-    }
-  }
+      }
 
       final Map<String, dynamic> geoJson = {'type': 'FeatureCollection', 'features': features};
       const jsonEncoder = JsonEncoder.withIndent('  ');

@@ -1,6 +1,7 @@
-// lib/pages/projetos/detalhes_projeto_page.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/pages/projetos/detalhes_projeto_page.dart (VERSÃO COM OPÇÃO DE REGERAR PDF)
 
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
@@ -8,12 +9,11 @@ import 'package:geoforestv1/pages/atividades/form_atividade_page.dart';
 import 'package:geoforestv1/pages/atividades/detalhes_atividade_page.dart';
 import 'package:geoforestv1/utils/navigation_helper.dart';
 
-// --- NOVOS IMPORTS DOS REPOSITÓRIOS ---
+// --- IMPORTS ATUALIZADOS ---
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
-// ------------------------------------
-
-// O import do database_helper foi removido.
-// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+import 'package:geoforestv1/services/pdf_service.dart';
+// ----------------------------
 
 class DetalhesProjetoPage extends StatefulWidget {
   final Projeto projeto;
@@ -26,9 +26,10 @@ class DetalhesProjetoPage extends StatefulWidget {
 class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
   late Future<List<Atividade>> _atividadesFuture;
   
-  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
   final _atividadeRepository = AtividadeRepository();
-  // ---------------------------------------
+  // <<< NOVAS INSTÂNCIAS DE SERVIÇOS E REPOSITÓRIOS >>>
+  final _pdfService = PdfService();
+  final _cubagemRepository = CubagemRepository();
 
   bool _isSelectionMode = false;
   final Set<int> _selectedAtividades = {};
@@ -39,15 +40,28 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
     _carregarAtividades();
   }
 
-  // --- MÉTODO ATUALIZADO ---
   void _carregarAtividades() {
     if (mounted) {
       setState(() {
         _isSelectionMode = false;
         _selectedAtividades.clear();
-        // Usa o AtividadeRepository
         _atividadesFuture = _atividadeRepository.getAtividadesDoProjeto(widget.projeto.id!);
       });
+    }
+  }
+  
+  void _navegarParaEdicao(Atividade atividade) async {
+    final bool? atividadeEditada = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FormAtividadePage(
+          projetoId: atividade.projetoId,
+          atividadeParaEditar: atividade,
+        ),
+      ),
+    );
+    if (atividadeEditada == true && mounted) {
+      _carregarAtividades();
     }
   }
 
@@ -74,7 +88,6 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
     });
   }
 
-  // --- MÉTODO ATUALIZADO ---
   Future<void> _deleteSelectedAtividades() async {
     if (_selectedAtividades.isEmpty) return;
 
@@ -96,7 +109,6 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
 
     if (confirmar == true && mounted) {
       for (final id in _selectedAtividades) {
-        // Usa o AtividadeRepository
         await _atividadeRepository.deleteAtividade(id);
       }
 
@@ -106,8 +118,6 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
       _carregarAtividades();
     }
   }
-
-  // O restante dos métodos (navegação, build, etc.) não precisa de alterações.
   
   void _navegarParaNovaAtividade() async {
     final bool? atividadeCriada = await Navigator.push<bool>(
@@ -208,7 +218,7 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
                 if (atividades.isEmpty) {
                   return const Center(
                     child: Padding(
-                      padding: EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.all(16.0),
                       child: Text(
                         'Nenhuma atividade encontrada.\nClique no botão "+" para adicionar a primeira.',
                         textAlign: TextAlign.center,
@@ -224,39 +234,76 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
                   itemBuilder: (context, index) {
                     final atividade = atividades[index];
                     final isSelected = _selectedAtividades.contains(atividade.id!);
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      color: isSelected ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5) : null,
-                      child: ListTile(
-                        onTap: () {
-                          if (_isSelectionMode) {
-                            _onItemSelected(atividade.id!);
-                          } else {
-                            _navegarParaDetalhesAtividade(atividade);
-                          }
-                        },
-                        onLongPress: () {
-                          if (!_isSelectionMode) {
-                            _toggleSelectionMode(atividade.id!);
-                          }
-                        },
-                        leading: CircleAvatar(
-                          backgroundColor: isSelected ? Theme.of(context).colorScheme.primary : null,
-                          child: Icon(isSelected ? Icons.check : _getIconForAtividade(atividade.tipo)),
+                    final isCubagem = atividade.tipo.toLowerCase().contains('cubagem');
+
+                    // <<< WIDGET LISTTILE FOI ENVOLVIDO PELO SLIDABLE >>>
+                    return Slidable(
+                      key: ValueKey(atividade.id),
+                      startActionPane: ActionPane(
+                        motion: const DrawerMotion(),
+                        extentRatio: isCubagem ? 0.50 : 0.25,
+                        children: [
+                          SlidableAction(
+                            onPressed: (_) => _navegarParaEdicao(atividade),
+                            backgroundColor: Colors.blue.shade700,
+                            foregroundColor: Colors.white,
+                            icon: Icons.edit_outlined,
+                            label: 'Editar',
+                          ),
+                          if (isCubagem)
+                            SlidableAction(
+                              onPressed: (_) async {
+                                final placeholders = await _cubagemRepository.getPlanoDeCubagemPorAtividade(atividade.id!);
+                                if (placeholders.isEmpty && mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum plano de cubagem encontrado para esta atividade.')));
+                                  return;
+                                }
+                                await _pdfService.gerarPdfDePlanoExistente(
+                                  context: context, 
+                                  atividade: atividade, 
+                                  placeholders: placeholders
+                                );
+                              },
+                              backgroundColor: Colors.teal,
+                              foregroundColor: Colors.white,
+                              icon: Icons.picture_as_pdf_outlined,
+                              label: 'PDF Plano',
+                            ),
+                        ],
+                      ),
+                      child: Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        color: isSelected ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5) : null,
+                        child: ListTile(
+                          onTap: () {
+                            if (_isSelectionMode) {
+                              _onItemSelected(atividade.id!);
+                            } else {
+                              _navegarParaDetalhesAtividade(atividade);
+                            }
+                          },
+                          onLongPress: () {
+                            if (!_isSelectionMode) {
+                              _toggleSelectionMode(atividade.id!);
+                            }
+                          },
+                          leading: CircleAvatar(
+                            backgroundColor: isSelected ? Theme.of(context).colorScheme.primary : null,
+                            child: Icon(isSelected ? Icons.check : _getIconForAtividade(atividade.tipo)),
+                          ),
+                          title: Text(atividade.tipo, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(atividade.descricao.isNotEmpty ? atividade.descricao : 'Sem descrição'),
+                          trailing: _isSelectionMode
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  onPressed: () async {
+                                    _toggleSelectionMode(atividade.id!);
+                                    await _deleteSelectedAtividades();
+                                  },
+                                ),
+                          selected: isSelected,
                         ),
-                        title: Text(atividade.tipo, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(atividade.descricao.isNotEmpty ? atividade.descricao : 'Sem descrição'),
-                        trailing: _isSelectionMode
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                onPressed: () async {
-                                  // Seleciona e deleta em um passo só
-                                  _toggleSelectionMode(atividade.id!);
-                                  await _deleteSelectedAtividades();
-                                },
-                              ),
-                        selected: isSelected,
                       ),
                     );
                   },

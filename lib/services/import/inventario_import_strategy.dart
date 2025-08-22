@@ -1,4 +1,4 @@
-// lib/services/import/inventario_import_strategy.dart (VERSÃO FINAL COM COORDENADAS E RF)
+// lib/services/import/inventario_import_strategy.dart (VERSÃO CORRIGIDA)
 
 import 'package:collection/collection.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -7,6 +7,7 @@ import 'package:geoforestv1/models/parcela_model.dart';
 import 'csv_import_strategy.dart'; // Importa a base
 import 'package:intl/intl.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
+import 'dart:math' as math; // Necessário para o cálculo PI
 
 class InventarioImportStrategy extends BaseImportStrategy {
   InventarioImportStrategy({required super.txn, required super.projeto, super.nomeDoResponsavel});
@@ -14,6 +15,7 @@ class InventarioImportStrategy extends BaseImportStrategy {
   Parcela? parcelaCache;
   int? parcelaCacheDbId;
 
+  // ... (a função _mapCodigo permanece a mesma)
   Codigo _mapCodigo(String? cod) {
     if (cod == null) return Codigo.normal;
     switch(cod.trim().toUpperCase()){
@@ -71,14 +73,35 @@ class InventarioImportStrategy extends BaseImportStrategy {
               }
             } else { dataColetaFinal = DateTime.now(); }
             
-            final lado1 = double.tryParse(BaseImportStrategy.getValue(row, ['lado1_m', 'lado 1'])?.replaceAll(',', '.') ?? '0') ?? 0.0;
-            final lado2 = double.tryParse(BaseImportStrategy.getValue(row, ['lado2_m', 'lado 2'])?.replaceAll(',', '.') ?? '0') ?? 0.0;
+            // --- INÍCIO DA LÓGICA DE CORREÇÃO DA ÁREA ---
+            final lado1 = double.tryParse(BaseImportStrategy.getValue(row, ['lado1_m', 'lado 1'])?.replaceAll(',', '.') ?? '');
+            final lado2 = double.tryParse(BaseImportStrategy.getValue(row, ['lado2_m', 'lado 2'])?.replaceAll(',', '.') ?? '');
+            final areaDoCsv = double.tryParse(BaseImportStrategy.getValue(row, ['area_m2', 'areaparcela'])?.replaceAll(',', '.') ?? '');
 
-            // <<< CORREÇÃO APLICADA AQUI: LÓGICA DE CONVERSÃO DE COORDENADAS >>>
+            double areaFinal = 0.0;
+            String formaFinal = 'Retangular';
+
+            if (areaDoCsv != null && areaDoCsv > 0) {
+              areaFinal = areaDoCsv;
+              // Se a área veio pronta, mas lado2 não, consideramos circular
+              if (lado2 == null || lado2 == 0.0) {
+                formaFinal = 'Circular';
+              }
+            } else {
+              // Fallback para cálculo manual
+              if (lado1 != null && lado2 != null && lado1 > 0 && lado2 > 0) {
+                areaFinal = lado1 * lado2;
+                formaFinal = 'Retangular';
+              } else if (lado1 != null && lado1 > 0) {
+                areaFinal = math.pi * math.pow(lado1, 2);
+                formaFinal = 'Circular';
+              }
+            }
+            // --- FIM DA LÓGICA DE CORREÇÃO DA ÁREA ---
+
             double? latitudeFinal, longitudeFinal;
             final eastingStr = BaseImportStrategy.getValue(row, ['easting']);
             final northingStr = BaseImportStrategy.getValue(row, ['northing']);
-            // Tenta adivinhar a zona se não estiver no CSV, assumindo 22S como padrão
             final zonaStr = BaseImportStrategy.getValue(row, ['zonautm']) ?? '22S'; 
 
             if (eastingStr != null && northingStr != null) {
@@ -97,30 +120,28 @@ class InventarioImportStrategy extends BaseImportStrategy {
                     }
                 }
             }
-            // <<< FIM DA CORREÇÃO DE COORDENADAS >>>
-
+            
             final novaParcela = Parcela(
                 talhaoId: talhao.id!, 
                 idParcela: idParcelaColeta, 
                 idFazenda: talhao.fazendaId,
-                areaMetrosQuadrados: lado1 * lado2, 
+                areaMetrosQuadrados: areaFinal, // <-- USA A ÁREA CORRIGIDA
                 status: StatusParcela.concluida, 
                 dataColeta: dataColetaFinal, 
                 nomeFazenda: talhao.fazendaNome, 
                 nomeTalhao: talhao.nome, 
                 isSynced: false, 
-                projetoId: projeto.id, 
-                // <<< CORREÇÃO APLICADA AQUI: Lendo RF/UP >>>
+                projetoId: projeto.id,
                 up: BaseImportStrategy.getValue(row, ['up', 'rf']),
                 referenciaRf: BaseImportStrategy.getValue(row, ['up', 'rf']), 
                 ciclo: BaseImportStrategy.getValue(row, ['ciclo']),
                 rotacao: int.tryParse(BaseImportStrategy.getValue(row, ['rotação']) ?? ''), 
                 tipoParcela: BaseImportStrategy.getValue(row, ['tipo']),
-                formaParcela: BaseImportStrategy.getValue(row, ['forma']), 
+                formaParcela: formaFinal, // <-- USA A FORMA CORRIGIDA
                 lado1: lado1, 
-                lado2: lado2,
-                latitude: latitudeFinal,      // Passa a coordenada convertida
-                longitude: longitudeFinal,    // Passa a coordenada convertida
+                lado2: (lado2 != null && lado2 > 0) ? lado2 : null, // <-- Salva null se for circular
+                latitude: latitudeFinal,
+                longitude: longitudeFinal,
                 observacao: BaseImportStrategy.getValue(row, ['observacao_parcela', 'obsparcela']), 
                 nomeLider: BaseImportStrategy.getValue(row, ['lider_equipe', 'equipe']) ?? nomeDoResponsavel
             );
@@ -131,7 +152,6 @@ class InventarioImportStrategy extends BaseImportStrategy {
             parcelaCacheDbId = parcelaDbId;
             result.parcelasCriadas++;
         } else {
-            // Se a parcela já existe, podemos aproveitar para atualizar o RF e as coordenadas se estiverem faltando
             final parcelaAtualizada = parcelaExistente.copyWith(
               up: parcelaExistente.up ?? BaseImportStrategy.getValue(row, ['up', 'rf']),
               referenciaRf: parcelaExistente.referenciaRf ?? BaseImportStrategy.getValue(row, ['up', 'rf'])

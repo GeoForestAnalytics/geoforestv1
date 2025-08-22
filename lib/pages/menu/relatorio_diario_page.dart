@@ -1,4 +1,4 @@
-// lib/pages/menu/relatorio_diario_page.dart (VERSÃO FINAL COM NAVEGAÇÃO COMPLETA)
+// lib/pages/menu/relatorio_diario_page.dart (VERSÃO COMPLETA COM "OUTROS GASTOS")
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -22,7 +22,6 @@ import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/data/repositories/diario_de_campo_repository.dart';
-// <<< PASSO 1: IMPORT DA NOVA TELA DE VISUALIZAÇÃO >>>
 import 'visualizador_relatorio_page.dart';
 
 /// Enum para controlar qual etapa do relatório está sendo exibida.
@@ -53,6 +52,8 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   final _marmitasController = TextEditingController();
   final _refeicaoValorController = TextEditingController();
   final _refeicaoDescricaoController = TextEditingController();
+  final _outrasDespesasValorController = TextEditingController();
+  final _outrasDespesasDescricaoController = TextEditingController();
   final _placaController = TextEditingController();
   final _modeloController = TextEditingController();
 
@@ -95,6 +96,8 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     _marmitasController.dispose();
     _refeicaoValorController.dispose();
     _refeicaoDescricaoController.dispose();
+    _outrasDespesasValorController.dispose();
+    _outrasDespesasDescricaoController.dispose();
     _placaController.dispose();
     _modeloController.dispose();
     super.dispose();
@@ -205,11 +208,12 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     _marmitasController.text = _diarioAtual?.alimentacaoMarmitasQtd?.toString() ?? '';
     _refeicaoValorController.text = _diarioAtual?.alimentacaoRefeicaoValor?.toString().replaceAll('.', ',') ?? '';
     _refeicaoDescricaoController.text = _diarioAtual?.alimentacaoDescricao ?? '';
+    _outrasDespesasValorController.text = _diarioAtual?.outrasDespesasValor?.toString().replaceAll('.', ',') ?? '';
+    _outrasDespesasDescricaoController.text = _diarioAtual?.outrasDespesasDescricao ?? '';
     _placaController.text = _diarioAtual?.veiculoPlaca ?? '';
     _modeloController.text = _diarioAtual?.veiculoModelo ?? '';
   }
   
-  // <<< PASSO 2: AJUSTE FINAL NA NAVEGAÇÃO >>>
   /// Salva o diário e navega para a tela de visualização e ações finais.
   Future<void> _navegarParaVisualizacao() async {
     if (mounted) setState(() => _isLoading = true);
@@ -227,6 +231,8 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       alimentacaoMarmitasQtd: int.tryParse(_marmitasController.text),
       alimentacaoRefeicaoValor: double.tryParse(_refeicaoValorController.text.replaceAll(',', '.')),
       alimentacaoDescricao: _refeicaoDescricaoController.text.trim(),
+      outrasDespesasValor: double.tryParse(_outrasDespesasValorController.text.replaceAll(',', '.')),
+      outrasDespesasDescricao: _outrasDespesasDescricaoController.text.trim(),
       veiculoPlaca: _placaController.text.trim().toUpperCase(),
       veiculoModelo: _modeloController.text.trim(),
       equipeNoCarro: '${_liderController.text.trim()}, ${_ajudantesController.text.trim()}',
@@ -238,7 +244,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     if (mounted) setState(() => _isLoading = false);
     
     if (mounted) {
-      // Navega para a nova tela, passando todos os dados consolidados.
       final bool? precisaEditar = await Navigator.push<bool>(context, MaterialPageRoute(
         builder: (context) => VisualizadorRelatorioPage(
           diario: diarioParaSalvar,
@@ -247,8 +252,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
         ),
       ));
 
-      // Se o usuário NÃO clicou em "Editar" (retorno foi nulo ou false),
-      // significa que o fluxo terminou, então voltamos para a tela de filtros.
       if (precisaEditar != true) {
         setState(() {
           _currentStep = RelatorioStep.selecionarFiltros;
@@ -262,7 +265,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
 
   @override
   Widget build(BuildContext context) {
-    // ... (O resto do build permanece o mesmo, pois já está refatorado)
     return Scaffold(
       appBar: AppBar(
         title: const Text('Relatório Diário Consolidado'),
@@ -271,8 +273,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => setState(() {
                   _currentStep = RelatorioStep.selecionarFiltros;
-                  // Limpa os resultados ao voltar para os filtros
-                   _locaisTrabalhados.clear();
+                  _locaisTrabalhados.clear();
                   _parcelasDoRelatorio.clear();
                   _cubagensDoRelatorio.clear();
                 }),
@@ -436,6 +437,10 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
                   ]),
                   const SizedBox(height: 12),
                   TextFormField(controller: _refeicaoDescricaoController, decoration: const InputDecoration(labelText: 'Descrição da Alimentação', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  TextFormField(controller: _outrasDespesasValorController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Outros Gastos (R\$)', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  TextFormField(controller: _outrasDespesasDescricaoController, decoration: const InputDecoration(labelText: 'Descrição dos Outros Gastos', border: OutlineInputBorder())),
                 ],
               ),
             ),

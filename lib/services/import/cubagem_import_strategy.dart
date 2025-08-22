@@ -4,6 +4,7 @@ import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:sqflite/sqflite.dart';
 import 'csv_import_strategy.dart'; // Importa a base
+import 'package:intl/intl.dart'; // <<< ADICIONAR ESTE IMPORT >>>
 
 class CubagemImportStrategy extends BaseImportStrategy {
   CubagemImportStrategy({required super.txn, required super.projeto, super.nomeDoResponsavel});
@@ -25,11 +26,29 @@ class CubagemImportStrategy extends BaseImportStrategy {
       CubagemArvore? arvoreCubagem = (await txn.query('cubagens_arvores', where: 'talhaoId = ? AND identificador = ?', whereArgs: [talhao.id!, idArvore])).map(CubagemArvore.fromMap).firstOrNull;
       
       if (arvoreCubagem == null) {
+        
+        // <<< INÍCIO DA CORREÇÃO >>>
+        // Lógica para ler e interpretar a data do CSV
+        final dataColetaStr = BaseImportStrategy.getValue(row, ['data_coleta']);
+        DateTime? dataColetaFinal;
+        if (dataColetaStr != null && dataColetaStr.isNotEmpty) {
+          try { 
+            // Tenta o formato completo primeiro
+            dataColetaFinal = DateFormat('dd/MM/yyyy HH:mm').parseStrict(dataColetaStr); 
+          } catch (_) {
+            try {
+              // Tenta apenas a data se o formato completo falhar
+              dataColetaFinal = DateFormat('dd/MM/yyyy').parseStrict(dataColetaStr); 
+            } catch (e) {
+              dataColetaFinal = null; // Deixa nulo se não conseguir interpretar
+            }
+          }
+        }
+        // <<< FIM DA CORREÇÃO >>>
+        
         final dadosArvore = CubagemArvore(
             talhaoId: talhao.id!, 
             idFazenda: talhao.fazendaId, 
-            // <<< CORREÇÃO APLICADA AQUI >>>
-            // Garante um valor padrão caso o nome da fazenda no talhão seja nulo.
             nomeFazenda: talhao.fazendaNome ?? 'N/A', 
             nomeTalhao: talhao.nome, 
             identificador: idArvore, 
@@ -38,7 +57,8 @@ class CubagemImportStrategy extends BaseImportStrategy {
             alturaBase: double.tryParse(BaseImportStrategy.getValue(row, ['altura_base_m'])?.replaceAll(',', '.') ?? '0') ?? 0, 
             tipoMedidaCAP: BaseImportStrategy.getValue(row, ['tipo_medida_cap']) ?? 'fita', 
             classe: BaseImportStrategy.getValue(row, ['classe']), isSynced: false,
-            nomeLider: BaseImportStrategy.getValue(row, ['lider_equipe']) ?? nomeDoResponsavel
+            nomeLider: BaseImportStrategy.getValue(row, ['lider_equipe']) ?? nomeDoResponsavel,
+            dataColeta: dataColetaFinal // <-- Passa a data lida para o objeto
         );
         final map = dadosArvore.toMap();
         map['lastModified'] = now;

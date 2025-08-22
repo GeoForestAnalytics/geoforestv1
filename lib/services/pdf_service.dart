@@ -1,4 +1,4 @@
-// lib/services/pdf_service.dart (VERSÃO COM PDF DO RELATÓRIO DIÁRIO)
+// lib/services/pdf_service.dart (VERSÃO COM REGENERAÇÃO DE PDF DO PLANO)
 
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -17,22 +17,25 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
 import 'package:collection/collection.dart';
-
-// <<< IMPORTS ADICIONAIS NECESSÁRIOS >>>
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 
+// <<< NOVOS IMPORTS NECESSÁRIOS >>>
+import 'package:geoforestv1/data/repositories/talhao_repository.dart';
+import 'package:geoforestv1/models/atividade_model.dart';
 
 
 class PdfService {
   final _analiseRepository = AnaliseRepository();
+  // <<< NOVA INSTÂNCIA DE REPOSITÓRIO >>>
+  final _talhaoRepository = TalhaoRepository();
 
   // ... (Toda a lógica de permissão e salvamento de PDF permanece a mesma)
   Future<bool> _requestPermission(BuildContext context) async {
     PermissionStatus status;
     if (Platform.isAndroid) {
       final androidInfo = await DeviceInfoPlugin().androidInfo;
-      if (androidInfo.version.sdkInt >= 30) { // Android 11+
+      if (androidInfo.version.sdkInt >= 30) {
         status = await Permission.manageExternalStorage.request();
       } else {
         status = await Permission.storage.request();
@@ -118,7 +121,8 @@ class PdfService {
     }
   }
   
-  // <<< NOVO MÉTODO PRINCIPAL PARA O RELATÓRIO DIÁRIO >>>
+  // ... (métodos de gerarRelatorioDiario... e outros permanecem iguais)
+
   Future<void> gerarRelatorioDiarioConsolidadoPdf({
     required BuildContext context,
     required DiarioDeCampo diario,
@@ -153,12 +157,10 @@ class PdfService {
     final nomeLiderFmt = diario.nomeLider.replaceAll(RegExp(r'\s+'), '_');
     final nomeArquivo = 'Relatorio_Diario_${nomeLiderFmt}_${diario.dataRelatorio}.pdf';
     
-    // Usa o mesmo método de salvar e abrir que os outros relatórios já usam.
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
 
-  // ... (métodos de geração de PDF existentes permanecem iguais)
-    Future<void> gerarRelatorioVolumetricoPdf({
+  Future<void> gerarRelatorioVolumetricoPdf({
     required BuildContext context,
     required Map<String, dynamic> resultadoRegressao,
     required Map<String, dynamic> producaoInventario,
@@ -301,6 +303,62 @@ class PdfService {
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
   
+  // <<< NOVO MÉTODO PARA REGERAR PDF ADICIONADO AQUI >>>
+  /// Regenera um PDF de um plano de cubagem já existente a partir de uma atividade.
+  Future<void> gerarPdfDePlanoExistente({
+    required BuildContext context,
+    required Atividade atividade,
+    required List<CubagemArvore> placeholders,
+  }) async {
+    if (placeholders.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum dado de plano encontrado para esta atividade.')));
+      return;
+    }
+
+    final pdf = pw.Document();
+    
+    // Agrupa as árvores por talhão para criar uma página por talhão
+    final grupoPorTalhao = groupBy(placeholders, (CubagemArvore c) => c.talhaoId);
+
+    for (var talhaoId in grupoPorTalhao.keys) {
+      final arvoresDoTalhao = grupoPorTalhao[talhaoId]!;
+      final primeiroItem = arvoresDoTalhao.first;
+      final talhao = await _talhaoRepository.getTalhaoById(talhaoId!);
+
+      // Conta quantas árvores por classe diamétrica
+      final plano = <String, int>{};
+      for (var arvore in arvoresDoTalhao) {
+        if (arvore.classe != null) {
+          plano.update(arvore.classe!, (value) => value + 1, ifAbsent: () => 1);
+        }
+      }
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          header: (pw.Context ctx) => _buildHeader('Plano de Cubagem', "${talhao?.fazendaNome ?? primeiroItem.nomeFazenda} / ${talhao?.nome ?? primeiroItem.nomeTalhao}"),
+          footer: (pw.Context ctx) => _buildFooter(),
+          build: (pw.Context ctx) {
+            return [
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Plano de Cubagem Estratificada por Classe Diamétrica',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
+                textAlign: pw.TextAlign.center,
+              ),
+              pw.Divider(height: 20),
+              _buildTabelaPlano(plano),
+            ];
+          },
+        ),
+      );
+    }
+    
+    final hoje = DateTime.now();
+    final nomeArquivo = 'Plano_de_Cubagem_Regerado_${DateFormat('yyyy-MM-dd_HH-mm').format(hoje)}.pdf';
+    await _salvarEAbriPdf(context, pdf, nomeArquivo);
+  }
+
   Future<void> gerarRelatorioRendimentoPdf({
     required BuildContext context,
     required String nomeFazenda,
@@ -381,7 +439,6 @@ class PdfService {
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
 
-  // <<< NOVOS WIDGETS AUXILIARES PARA O PDF DO RELATÓRIO DIÁRIO >>>
   pw.Widget _buildTabelaDiarioPdf(DiarioDeCampo diario) {
     final nf = NumberFormat("#,##0.00", "pt_BR");
     final distancia = (diario.kmFinal ?? 0) - (diario.kmInicial ?? 0);
@@ -437,13 +494,11 @@ class PdfService {
     final allColetas = [...parcelas, ...cubagens];
     if (allColetas.isEmpty) return pw.Container();
     
-    // Agrupa por uma chave combinada: 'Projeto-Fazenda-Talhão'
     final grupoPorLocal = groupBy(allColetas, (item) {
       if (item is Parcela) {
         return '${item.projetoId}-${item.nomeFazenda}-${item.nomeTalhao}';
       }
       if (item is CubagemArvore) {
-        // Precisaria buscar o projetoId para a cubagem
         return 'ProjetoDesconhecido-${item.nomeFazenda}-${item.nomeTalhao}';
       }
       return 'Desconhecido';
@@ -492,7 +547,6 @@ class PdfService {
     );
   }
 
-  // --- MÉTODOS DE BUILD AUXILIARES E EXISTENTES ---
   pw.Widget _buildHeader(String titulo, String subtitulo) {
     return pw.Container(
       alignment: pw.Alignment.centerLeft,

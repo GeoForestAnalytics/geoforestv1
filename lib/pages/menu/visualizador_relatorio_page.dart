@@ -1,4 +1,4 @@
-// lib/pages/menu/visualizador_relatorio_page.dart (NOVO ARQUIVO - VERSÃO SIMPLIFICADA)
+// lib/pages/menu/visualizador_relatorio_page.dart (VERSÃO COM BOTÃO HOME)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
@@ -7,6 +7,7 @@ import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/services/export_service.dart';
 import 'package:geoforestv1/services/pdf_service.dart';
 import 'package:geoforestv1/services/sync_service.dart';
+import 'package:geoforestv1/utils/navigation_helper.dart'; // <<< 1. IMPORT NECESSÁRIO
 
 /// Tela de ações finais após a consolidação de um relatório diário.
 class VisualizadorRelatorioPage extends StatefulWidget {
@@ -82,6 +83,15 @@ class _VisualizadorRelatorioPageState extends State<VisualizadorRelatorioPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Finalizar Relatório'),
+        // <<< 2. BOTÃO ADICIONADO AQUI >>>
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.home_outlined),
+            tooltip: 'Voltar para o Início',
+            // Ao clicar, chama a função do helper para voltar ao menu principal
+            onPressed: () => NavigationHelper.goBackToHome(context),
+          ),
+        ],
       ),
       body: Center(
         child: Padding(
@@ -132,7 +142,7 @@ class _VisualizadorRelatorioPageState extends State<VisualizadorRelatorioPage> {
               TextButton.icon(
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Editar Informações'),
-                onPressed: () => Navigator.of(context).pop(true), // Retorna 'true' para sinalizar edição
+                onPressed: () => Navigator.of(context).pop(true),
               ),
             ],
           ),

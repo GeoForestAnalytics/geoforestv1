@@ -1,9 +1,12 @@
-// lib/providers/operacoes_provider.dart (NOVO ARQUIVO)
+// lib/providers/operacoes_provider.dart (VERSÃO FINAL COM IMPORT CORRIGIDO)
 
 import 'package:flutter/foundation.dart';
 import 'package:collection/collection.dart';
+import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
+import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
+import 'package:intl/intl.dart'; // <<< IMPORT ADICIONADO AQUI >>>
 
 // Classes de modelo para estruturar os dados calculados
 class KpiData {
@@ -51,32 +54,102 @@ class OperacoesProvider with ChangeNotifier {
   List<DiarioDeCampo> get diariosFiltrados => _diariosFiltrados;
 
   /// Método principal chamado pelo ProxyProvider para atualizar todos os cálculos.
-  void update(GerenteProvider gerenteProvider) {
-    // Aqui, futuramente, adicionaremos os filtros de data e equipe.
-    // Por enquanto, vamos calcular com base em todos os dados disponíveis.
+  void update(GerenteProvider gerenteProvider, OperacoesFilterProvider filterProvider) {
     final todosOsDiarios = gerenteProvider.diariosSincronizados;
     final todasAsParcelas = gerenteProvider.parcelasSincronizadas;
     final todasAsCubagens = gerenteProvider.cubagensSincronizadas;
 
-    // TODO: Implementar a lógica de filtro por data e equipe aqui.
-    _diariosFiltrados = todosOsDiarios;
+    _diariosFiltrados = _filtrarDiarios(todosOsDiarios, filterProvider);
+    
+    final datasFiltradas = _diariosFiltrados.map((d) => d.dataRelatorio).toSet();
+    final lideresFiltrados = _diariosFiltrados.map((d) => d.nomeLider).toSet();
 
-    if (_diariosFiltrados.isEmpty) {
+    final parcelasFiltradas = todasAsParcelas.where((p) {
+      if (p.dataColeta == null || p.nomeLider == null) return false;
+      final dataString = DateFormat('yyyy-MM-dd').format(p.dataColeta!);
+      // Se não houver líderes filtrados, considera todos.
+      final liderMatch = lideresFiltrados.isEmpty || lideresFiltrados.contains(p.nomeLider!);
+      return datasFiltradas.contains(dataString) && liderMatch;
+    }).toList();
+
+    final cubagensFiltradas = todasAsCubagens.where((c) {
+      if (c.dataColeta == null || c.nomeLider == null) return false;
+      final dataString = DateFormat('yyyy-MM-dd').format(c.dataColeta!);
+      // Se não houver líderes filtrados, considera todos.
+      final liderMatch = lideresFiltrados.isEmpty || lideresFiltrados.contains(c.nomeLider!);
+      return datasFiltradas.contains(dataString) && liderMatch;
+    }).toList();
+
+    final totalColetasFiltradas = parcelasFiltradas.length + cubagensFiltradas.length;
+
+    if (_diariosFiltrados.isEmpty && totalColetasFiltradas == 0) {
       _limparDados();
       return;
     }
-
-    _calcularKPIs(todosOsDiarios, todasAsParcelas.length, todasAsCubagens.length);
-    _calcularComposicaoDespesas(todosOsDiarios);
-    _calcularColetasPorEquipe(todosOsDiarios, todasAsParcelas.length, todasAsCubagens.length);
-    _calcularCustosPorVeiculo(todosOsDiarios);
+    
+    _calcularKPIs(_diariosFiltrados, totalColetasFiltradas);
+    _calcularComposicaoDespesas(_diariosFiltrados);
+    _calcularColetasPorEquipe(_diariosFiltrados);
+    _calcularCustosPorVeiculo(_diariosFiltrados);
+    _diariosFiltrados.sort((a, b) => b.dataRelatorio.compareTo(a.dataRelatorio));
 
     notifyListeners();
   }
+  
+  List<DiarioDeCampo> _filtrarDiarios(List<DiarioDeCampo> todos, OperacoesFilterProvider filterProvider) {
+    List<DiarioDeCampo> filtradosPorData;
+    final agora = DateTime.now();
 
-  void _calcularKPIs(List<DiarioDeCampo> diarios, int totalParcelas, int totalCubagens) {
-    final int coletas = totalParcelas + totalCubagens;
-    
+    switch (filterProvider.periodo) {
+      case PeriodoFiltro.todos:
+        filtradosPorData = todos;
+        break;
+      case PeriodoFiltro.hoje:
+        final hoje = DateTime(agora.year, agora.month, agora.day);
+        filtradosPorData = todos.where((d) => DateTime.parse(d.dataRelatorio).isAtSameMomentAs(hoje)).toList();
+        break;
+      case PeriodoFiltro.ultimos7Dias:
+        final seteDiasAtras = agora.subtract(const Duration(days: 6));
+        final inicioDoDia = DateTime(seteDiasAtras.year, seteDiasAtras.month, seteDiasAtras.day);
+        filtradosPorData = todos.where((d) => !DateTime.parse(d.dataRelatorio).isBefore(inicioDoDia)).toList();
+        break;
+      case PeriodoFiltro.esteMes:
+        filtradosPorData = todos.where((d) {
+          final dataDiario = DateTime.parse(d.dataRelatorio);
+          return dataDiario.year == agora.year && dataDiario.month == agora.month;
+        }).toList();
+        break;
+      case PeriodoFiltro.mesPassado:
+        final primeiroDiaDoMesAtual = DateTime(agora.year, agora.month, 1);
+        final ultimoDiaMesPassado = primeiroDiaDoMesAtual.subtract(const Duration(days: 1));
+        final primeiroDiaMesPassado = DateTime(ultimoDiaMesPassado.year, ultimoDiaMesPassado.month, 1);
+        filtradosPorData = todos.where((d) {
+          final dataDiario = DateTime.parse(d.dataRelatorio);
+          return dataDiario.year == primeiroDiaMesPassado.year && dataDiario.month == primeiroDiaMesPassado.month;
+        }).toList();
+        break;
+      case PeriodoFiltro.personalizado:
+        if (filterProvider.periodoPersonalizado != null) {
+          final dataFim = filterProvider.periodoPersonalizado!.end.add(const Duration(days: 1));
+          filtradosPorData = todos.where((d) {
+            final dataDiario = DateTime.parse(d.dataRelatorio);
+            return dataDiario.isAfter(filterProvider.periodoPersonalizado!.start.subtract(const Duration(days: 1))) &&
+                   dataDiario.isBefore(dataFim);
+          }).toList();
+        } else {
+          filtradosPorData = todos;
+        }
+        break;
+    }
+
+    if (filterProvider.lideresSelecionados.isEmpty) {
+      return filtradosPorData;
+    } else {
+      return filtradosPorData.where((d) => filterProvider.lideresSelecionados.contains(d.nomeLider)).toList();
+    }
+  }
+
+  void _calcularKPIs(List<DiarioDeCampo> diarios, int totalColetas) {
     final double custoTotal = diarios.fold(0.0, (prev, d) {
       return prev + (d.abastecimentoValor ?? 0) + (d.pedagioValor ?? 0) + (d.alimentacaoRefeicaoValor ?? 0);
     });
@@ -89,10 +162,10 @@ class OperacoesProvider with ChangeNotifier {
     });
 
     _kpis = KpiData(
-      coletasRealizadas: coletas,
+      coletasRealizadas: totalColetas,
       custoTotalCampo: custoTotal,
       kmRodados: kmTotal,
-      custoPorColeta: coletas > 0 ? custoTotal / coletas : 0.0,
+      custoPorColeta: totalColetas > 0 ? custoTotal / totalColetas : 0.0,
     );
   }
 
@@ -100,26 +173,22 @@ class OperacoesProvider with ChangeNotifier {
     double totalAbastecimento = diarios.fold(0.0, (prev, d) => prev + (d.abastecimentoValor ?? 0));
     double totalPedagio = diarios.fold(0.0, (prev, d) => prev + (d.pedagioValor ?? 0));
     double totalAlimentacao = diarios.fold(0.0, (prev, d) => prev + (d.alimentacaoRefeicaoValor ?? 0));
+    double totalOutros = diarios.fold(0.0, (prev, d) => prev + (d.outrasDespesasValor ?? 0));
 
     _composicaoDespesas = {
       'Abastecimento': totalAbastecimento,
       'Alimentação': totalAlimentacao,
       'Pedágio': totalPedagio,
+      'Outros': totalOutros,
     };
   }
   
-  void _calcularColetasPorEquipe(List<DiarioDeCampo> diarios, int totalParcelas, int totalCubagens) {
-    // Esta é uma estimativa. Para dados precisos, precisaríamos vincular
-    // cada coleta ao diário do dia. Por enquanto, agrupamos por líder.
+  void _calcularColetasPorEquipe(List<DiarioDeCampo> diarios) {
     final grupo = groupBy(diarios, (DiarioDeCampo d) => d.nomeLider);
     _coletasPorEquipe = grupo.map((lider, listaDiarios) => MapEntry(lider, listaDiarios.length));
-    // NOTE: Este cálculo assume "1 diário = 1 dia de coleta por equipe".
-    // A métrica real de coletas por equipe já está no `DashboardMetricsProvider`.
-    // Poderíamos refatorar para unificar isso no futuro.
   }
 
   void _calcularCustosPorVeiculo(List<DiarioDeCampo> diarios) {
-    // Agrupa os diários por placa de veículo, filtrando os que não têm placa.
     final grupoPorPlaca = groupBy(
       diarios.where((d) => d.veiculoPlaca != null && d.veiculoPlaca!.isNotEmpty),
       (DiarioDeCampo d) => d.veiculoPlaca!,
@@ -147,7 +216,6 @@ class OperacoesProvider with ChangeNotifier {
     }).toList();
   }
 
-  /// Limpa todos os dados calculados quando não há filtros ou dados.
   void _limparDados() {
     _kpis = KpiData();
     _composicaoDespesas = {};

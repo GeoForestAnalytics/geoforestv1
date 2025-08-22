@@ -1,4 +1,4 @@
-// lib/main.dart (VERSÃO FINAL COM O NOVO OPERACOES PROVIDER)
+// lib/main.dart (VERSÃO COM ARQUITETURA DE PROVIDERS FINALIZADA)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -30,14 +30,11 @@ import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/pages/gerente/gerente_map_page.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
-import 'package:geoforestv1/pages/gerente/gerente_main_page.dart';
-
-// <<< NOVO IMPORT PARA O PROVIDER DE OPERAÇÕES >>>
 import 'package:geoforestv1/providers/operacoes_provider.dart';
+import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
 
 
 void initializeProj4Definitions() {
-  // Uma função auxiliar para adicionar uma projeção apenas se ela não existir.
   void addProjectionIfNotExists(String name, String definition) {
     try {
       proj4.Projection.get(name);
@@ -45,15 +42,10 @@ void initializeProj4Definitions() {
       proj4.Projection.add(name, definition);
     }
   }
-
-  // Garante que a projeção base sempre exista.
   addProjectionIfNotExists('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
-
-  // Itera e adiciona TODAS as definições UTM necessárias.
   proj4Definitions.forEach((epsg, def) {
     addProjectionIfNotExists('EPSG:$epsg', def);
   });
-
   debugPrint("Definições Proj4 inicializadas/verificadas.");
 }
 
@@ -76,7 +68,6 @@ Future<void> main() async {
 
 class AppServicesLoader extends StatefulWidget {
   const AppServicesLoader({super.key});
-
   @override
   State<AppServicesLoader> createState() => _AppServicesLoaderState();
 }
@@ -99,9 +90,7 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
       await SystemChrome.setPreferredOrientations(
         [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown],
       );
-      
       return await loadThemeFromPreferences();
-
     } catch (e) {
       print("!!!!!! ERRO NA INICIALIZAÇÃO DOS SERVIÇOS: $e !!!!!");
       rethrow;
@@ -156,52 +145,51 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => LicenseProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider(initialThemeMode)),
         
-        // --- INÍCIO DA ARQUITETURA CORRETA ---
+        // --- ARQUITETURA DE DADOS E FILTROS PARA OS DASHBOARDS ---
 
-        // 1. O GerenteProvider fornece os dados brutos. Ele é independente.
+        // 1. Provider de Dados Brutos
         ChangeNotifierProvider(create: (_) => GerenteProvider()),
 
-        // 2. O FilterProvider agora DEPENDE do GerenteProvider.
+        // 2. Providers de Filtro (dependem dos dados brutos)
         ChangeNotifierProxyProvider<GerenteProvider, DashboardFilterProvider>(
           create: (_) => DashboardFilterProvider(),
-          update: (_, gerenteProvider, previousFilterProvider) {
-            final filterProvider = previousFilterProvider ?? DashboardFilterProvider();
-            filterProvider.updateProjetosDisponiveis(gerenteProvider.projetos);
-            List<Parcela> parcelasParaFiltroDeFazenda;
-            if (filterProvider.selectedProjetoIds.isEmpty) {
-              parcelasParaFiltroDeFazenda = gerenteProvider.parcelasSincronizadas;
-            } else {
-              parcelasParaFiltroDeFazenda = gerenteProvider.parcelasSincronizadas
-                  .where((p) => filterProvider.selectedProjetoIds.contains(p.projetoId))
-                  .toList();
-            }
-            filterProvider.updateFazendasDisponiveis(parcelasParaFiltroDeFazenda);
-            return filterProvider;
+          update: (_, gerenteProvider, previous) {
+            final filter = previous ?? DashboardFilterProvider();
+            filter.updateProjetosDisponiveis(gerenteProvider.projetos);
+            List<Parcela> parcelasParaFiltroDeFazenda = filter.selectedProjetoIds.isEmpty
+                ? gerenteProvider.parcelasSincronizadas
+                : gerenteProvider.parcelasSincronizadas.where((p) => filter.selectedProjetoIds.contains(p.projetoId)).toList();
+            filter.updateFazendasDisponiveis(parcelasParaFiltroDeFazenda);
+            return filter;
           },
         ),
-
-        // 3. O MetricsProvider (Dashboard de PROJETOS) DEPENDE de Gerente e Filter.
+        ChangeNotifierProxyProvider<GerenteProvider, OperacoesFilterProvider>(
+          create: (_) => OperacoesFilterProvider(),
+          update: (_, gerenteProvider, previous) {
+            final filter = previous ?? OperacoesFilterProvider();
+            final lideres = gerenteProvider.diariosSincronizados.map((d) => d.nomeLider).toSet().toList();
+            filter.setLideresDisponiveis(lideres);
+            return filter;
+          },
+        ),
+        
+        // 3. Providers de Métricas (dependem dos dados brutos e dos filtros)
         ChangeNotifierProxyProvider2<GerenteProvider, DashboardFilterProvider, DashboardMetricsProvider>(
           create: (_) => DashboardMetricsProvider(),
-          update: (_, gerenteProvider, filterProvider, previousMetricsProvider) {
-            final metricsProvider = previousMetricsProvider ?? DashboardMetricsProvider();
-            metricsProvider.update(gerenteProvider, filterProvider);
-            return metricsProvider;
+          update: (_, gerenteProvider, filterProvider, previous) {
+            final metrics = previous ?? DashboardMetricsProvider();
+            metrics.update(gerenteProvider, filterProvider);
+            return metrics;
           },
         ),
-        
-        // <<< 4. NOVO PROVIDER DE OPERAÇÕES, que depende apenas do GerenteProvider >>>
-        ChangeNotifierProxyProvider<GerenteProvider, OperacoesProvider>(
+        ChangeNotifierProxyProvider2<GerenteProvider, OperacoesFilterProvider, OperacoesProvider>(
           create: (_) => OperacoesProvider(),
-          update: (_, gerenteProvider, previousOperacoesProvider) {
-            final operacoesProvider = previousOperacoesProvider ?? OperacoesProvider();
-            // O update irá calcular as métricas de custo, km, etc.
-            operacoesProvider.update(gerenteProvider); 
-            return operacoesProvider;
+          update: (_, gerenteProvider, filterProvider, previous) {
+            final operacoes = previous ?? OperacoesProvider();
+            operacoes.update(gerenteProvider, filterProvider);
+            return operacoes;
           },
         ),
-        
-        // --- FIM DA ARQUITETURA CORRETA ---
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {

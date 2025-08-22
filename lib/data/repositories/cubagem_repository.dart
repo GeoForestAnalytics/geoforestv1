@@ -1,4 +1,4 @@
-// lib/data/repositories/cubagem_repository.dart (VERSÃO COM BUSCA POR DATA)
+// lib/data/repositories/cubagem_repository.dart (VERSÃO FINAL COM FILTROS PARA GERENTE)
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,7 +12,7 @@ import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/services/analysis_service.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:intl/intl.dart'; // <<< IMPORT NECESSÁRIO PARA FORMATAR A DATA
+import 'package:intl/intl.dart'; 
 
 class CubagemRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
@@ -26,16 +26,15 @@ class CubagemRepository {
 
   Future<void> salvarCubagemCompleta(CubagemArvore arvore, List<CubagemSecao> secoes) async {
     final db = await _dbHelper.database;
-    final now = DateTime.now(); // <<< USA a data atual como objeto DateTime
+    final now = DateTime.now(); 
     final nowAsString = now.toIso8601String();
 
     await db.transaction((txn) async {
       int id;
       
-      // <<< ALTERAÇÃO 1: Garante que a data da coleta seja salva >>>
       final arvoreParaSalvar = arvore.copyWith(
         isSynced: false,
-        dataColeta: arvore.dataColeta ?? now, // Se não tiver data, usa a atual
+        dataColeta: arvore.dataColeta ?? now, 
       );
 
       final map = arvoreParaSalvar.toMap();
@@ -98,7 +97,7 @@ class CubagemRepository {
               identificador: '${talhao.nome} - Árvore ${i.toString().padLeft(2, '0')}',
               classe: classe,
               isSynced: false,
-              dataColeta: now, // Atribui a data de criação do plano
+              dataColeta: now, 
           );
               
           final map = arvoreCubagem.toMap();
@@ -109,17 +108,12 @@ class CubagemRepository {
     });
   }
 
-  // --- O RESTANTE DO ARQUIVO PERMANECE IGUAL ---
-  // ... (getters e outros métodos)
-
   Future<List<CubagemArvore>> getTodasCubagensDoTalhao(int talhaoId) async {
     final db = await _dbHelper.database;
     final maps = await db.query('cubagens_arvores', where: 'talhaoId = ?', whereArgs: [talhaoId], orderBy: 'id ASC');
     return List.generate(maps.length, (i) => CubagemArvore.fromMap(maps[i]));
   }
   
-  // <<< ALTERAÇÃO 2: NOVO MÉTODO PARA O RELATÓRIO DIÁRIO >>>
-  /// Busca cubagens de um dia específico, para uma equipe e talhão.
   Future<List<CubagemArvore>> getCubagensDoDiaPorEquipe({
     required String nomeLider,
     required DateTime dataSelecionada,
@@ -127,10 +121,8 @@ class CubagemRepository {
   }) async {
     final db = await _dbHelper.database;
     
-    // Formata a data para o formato 'YYYY-MM-DD' para a consulta SQL.
     final dataFormatadaParaQuery = DateFormat('yyyy-MM-dd').format(dataSelecionada);
 
-    // Constrói a consulta.
     String whereClause = 'nomeLider = ? AND talhaoId = ? AND DATE(dataColeta) = ?';
     List<dynamic> whereArgs = [nomeLider, talhaoId, dataFormatadaParaQuery];
 
@@ -138,7 +130,7 @@ class CubagemRepository {
       'cubagens_arvores',
       where: whereClause,
       whereArgs: whereArgs,
-      orderBy: 'lastModified DESC', // Ordena pela data de modificação
+      orderBy: 'lastModified DESC', 
     );
 
     if (maps.isNotEmpty) {
@@ -211,5 +203,75 @@ class CubagemRepository {
     if (ids.isEmpty) return;
     final db = await _dbHelper.database;
     await db.update('cubagens_arvores', {'exportada': 1}, where: 'id IN (${List.filled(ids.length, '?').join(',')})', whereArgs: ids);
+  }
+
+  Future<List<CubagemArvore>> getPlanoDeCubagemPorAtividade(int atividadeId) async {
+    final db = await _dbHelper.database;
+    
+    final List<Map<String, dynamic>> talhoesMaps = await db.query(
+      'talhoes',
+      columns: ['id'],
+      where: 'fazendaAtividadeId = ?',
+      whereArgs: [atividadeId],
+    );
+
+    if (talhoesMaps.isEmpty) {
+      return [];
+    }
+
+    final List<int> talhaoIds = talhoesMaps.map((map) => map['id'] as int).toList();
+
+    final List<Map<String, dynamic>> cubagensMaps = await db.query(
+      'cubagens_arvores',
+      where: 'talhaoId IN (${List.filled(talhaoIds.length, '?').join(',')})',
+      whereArgs: talhaoIds,
+    );
+
+    return List.generate(cubagensMaps.length, (i) => CubagemArvore.fromMap(cubagensMaps[i]));
+  }
+
+  // <<< NOVOS MÉTODOS ADICIONADOS PARA FILTRO DO GERENTE >>>
+  
+  /// Retorna uma lista de nomes de líderes distintos que registraram cubagens concluídas.
+  Future<Set<String>> getDistinctLideres() async {
+    final db = await _dbHelper.database;
+    final maps = await db.query(
+        'cubagens_arvores',
+        distinct: true,
+        columns: ['nomeLider'],
+        where: 'nomeLider IS NOT NULL AND nomeLider != ? AND alturaTotal > 0',
+        whereArgs: ['']
+    );
+    return maps.map((map) => map['nomeLider'] as String).toSet();
+  }
+
+  /// Busca cubagens concluídas com base em filtros opcionais de projeto e líder.
+  Future<List<CubagemArvore>> getConcludedCubagensFiltrado({
+    Set<int>? projetoIds, 
+    Set<String>? lideresNomes
+  }) async {
+    final db = await _dbHelper.database;
+    
+    // Query base para buscar cubagens concluídas e juntar com tabelas de hierarquia
+    String query = '''
+      SELECT C.*, A.projetoId FROM cubagens_arvores C
+      INNER JOIN talhoes T ON C.talhaoId = T.id
+      INNER JOIN atividades A ON T.fazendaAtividadeId = A.id
+      WHERE C.alturaTotal > 0
+    ''';
+
+    List<dynamic> whereArgs = [];
+    
+    if (projetoIds != null && projetoIds.isNotEmpty) {
+      query += ' AND A.projetoId IN (${List.filled(projetoIds.length, '?').join(',')})';
+      whereArgs.addAll(projetoIds);
+    }
+    if (lideresNomes != null && lideresNomes.isNotEmpty) {
+      query += ' AND C.nomeLider IN (${List.filled(lideresNomes.length, '?').join(',')})';
+      whereArgs.addAll(lideresNomes);
+    }
+    
+    final maps = await db.rawQuery(query, whereArgs);
+    return List.generate(maps.length, (i) => CubagemArvore.fromMap(maps[i]));
   }
 }
