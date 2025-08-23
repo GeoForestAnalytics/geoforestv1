@@ -1,17 +1,14 @@
-// lib/pages/gerente/projetos_dashboard_page.dart (VERSÃO CORRIGIDA)
-
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
-import 'package:geoforestv1/providers/gerente_provider.dart';
-import 'package:geoforestv1/services/export_service.dart';
-import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
-import 'package:intl/intl.dart';
+import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/operacoes_provider.dart';
-
+import 'package:geoforestv1/services/export_service.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 class ProjetosDashboardPage extends StatefulWidget {
   const ProjetosDashboardPage({super.key});
@@ -34,10 +31,12 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer4<GerenteProvider, DashboardFilterProvider, DashboardMetricsProvider, OperacoesProvider>(
-      builder: (context, gerenteProvider, filterProvider, metricsProvider, operacoesProvider, child) {
-        
-        if (gerenteProvider.isLoading && metricsProvider.parcelasFiltradas.isEmpty) {
+    return Consumer4<GerenteProvider, DashboardFilterProvider,
+        DashboardMetricsProvider, OperacoesProvider>(
+      builder: (context, gerenteProvider, filterProvider, metricsProvider,
+          operacoesProvider, child) {
+        if (gerenteProvider.isLoading &&
+            metricsProvider.parcelasFiltradas.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
 
@@ -47,16 +46,19 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.red)));
         }
-        
+
         final totalPlanejado = metricsProvider.parcelasFiltradas.length;
         final concluidas = metricsProvider.parcelasFiltradas
-            .where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada)
+            .where((p) =>
+                p.status == StatusParcela.concluida ||
+                p.status == StatusParcela.exportada)
             .length;
         final progressoGeral =
             totalPlanejado > 0 ? concluidas / totalPlanejado : 0.0;
-        
+
         return RefreshIndicator(
-          onRefresh: () async => context.read<GerenteProvider>().iniciarMonitoramento(),
+          onRefresh: () async =>
+              context.read<GerenteProvider>().iniciarMonitoramento(),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
             children: [
@@ -77,20 +79,29 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                 _buildRankingCard(context, metricsProvider.progressoPorEquipe),
               const SizedBox(height: 24),
               if (metricsProvider.coletasPorAtividade.isNotEmpty)
-                _buildColetasPorAtividadeChartCard(context, metricsProvider.coletasPorAtividade),
+                _buildColetasPorAtividadeChartCard(
+                    context, metricsProvider.coletasPorAtividade),
               const SizedBox(height: 24),
               if (metricsProvider.desempenhoPorFazenda.isNotEmpty)
-                _buildFazendaDataTableCard(context, metricsProvider.desempenhoPorFazenda, metricsProvider.desempenhoInventarioTotais),
+                _buildFazendaDataTableCard(
+                    context,
+                    metricsProvider.desempenhoPorFazenda,
+                    metricsProvider.desempenhoInventarioTotais),
               if (metricsProvider.desempenhoPorCubagem.isNotEmpty) ...[
                 const SizedBox(height: 24),
-                _buildCubagemDataTableCard(context, metricsProvider.desempenhoPorCubagem, metricsProvider.desempenhoCubagemTotais),
+                _buildCubagemDataTableCard(
+                    context,
+                    metricsProvider.desempenhoPorCubagem,
+                    metricsProvider.desempenhoCubagemTotais),
               ],
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: () {
-                  final Set<int> projetosFiltrados = filterProvider.selectedProjetoIds;
+                  final Set<int> projetosFiltrados =
+                      filterProvider.selectedProjetoIds;
                   _exportService.exportarDesenvolvimentoEquipes(context,
-                      projetoIdsFiltrados: projetosFiltrados.isNotEmpty ? projetosFiltrados : null);
+                      projetoIdsFiltrados:
+                          projetosFiltrados.isNotEmpty ? projetosFiltrados : null);
                 },
                 icon: const Icon(Icons.download_outlined),
                 label: const Text('Exportar Desenvolvimento das Equipes'),
@@ -114,7 +125,7 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
       },
     );
   }
-  
+
   Widget _buildFiltros(BuildContext context) {
     final filterProvider = context.watch<DashboardFilterProvider>();
     return Card(
@@ -146,164 +157,21 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
-  // <<< MÉTODO COMPLETAMENTE ATUALIZADO >>>
-  Widget _buildMultiSelectAtividadeFilter(BuildContext context, DashboardFilterProvider provider) {
-    // Usa o novo getter para pegar apenas os tipos únicos de atividade
-    final tiposDisponiveis = provider.atividadesTiposDisponiveis;
-    if (tiposDisponiveis.isEmpty) return const SizedBox.shrink();
-
-    String displayText;
-    if (provider.selectedAtividadeTipos.isEmpty) {
-      displayText = 'Todas as Atividades';
-    } else if (provider.selectedAtividadeTipos.length == 1) {
-      displayText = provider.selectedAtividadeTipos.first;
-    } else {
-      displayText = '${provider.selectedAtividadeTipos.length} atividades selecionadas';
-    }
-
-    return InkWell(
-      onTap: () => _showMultiSelectDialog(
-        context: context,
-        title: 'Filtrar por Atividade',
-        // Cria os itens do diálogo a partir da lista de tipos únicos
-        items: tiposDisponiveis.map((tipo) => {'id': tipo, 'label': tipo}).toList(),
-        selectedItems: provider.selectedAtividadeTipos,
-        // Chama os novos métodos do provider
-        onConfirm: (selected) => context.read<DashboardFilterProvider>().setSelectedAtividadeTipos(selected.cast<String>()),
-        onClear: () => context.read<DashboardFilterProvider>().clearAtividadeTipoSelection(),
-      ),
-      child: InputDecorator(
-        decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0)),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Expanded(child: Text(displayText, overflow: TextOverflow.ellipsis)),
-            const Icon(Icons.arrow_drop_down),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildKpiGrid(BuildContext context, DashboardMetricsProvider metrics) {
-    final kpiCards = [
-      _buildKpiCard('Volume Coletado', '${_volumeFormat.format(metrics.volumeTotalColetado)} m³', Icons.forest, Colors.teal),
-      _buildKpiCard('Amostras Concluídas', metrics.totalAmostrasConcluidas.toString(), Icons.checklist, Colors.blue),
-      _buildKpiCard('Cubagens Concluídas', metrics.totalCubagensConcluidas.toString(), Icons.architecture, Colors.orange),
-      _buildKpiCard('Média Diária', '${metrics.mediaDiariaColetas.toStringAsFixed(1)} coletas', Icons.show_chart, Colors.purple),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const maxCrossAxisExtent = 200.0;
-        final crossAxisCount = (constraints.maxWidth / maxCrossAxisExtent).floor().clamp(1, 4);
-
-        return GridView.builder(
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 1.2,
-          ),
-          itemCount: kpiCards.length,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemBuilder: (context, index) {
-            return kpiCards[index];
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildColetasPorAtividadeChartCard(BuildContext context, Map<String, int> data) {
-    final entries = data.entries.toList();
-    final barGroups = entries.asMap().entries.map((entry) {
-      return BarChartGroupData(
-        x: entry.key,
-        barRods: [
-          BarChartRodData(toY: entry.value.value.toDouble(), color: Colors.indigo, borderRadius: BorderRadius.circular(4))
-        ],
-      );
-    }).toList();
-
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Text("Coletas Concluídas por Atividade", style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 24),
-            SizedBox(
-              height: 250,
-              child: BarChart(
-                BarChartData(
-                    barGroups: barGroups,
-                    titlesData: FlTitlesData(
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 30,
-                          getTitlesWidget: (double value, TitleMeta meta) {
-                            if (value.toInt() >= entries.length) return const SizedBox.shrink();
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: Text(
-                                entries[value.toInt()].key,
-                                style: const TextStyle(fontSize: 10),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                       leftTitles: const AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 28,
-                        ),
-                      ),
-                    ),
-                    barTouchData: BarTouchData(
-                      touchTooltipData: BarTouchTooltipData(
-                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                          final atividade = entries[groupIndex].key;
-                          final total = entries[groupIndex].value;
-                          return BarTooltipItem(
-                            '$atividade\n',
-                            const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                            children: <TextSpan>[
-                              TextSpan(
-                                text: total.toString(),
-                                style: const TextStyle(
-                                  color: Colors.yellow,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMultiSelectProjectFilter(BuildContext context, DashboardFilterProvider provider) {
-    final projetosDisponiveis = provider.projetosDisponiveis.where((p) => p.status == 'ativo').toList();
+  Widget _buildMultiSelectProjectFilter(
+      BuildContext context, DashboardFilterProvider provider) {
+    final projetosDisponiveis =
+        provider.projetosDisponiveis.where((p) => p.status == 'ativo').toList();
     String displayText;
     if (provider.selectedProjetoIds.isEmpty) {
       displayText = 'Todos os Projetos';
     } else if (provider.selectedProjetoIds.length == 1) {
-      displayText = projetosDisponiveis.firstWhere((p) => p.id == provider.selectedProjetoIds.first, orElse: () => Projeto(nome: '1 projeto', empresa: '', responsavel: '', dataCriacao: DateTime.now())).nome;
+      displayText = projetosDisponiveis.firstWhere(
+          (p) => p.id == provider.selectedProjetoIds.first,
+          orElse: () => Projeto(
+              nome: '1 projeto',
+              empresa: '',
+              responsavel: '',
+              dataCriacao: DateTime.now())).nome;
     } else {
       displayText = '${provider.selectedProjetoIds.length} projetos selecionados';
     }
@@ -314,11 +182,16 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
         title: 'Filtrar por Projeto',
         items: projetosDisponiveis.map((p) => {'id': p.id, 'label': p.nome}).toList(),
         selectedItems: provider.selectedProjetoIds.map((id) => id as dynamic).toSet(),
-        onConfirm: (selected) => context.read<DashboardFilterProvider>().setSelectedProjetos(selected.cast<int>()),
-        onClear: () => context.read<DashboardFilterProvider>().clearProjetoSelection(),
+        onConfirm: (selected) =>
+            context.read<DashboardFilterProvider>().setSelectedProjetos(selected.cast<int>()),
+        onClear: () =>
+            context.read<DashboardFilterProvider>().clearProjetoSelection(),
       ),
       child: InputDecorator(
-        decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0)),
+        decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding:
+                EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0)),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: <Widget>[
@@ -330,7 +203,53 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
-  Widget _buildMultiSelectFazendaFilter(BuildContext context, DashboardFilterProvider provider) {
+  Widget _buildMultiSelectAtividadeFilter(
+      BuildContext context, DashboardFilterProvider provider) {
+    final tiposDisponiveis = provider.atividadesTiposDisponiveis;
+    if (tiposDisponiveis.isEmpty) return const SizedBox.shrink();
+
+    String displayText;
+    if (provider.selectedAtividadeTipos.isEmpty) {
+      displayText = 'Todas as Atividades';
+    } else if (provider.selectedAtividadeTipos.length == 1) {
+      displayText = provider.selectedAtividadeTipos.first;
+    } else {
+      displayText =
+          '${provider.selectedAtividadeTipos.length} atividades selecionadas';
+    }
+
+    return InkWell(
+      onTap: () => _showMultiSelectDialog(
+        context: context,
+        title: 'Filtrar por Atividade',
+        items: tiposDisponiveis
+            .map((tipo) => {'id': tipo, 'label': tipo})
+            .toList(),
+        selectedItems: provider.selectedAtividadeTipos,
+        onConfirm: (selected) => context
+            .read<DashboardFilterProvider>()
+            .setSelectedAtividadeTipos(selected.cast<String>()),
+        onClear: () =>
+            context.read<DashboardFilterProvider>().clearAtividadeTipoSelection(),
+      ),
+      child: InputDecorator(
+        decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding:
+                EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Expanded(child: Text(displayText, overflow: TextOverflow.ellipsis)),
+            const Icon(Icons.arrow_drop_down),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMultiSelectFazendaFilter(
+      BuildContext context, DashboardFilterProvider provider) {
     if (provider.fazendasDisponiveis.isEmpty) return const SizedBox.shrink();
 
     String displayText;
@@ -339,20 +258,29 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     } else if (provider.selectedFazendaNomes.length == 1) {
       displayText = provider.selectedFazendaNomes.first;
     } else {
-      displayText = '${provider.selectedFazendaNomes.length} fazendas selecionadas';
+      displayText =
+          '${provider.selectedFazendaNomes.length} fazendas selecionadas';
     }
 
     return InkWell(
       onTap: () => _showMultiSelectDialog(
         context: context,
         title: 'Filtrar por Fazenda',
-        items: provider.fazendasDisponiveis.map((nome) => {'id': nome, 'label': nome}).toList(),
+        items: provider.fazendasDisponiveis
+            .map((nome) => {'id': nome, 'label': nome})
+            .toList(),
         selectedItems: provider.selectedFazendaNomes,
-        onConfirm: (selected) => context.read<DashboardFilterProvider>().setSelectedFazendas(selected.cast<String>()),
-        onClear: () => context.read<DashboardFilterProvider>().clearFazendaSelection(),
+        onConfirm: (selected) => context
+            .read<DashboardFilterProvider>()
+            .setSelectedFazendas(selected.cast<String>()),
+        onClear: () =>
+            context.read<DashboardFilterProvider>().clearFazendaSelection(),
       ),
       child: InputDecorator(
-        decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0)),
+        decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding:
+                EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0)),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: <Widget>[
@@ -363,13 +291,16 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
       ),
     );
   }
-  
+
   Widget _buildPeriodoDropdown(BuildContext context) {
     final filterProvider = context.watch<DashboardFilterProvider>();
     return DropdownButtonFormField<PeriodoFiltro>(
       value: filterProvider.periodo,
-      decoration: const InputDecoration(labelText: 'Período', border: OutlineInputBorder()),
-      items: PeriodoFiltro.values.map((p) => DropdownMenuItem(value: p, child: Text(p.displayName))).toList(),
+      decoration: const InputDecoration(
+          labelText: 'Período', border: OutlineInputBorder()),
+      items: PeriodoFiltro.values
+          .map((p) => DropdownMenuItem(value: p, child: Text(p.displayName)))
+          .toList(),
       onChanged: (value) {
         if (value != null) {
           if (value == PeriodoFiltro.personalizado) {
@@ -385,10 +316,13 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
   Widget _buildLiderDropdown(BuildContext context) {
     final filterProvider = context.watch<DashboardFilterProvider>();
     final lideresDisponiveis = filterProvider.lideresDisponiveis;
-    
+
     return DropdownButtonFormField<String>(
-      decoration: const InputDecoration(labelText: 'Líder', border: OutlineInputBorder()),
-      value: filterProvider.lideresSelecionados.isEmpty ? null : filterProvider.lideresSelecionados.first,
+      decoration:
+          const InputDecoration(labelText: 'Líder', border: OutlineInputBorder()),
+      value: filterProvider.lideresSelecionados.isEmpty
+          ? null
+          : filterProvider.lideresSelecionados.first,
       hint: const Text("Todos"),
       items: [
         const DropdownMenuItem<String>(value: null, child: Text("Todos")),
@@ -399,18 +333,19 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
       },
     );
   }
-  
+
   Future<void> _selecionarDataPersonalizada(BuildContext context) async {
-      final filterProvider = context.read<DashboardFilterProvider>();
-      final range = await showDateRangePicker(
-        context: context,
-        firstDate: DateTime(2020),
-        lastDate: DateTime.now(),
-        initialDateRange: filterProvider.periodoPersonalizado,
-      );
-      if (range != null) {
-        filterProvider.setPeriodo(PeriodoFiltro.personalizado, personalizado: range);
-      }
+    final filterProvider = context.read<DashboardFilterProvider>();
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDateRange: filterProvider.periodoPersonalizado,
+    );
+    if (range != null) {
+      filterProvider.setPeriodo(PeriodoFiltro.personalizado,
+          personalizado: range);
+    }
   }
 
   Widget _buildDatePicker(BuildContext context) {
@@ -431,12 +366,12 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
   }
 
   void _showMultiSelectDialog({
-      required BuildContext context,
-      required String title,
-      required List<Map<String, dynamic>> items,
-      required Set<dynamic> selectedItems,
-      required Function(Set<dynamic>) onConfirm,
-      required VoidCallback onClear
+    required BuildContext context,
+    required String title,
+    required List<Map<String, dynamic>> items,
+    required Set<dynamic> selectedItems,
+    required Function(Set<dynamic>) onConfirm,
+    required VoidCallback onClear,
   }) {
     showDialog(
       context: context,
@@ -491,12 +426,12 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
   }
 
   Widget _buildSummaryCard({
-      required BuildContext context,
-      required String title,
-      required String value,
-      required String subtitle,
-      required double progress,
-      required Color color
+    required BuildContext context,
+    required String title,
+    required String value,
+    required String subtitle,
+    required double progress,
+    required Color color,
   }) {
     return Card(
       elevation: 2,
@@ -506,20 +441,70 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Flexible(child: Text(title, style: Theme.of(context).textTheme.titleLarge, overflow: TextOverflow.ellipsis)),
-              Text(value, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: color, fontWeight: FontWeight.bold)),
+              Flexible(
+                  child: Text(title,
+                      style: Theme.of(context).textTheme.titleLarge,
+                      overflow: TextOverflow.ellipsis)),
+              Text(value,
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineMedium
+                      ?.copyWith(color: color, fontWeight: FontWeight.bold)),
             ]),
             const SizedBox(height: 8),
             Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 8),
             LinearProgressIndicator(
-                value: progress, minHeight: 6, borderRadius: BorderRadius.circular(3), backgroundColor: color.withOpacity(0.2), valueColor: AlwaysStoppedAnimation<Color>(color)),
+                value: progress,
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(3),
+                backgroundColor: color.withOpacity(0.2),
+                valueColor: AlwaysStoppedAnimation<Color>(color)),
           ],
         ),
       ),
     );
   }
-  
+
+  Widget _buildKpiGrid(BuildContext context, DashboardMetricsProvider metrics) {
+    final kpiCards = [
+      _buildKpiCard(
+          'Volume Coletado',
+          '${_volumeFormat.format(metrics.volumeTotalColetado)} m³',
+          Icons.forest,
+          Colors.teal),
+      _buildKpiCard('Amostras Concluídas',
+          metrics.totalAmostrasConcluidas.toString(), Icons.checklist, Colors.blue),
+      _buildKpiCard('Cubagens Concluídas',
+          metrics.totalCubagensConcluidas.toString(), Icons.architecture, Colors.orange),
+      _buildKpiCard('Média Diária',
+          '${metrics.mediaDiariaColetas.toStringAsFixed(1)} coletas', Icons.show_chart, Colors.purple),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const maxCrossAxisExtent = 200.0;
+        final crossAxisCount =
+            (constraints.maxWidth / maxCrossAxisExtent).floor().clamp(1, 4);
+
+        return GridView.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 1.2,
+          ),
+          itemCount: kpiCards.length,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemBuilder: (context, index) {
+            return kpiCards[index];
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildKpiCard(String title, String value, IconData icon, Color color) {
     return Card(
       elevation: 2,
@@ -536,11 +521,12 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
               child: Icon(icon, color: color, size: 24),
             ),
             const SizedBox(height: 12),
-            Text(
-              title, 
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500, fontSize: 14)
-            ),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14)),
             const SizedBox(height: 4),
             Text(
               value,
@@ -570,20 +556,35 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
               final index = entry.key;
               final lider = entry.value.key;
               final contagem = entry.value.value;
-              
+
               IconData medalIcon;
               Color medalColor;
               switch (index) {
-                case 0: medalIcon = Icons.military_tech; medalColor = const Color(0xFFFFD700); break;
-                case 1: medalIcon = Icons.military_tech; medalColor = const Color(0xFFC0C0C0); break;
-                case 2: medalIcon = Icons.military_tech; medalColor = const Color(0xFFCD7F32); break;
-                default: medalIcon = Icons.person; medalColor = Colors.grey;
+                case 0:
+                  medalIcon = Icons.military_tech;
+                  medalColor = const Color(0xFFFFD700);
+                  break;
+                case 1:
+                  medalIcon = Icons.military_tech;
+                  medalColor = const Color(0xFFC0C0C0);
+                  break;
+                case 2:
+                  medalIcon = Icons.military_tech;
+                  medalColor = const Color(0xFFCD7F32);
+                  break;
+                default:
+                  medalIcon = Icons.person;
+                  medalColor = Colors.grey;
               }
 
               return ListTile(
                 leading: Icon(medalIcon, color: medalColor, size: 40),
-                title: Text(lider, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                trailing: Text('$contagem Coletas', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                title: Text(lider,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16)),
+                trailing: Text('$contagem Coletas',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w500)),
               );
             }),
           ],
@@ -592,7 +593,99 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
-  Widget _buildFazendaDataTableCard(BuildContext context, List<DesempenhoFazenda> data, DesempenhoFazendaTotais totais) {
+  Widget _buildColetasPorAtividadeChartCard(
+      BuildContext context, Map<String, int> data) {
+    final entries = data.entries.toList();
+    final barGroups = entries.asMap().entries.map((entry) {
+      return BarChartGroupData(
+        x: entry.key,
+        barRods: [
+          BarChartRodData(
+              toY: entry.value.value.toDouble(),
+              color: Colors.indigo,
+              borderRadius: BorderRadius.circular(4))
+        ],
+      );
+    }).toList();
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Text("Coletas Concluídas por Atividade",
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 250,
+              child: BarChart(
+                BarChartData(
+                  barGroups: barGroups,
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 30,
+                        getTitlesWidget: (double value, TitleMeta meta) {
+                          if (value.toInt() >= entries.length) {
+                            return const SizedBox.shrink();
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Text(
+                              entries[value.toInt()].key,
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    leftTitles: const AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 28,
+                      ),
+                    ),
+                  ),
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        final atividade = entries[groupIndex].key;
+                        final total = entries[groupIndex].value;
+                        return BarTooltipItem(
+                          '$atividade\n',
+                          const TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.bold),
+                          children: <TextSpan>[
+                            TextSpan(
+                              text: total.toString(),
+                              style: const TextStyle(
+                                color: Colors.yellow,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFazendaDataTableCard(BuildContext context,
+      List<DesempenhoFazenda> data, DesempenhoFazendaTotais totais) {
     return Card(
       elevation: 2,
       child: Column(
@@ -600,7 +693,8 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-            child: Text("Desempenho por Fazenda (Inventário)", style: Theme.of(context).textTheme.titleLarge),
+            child: Text("Desempenho por Fazenda (Inventário)",
+                style: Theme.of(context).textTheme.titleLarge),
           ),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -619,25 +713,35 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
               rows: [
                 ...data.map((d) => DataRow(cells: [
                       DataCell(Text(d.nomeAtividade)),
-                      DataCell(Text(d.nomeFazenda, style: const TextStyle(fontWeight: FontWeight.w500))),
+                      DataCell(Text(d.nomeFazenda,
+                          style: const TextStyle(fontWeight: FontWeight.w500))),
                       DataCell(Text(d.pendentes.toString())),
                       DataCell(Text(d.emAndamento.toString())),
                       DataCell(Text(d.concluidas.toString())),
                       DataCell(Text(d.exportadas.toString())),
-                      DataCell(Text(d.total.toString(), style: const TextStyle(fontWeight: FontWeight.w500))),
+                      DataCell(Text(d.total.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.w500))),
                     ])),
                 DataRow(
-                  color: MaterialStateProperty.all(Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3)),
-                  cells: [
-                    const DataCell(Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold))),
-                    const DataCell(Text('')),
-                    DataCell(Text(totais.pendentes.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
-                    DataCell(Text(totais.emAndamento.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
-                    DataCell(Text(totais.concluidas.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
-                    DataCell(Text(totais.exportadas.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
-                    DataCell(Text(totais.total.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
-                  ]
-                )
+                    color: MaterialStateProperty.all(Theme.of(context)
+                        .colorScheme
+                        .primaryContainer
+                        .withOpacity(0.3)),
+                    cells: [
+                      const DataCell(Text('TOTAL',
+                          style: TextStyle(fontWeight: FontWeight.bold))),
+                      const DataCell(Text('')),
+                      DataCell(Text(totais.pendentes.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(totais.emAndamento.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(totais.concluidas.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(totais.exportadas.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(totais.total.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold))),
+                    ])
               ],
             ),
           ),
@@ -646,7 +750,8 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
-  Widget _buildCubagemDataTableCard(BuildContext context, List<DesempenhoFazenda> data, DesempenhoFazendaTotais totais) {
+  Widget _buildCubagemDataTableCard(BuildContext context,
+      List<DesempenhoFazenda> data, DesempenhoFazendaTotais totais) {
     return Card(
       elevation: 2,
       child: Column(
@@ -654,7 +759,8 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-            child: Text("Desempenho por Fazenda (Cubagem)", style: Theme.of(context).textTheme.titleLarge),
+            child: Text("Desempenho por Fazenda (Cubagem)",
+                style: Theme.of(context).textTheme.titleLarge),
           ),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -672,26 +778,36 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
               ],
               rows: [
                 ...data.map((d) => DataRow(cells: [
-                        DataCell(Text(d.nomeAtividade)),
-                        DataCell(Text(d.nomeFazenda, style: const TextStyle(fontWeight: FontWeight.w500))),
-                        DataCell(Text(d.pendentes.toString())),
-                        DataCell(Text(d.emAndamento.toString())),
-                        DataCell(Text(d.concluidas.toString())),
-                        DataCell(Text(d.exportadas.toString())),
-                        DataCell(Text(d.total.toString(), style: const TextStyle(fontWeight: FontWeight.w500))),
-                      ])),
+                      DataCell(Text(d.nomeAtividade)),
+                      DataCell(Text(d.nomeFazenda,
+                          style: const TextStyle(fontWeight: FontWeight.w500))),
+                      DataCell(Text(d.pendentes.toString())),
+                      DataCell(Text(d.emAndamento.toString())),
+                      DataCell(Text(d.concluidas.toString())),
+                      DataCell(Text(d.exportadas.toString())),
+                      DataCell(Text(d.total.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.w500))),
+                    ])),
                 DataRow(
-                  color: MaterialStateProperty.all(Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3)),
-                  cells: [
-                    const DataCell(Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold))),
-                    const DataCell(Text('')),
-                    DataCell(Text(totais.pendentes.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
-                    DataCell(Text(totais.emAndamento.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
-                    DataCell(Text(totais.concluidas.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
-                    DataCell(Text(totais.exportadas.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
-                    DataCell(Text(totais.total.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
-                  ]
-                )
+                    color: MaterialStateProperty.all(Theme.of(context)
+                        .colorScheme
+                        .primaryContainer
+                        .withOpacity(0.3)),
+                    cells: [
+                      const DataCell(Text('TOTAL',
+                          style: TextStyle(fontWeight: FontWeight.bold))),
+                      const DataCell(Text('')),
+                      DataCell(Text(totais.pendentes.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(totais.emAndamento.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(totais.concluidas.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(totais.exportadas.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(totais.total.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold))),
+                    ])
               ],
             ),
           ),

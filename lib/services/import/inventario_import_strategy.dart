@@ -17,25 +17,25 @@ class InventarioImportStrategy extends BaseImportStrategy {
 
   // ... (a função _mapCodigo permanece a mesma)
   Codigo _mapCodigo(String? cod) {
-    if (cod == null) return Codigo.normal;
+    if (cod == null) return Codigo.Normal;
     switch(cod.trim().toUpperCase()){
-      case 'FALHA': return Codigo.falha; 
-      case 'MORTA': return Codigo.morta;
-      case 'QUEBRADA': return Codigo.quebrada;
-      case 'BIFURCADA': return Codigo.bifurcada;
-      case 'CAIDA': return Codigo.caida;
-      case 'ATAQUEMACACO': return Codigo.ataquemacaco;
-      case 'REGENERACAO': return Codigo.regenaracao;
-      case 'INCLINADA': return Codigo.inclinada;
-      case 'FOGO': return Codigo.fogo;
-      case 'FORMIGA': return Codigo.formiga;
-      case 'OUTRO': return Codigo.outro;
-      case 'NORMAL': return Codigo.normal;
-      case 'F': return Codigo.falha; case 'M': return Codigo.morta;
-      case 'Q': return Codigo.quebrada; case 'B': return Codigo.bifurcada;
-      case 'C': return Codigo.caida; case 'A': return Codigo.ataquemacaco;
-      case 'R': return Codigo.regenaracao; case 'I': return Codigo.inclinada;
-      default: return Codigo.normal;
+      case 'FALHA': return Codigo.Falha; 
+      case 'MORTA': return Codigo.MortaOuSeca;
+      case 'QUEBRADA': return Codigo.Quebrada;
+      case 'BIFURCADA': return Codigo.Bifurcada;
+      case 'CAIDA': return Codigo.Caida;
+      case 'ATAQUEMACACO': return Codigo.AtaqueMacaco;
+      case 'REGENERACAO': return Codigo.Rebrota;
+      case 'INCLINADA': return Codigo.Inclinada;
+      case 'FOGO': return Codigo.Fogo;
+      case 'FORMIGA': return Codigo.AtaqueFormiga;
+      case 'OUTRO': return Codigo.Outro;
+      case 'NORMAL': return Codigo.Normal;
+      case 'F': return Codigo.Falha; case 'M': return Codigo.MortaOuSeca;
+      case 'Q': return Codigo.Quebrada; case 'B': return Codigo.Bifurcada;
+      case 'C': return Codigo.Caida; case 'A': return Codigo.AtaqueMacaco;
+      case 'R': return Codigo.Rebrota; case 'I': return Codigo.Inclinada;
+      default: return Codigo.Normal;
     }
   }
 

@@ -35,13 +35,25 @@ class _GraficoDispersaoCapAlturaState extends State<GraficoDispersaoCapAltura> {
   // Mapeia cada código para uma cor específica
   Color _getColorForCodigo(Codigo codigo) {
     switch (codigo) {
-      case Codigo.normal: return Colors.green;
-      case Codigo.quebrada: return Colors.orange;
-      case Codigo.bifurcada: return Colors.blue;
-      case Codigo.morta: return Colors.black54;
-      case Codigo.caida: return Colors.brown;
-      case Codigo.fogo: return Colors.red;
-      case Codigo.ataquemacaco: return Colors.purple;
+      case Codigo.Normal: return Colors.green;
+      case Codigo.Quebrada: return Colors.orange;
+      case Codigo.Bifurcada: return Colors.blue;
+      case Codigo.MortaOuSeca: return Colors.black54;
+      case Codigo.Caida: return Colors.brown;
+      case Codigo.Fogo: return Colors.red;
+      case Codigo.AtaqueMacaco: return Colors.purple;
+      case Codigo.Multipla: return const Color.fromRGBO(214, 200, 5, 1);
+      case Codigo.AtaqueFormiga: return const Color.fromARGB(255, 6, 7, 80);
+      case Codigo.PragasOuDoencas: return Colors.teal;
+      case Codigo.Dominada: return Colors.cyan;
+      case Codigo.Geada: return Colors.lightBlueAccent;
+      case Codigo.VespaMadeira: return Colors.amber;
+      case Codigo.Rebrota: return Colors.lightGreen;
+      case Codigo.Torta: return Colors.indigo;
+      case Codigo.FoxTail: return Colors.pink;
+      case Codigo.FeridaBase: return Colors.grey;
+      case Codigo.PonteiraSeca: return Colors.lime;
+      case Codigo.Outro: return const Color.fromARGB(255, 219, 132, 1);
       default: return Colors.grey;
     }
   }

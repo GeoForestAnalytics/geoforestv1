@@ -1,15 +1,15 @@
-// lib/providers/dashboard_metrics_provider.dart (VERSÃO CORRIGIDA)
-
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:geoforestv1/data/repositories/parcela_repository.dart'; // Import da Versão 1
+import 'package:geoforestv1/models/arvore_model.dart'; // Import da Versão 1
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
-import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
+import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/services/analysis_service.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter/material.dart';
 
 class ProgressoFazenda {
   final String nome;
@@ -91,8 +91,10 @@ class DashboardMetricsProvider with ChangeNotifier {
   double get mediaDiariaColetas => _mediaDiariaColetas;
 
   final AnalysisService _analysisService = AnalysisService();
+  final ParcelaRepository _parcelaRepository = ParcelaRepository(); // Instância da Versão 1
 
-  void update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) {
+  // Método update agora é ASYNC, como na Versão 1
+  Future<void> update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) async {
     debugPrint("METRICS PROVIDER UPDATE: Recebeu ${gerenteProvider.parcelasSincronizadas.length} parcelas para calcular.");
 
     final lideres = {
@@ -121,7 +123,7 @@ class DashboardMetricsProvider with ChangeNotifier {
     );
 
     _recalcularDesempenhoPorCubagem(gerenteProvider.talhaoToAtividadeMap, atividadeIdToTipoMap);
-    _recalcularKpisDeProjeto(gerenteProvider);
+    await _recalcularKpisDeProjeto(gerenteProvider); // Chamada agora usa 'await'
     _recalcularProgressoPorEquipe();
     _recalcularColetasPorAtividade(gerenteProvider);
     _recalcularColetasPorMes();
@@ -147,7 +149,7 @@ class DashboardMetricsProvider with ChangeNotifier {
         if (p.projetoId == null || !idsProjetosAtivos.contains(p.projetoId)) return false;
       }
 
-      // <<< MUDANÇA: Lógica de filtro por tipo de atividade >>>
+      // Lógica de filtro por tipo de atividade da Versão 2
       if (filterProvider.selectedAtividadeTipos.isNotEmpty) {
         final atividadeId = gerenteProvider.talhaoToAtividadeMap[p.talhaoId];
         final atividade = gerenteProvider.atividades.firstWhereOrNull((a) => a.id == atividadeId);
@@ -185,8 +187,8 @@ class DashboardMetricsProvider with ChangeNotifier {
       } else {
         if (projetoId == null || !idsProjetosAtivos.contains(projetoId)) return false;
       }
-
-      // <<< MUDANÇA: Lógica de filtro por tipo de atividade >>>
+      
+      // Lógica de filtro por tipo de atividade da Versão 2
       if (filterProvider.selectedAtividadeTipos.isNotEmpty) {
         final atividadeId = gerenteProvider.talhaoToAtividadeMap[c.talhaoId];
         final atividade = gerenteProvider.atividades.firstWhereOrNull((a) => a.id == atividadeId);
@@ -208,7 +210,8 @@ class DashboardMetricsProvider with ChangeNotifier {
     }).toList();
   }
 
-  void _recalcularKpisDeProjeto(GerenteProvider gerenteProvider) {
+  // Método de cálculo de volume ASYNC e CORRETO da Versão 1
+  Future<void> _recalcularKpisDeProjeto(GerenteProvider gerenteProvider) async {
     final parcelasConcluidas = _parcelasFiltradas
         .where((p) =>
             p.status == StatusParcela.concluida ||
@@ -226,14 +229,21 @@ class DashboardMetricsProvider with ChangeNotifier {
     final parcelasPorTalhao = groupBy(parcelasConcluidas, (Parcela p) => p.talhaoId);
     double volumeTotalAcumulado = 0.0;
 
-    parcelasPorTalhao.forEach((talhaoId, parcelasDoTalhao) {
-      if (talhaoId == null) return;
-      
-      final todasAsArvoresDoTalhao = parcelasDoTalhao
-          .expand((p) => p.arvores)
-          .toList();
+    for (final entry in parcelasPorTalhao.entries) {
+      final talhaoId = entry.key;
+      final parcelasDoTalhao = entry.value;
 
-      if (todasAsArvoresDoTalhao.isEmpty) return;
+      if (talhaoId == null) continue;
+      
+      List<Arvore> todasAsArvoresDoTalhao = [];
+      for (final parcela in parcelasDoTalhao) {
+        if (parcela.dbId != null) {
+          final arvoresDaParcela = await _parcelaRepository.getArvoresDaParcela(parcela.dbId!);
+          todasAsArvoresDoTalhao.addAll(arvoresDaParcela);
+        }
+      }
+
+      if (todasAsArvoresDoTalhao.isEmpty) continue;
       
       final analiseTalhao = _analysisService.getTalhaoInsights(parcelasDoTalhao, todasAsArvoresDoTalhao);
       final volumeHaDoTalhao = analiseTalhao.volumePorHectare;
@@ -244,7 +254,7 @@ class DashboardMetricsProvider with ChangeNotifier {
       if (areaHaDoTalhao > 0) {
         volumeTotalAcumulado += volumeHaDoTalhao * areaHaDoTalhao;
       }
-    });
+    }
 
     _volumeTotalColetado = volumeTotalAcumulado;
   }
@@ -383,38 +393,49 @@ class DashboardMetricsProvider with ChangeNotifier {
   }
   
   void _recalcularProgressoPorEquipe() {
-    final parcelasConcluidas = _parcelasFiltradas
-        .where((p) =>
-            p.status == StatusParcela.concluida ||
-            p.status == StatusParcela.exportada)
-        .toList();
-    if (parcelasConcluidas.isEmpty) {
+    final List<dynamic> todasColetasConcluidas = [
+      ..._parcelasFiltradas.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada),
+      ..._cubagensFiltradas.where((c) => c.alturaTotal > 0)
+    ];
+    
+    if (todasColetasConcluidas.isEmpty) {
       _progressoPorEquipe = {};
       return;
     }
-    final grupoPorEquipe = groupBy(
-        parcelasConcluidas,
-        (Parcela p) =>
-            p.nomeLider?.isNotEmpty == true ? p.nomeLider! : 'Gerente');
-    final mapaContagem = grupoPorEquipe
-        .map((nomeEquipe, listaParcelas) => MapEntry(nomeEquipe, listaParcelas.length));
-    final sortedEntries = mapaContagem.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+
+    String getLider(dynamic coleta) {
+      String? nome;
+      if (coleta is Parcela) nome = coleta.nomeLider;
+      if (coleta is CubagemArvore) nome = coleta.nomeLider;
+      return nome?.isNotEmpty == true ? nome! : 'Gerente';
+    }
+
+    final grupoPorEquipe = groupBy(todasColetasConcluidas, getLider);
+
+    final mapaContagem = grupoPorEquipe.map((nomeEquipe, listaColetas) => MapEntry(nomeEquipe, listaColetas.length));
+    
+    final sortedEntries = mapaContagem.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    
     _progressoPorEquipe = Map.fromEntries(sortedEntries);
   }
 
   void _recalcularColetasPorMes() {
-    final parcelas = _parcelasFiltradas
-        .where((p) => p.status == StatusParcela.concluida && p.dataColeta != null)
-        .toList();
-    if (parcelas.isEmpty) {
+    final List<DateTime?> todasAsDatas = [
+      ..._parcelasFiltradas.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada).map((p) => p.dataColeta),
+      ..._cubagensFiltradas.where((c) => c.alturaTotal > 0).map((c) => c.dataColeta),
+    ];
+
+    final datasValidas = todasAsDatas.whereType<DateTime>().toList();
+    
+    if (datasValidas.isEmpty) {
       _coletasPorMes = {};
       return;
     }
-    final grupoPorMes = groupBy(parcelas,
-        (Parcela p) => DateFormat('MMM/yy', 'pt_BR').format(p.dataColeta!));
-    final mapaContagem =
-        grupoPorMes.map((mes, lista) => MapEntry(mes, lista.length));
+
+    final grupoPorMes = groupBy(datasValidas, (DateTime data) => DateFormat('MMM/yy', 'pt_BR').format(data));
+    
+    final mapaContagem = grupoPorMes.map((mes, lista) => MapEntry(mes, lista.length));
+    
     final chavesOrdenadas = mapaContagem.keys.toList()
       ..sort((a, b) {
         try {
@@ -425,6 +446,7 @@ class DashboardMetricsProvider with ChangeNotifier {
           return 0;
         }
       });
+      
     _coletasPorMes = {for (var key in chavesOrdenadas) key: mapaContagem[key]!};
   }
 
@@ -452,15 +474,15 @@ class DashboardMetricsProvider with ChangeNotifier {
             parcelas.where((p) => p.status == StatusParcela.emAndamento).length,
         concluidas: parcelas
             .where((p) =>
-                p.status == StatusParcela.concluida ||
-                p.status == StatusParcela.exportada)
+                p.status == StatusParcela.concluida)
             .length,
-        exportadas: parcelas.where((p) => p.exportada).length,
+        exportadas: parcelas.where((p) => p.status == StatusParcela.exportada).length,
         total: parcelas.length,
       );
     }).toList()
       ..sort((a, b) => '${a.nomeAtividade}-${a.nomeFazenda}'
           .compareTo('${b.nomeAtividade}-${b.nomeFazenda}'));
+          
     _desempenhoInventarioTotais = _desempenhoPorFazenda.fold(
         DesempenhoFazendaTotais(),
         (totais, item) => DesempenhoFazendaTotais(

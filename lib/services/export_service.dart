@@ -672,10 +672,10 @@ class ExportService {
         final covas = <String>{};
         for (var a in arvores) { covas.add('${a.linha}-${a.posicaoNaLinha}'); }
         
-        final fustes = arvores.where((a) => a.codigo != Codigo.falha && a.codigo != Codigo.caida).length;
-        final falhas = arvores.where((a) => a.codigo == Codigo.falha).length;
+        final fustes = arvores.where((a) => a.codigo != Codigo.Falha && a.codigo != Codigo.Caida).length;
+        final falhas = arvores.where((a) => a.codigo == Codigo.Falha).length;
         final codigosEspeciais = arvores.where((a) => 
-            a.codigo != Codigo.normal && a.codigo != Codigo.falha && a.codigo != Codigo.caida
+            a.codigo != Codigo.Normal && a.codigo != Codigo.Falha && a.codigo != Codigo.Caida
         ).length;
 
         allColetasData.add({

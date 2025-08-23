@@ -53,8 +53,11 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   bool _camposHabilitados = true;
   
   final _codesRequiringAlturaDano = [
-    Codigo.bifurcada, Codigo.multipla, Codigo.quebrada,
-    Codigo.ataquemacaco, Codigo.fogo
+    Codigo.Bifurcada, Codigo.Multipla, Codigo.Quebrada,
+    Codigo.AtaqueMacaco, Codigo.Fogo, Codigo.PragasOuDoencas,
+    Codigo.VespaMadeira, Codigo.MortaOuSeca, Codigo.PonteiraSeca,
+    Codigo.Rebrota, Codigo.AtaqueFormiga, Codigo.Torta,
+    Codigo.FoxTail,Codigo.FeridaBase
   ];
 
   @override
@@ -71,7 +74,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
       _linhaController.text = arvore.linha.toString();
       _posicaoController.text = arvore.posicaoNaLinha.toString();
     } else {
-      _codigo = Codigo.normal;
+      _codigo = Codigo.Normal;
       _linhaController.text = widget.linhaAtual.toString();
       _posicaoController.text = widget.posicaoNaLinhaAtual.toString();
     }
@@ -80,7 +83,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
 
   void _atualizarEstadoCampos() {
     setState(() {
-      if (_codigo == Codigo.falha || _codigo == Codigo.caida) {
+      if (_codigo == Codigo.Falha || _codigo == Codigo.Caida) {
         _camposHabilitados = false;
         _capController.text = '0';
         _alturaController.clear();

@@ -232,7 +232,7 @@ class AnalysisService {
     final double mediaAltura = alturasValidas.isNotEmpty ? alturasValidas.reduce((a, b) => a + b) / alturasValidas.length : 0.0;
     
     // Define quais códigos não devem ter volume calculado
-    const codigosSemVolume = [Codigo.falha, Codigo.morta, Codigo.caida];
+    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
 
     for (final arvore in arvoresDoInventario) {
       // A condição foi alterada para excluir apenas os códigos sem volume
@@ -312,7 +312,7 @@ class AnalysisService {
     
     // <<< MUDANÇA INICIADA >>>
     // A lista de árvores vivas para cálculo agora inclui todos os códigos, exceto os não-produtivos.
-    const codigosSemVolume = [Codigo.falha, Codigo.morta, Codigo.caida];
+    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
     final List<Arvore> arvoresVivas = arvoresDoConjunto.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
     // <<< MUDANÇA FINALIZADA >>>
 
@@ -336,7 +336,7 @@ class AnalysisService {
     List<String> insights = [];
     List<String> recommendations = [];
     
-    final int arvoresMortas = (codeAnalysis?.contagemPorCodigo['morta'] ?? 0) + (codeAnalysis?.contagemPorCodigo['caida'] ?? 0);
+    final int arvoresMortas = (codeAnalysis?.contagemPorCodigo['MortaOuSeca'] ?? 0) + (codeAnalysis?.contagemPorCodigo['Caida'] ?? 0);
     final taxaMortalidade = (codeAnalysis?.totalFustes ?? 0) > 0 ? (arvoresMortas / codeAnalysis!.totalFustes) * 100 : 0.0;
     if (taxaMortalidade > 15) {
       warnings.add("Mortalidade de ${taxaMortalidade.toStringAsFixed(1)}% detectada, valor considerado alto.");
@@ -380,7 +380,7 @@ class AnalysisService {
       covasUnicas.add('${arvore.linha}-${arvore.posicaoNaLinha}');
     }
     final totalCovasAmostradas = covasUnicas.length;
-    final totalCovasOcupadas = arvores.where((a) => a.codigo != Codigo.falha).map((a) => '${a.linha}-${a.posicaoNaLinha}').toSet().length;
+    final totalCovasOcupadas = arvores.where((a) => a.codigo != Codigo.Falha).map((a) => '${a.linha}-${a.posicaoNaLinha}').toSet().length;
 
     final Map<String, CodeStatDetails> estatisticas = {};
     final arvoresAgrupadas = groupBy(arvores, (Arvore a) => a.codigo.name);
@@ -415,7 +415,7 @@ class AnalysisService {
       return getTalhaoInsights(parcelasOriginais, todasAsArvores);
     }
     
-    const codigosSemVolume = [Codigo.falha, Codigo.morta, Codigo.caida];
+    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
     final List<Arvore> arvoresVivas = todasAsArvores.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
     if (arvoresVivas.isEmpty) {
       return getTalhaoInsights(parcelasOriginais, todasAsArvores);
@@ -439,7 +439,7 @@ class AnalysisService {
       return [];
     }
     
-    const codigosSemVolume = [Codigo.falha, Codigo.morta, Codigo.caida];
+    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
     final List<Arvore> arvoresVivas = todasAsArvores.where((a) => !codigosSemVolume.contains(a.codigo) && a.cap > 0).toList();
     if (arvoresVivas.isEmpty) return [];
 

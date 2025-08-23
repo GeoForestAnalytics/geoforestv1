@@ -14,7 +14,7 @@ class ValidationService {
     final List<String> warnings = [];
 
     // Não valida CAP para 'falha' ou 'caida', pois é esperado que seja 0.
-    if (arvore.codigo != Codigo.falha && arvore.codigo != Codigo.caida) {
+    if (arvore.codigo != Codigo.Falha && arvore.codigo != Codigo.Caida) {
       if (arvore.cap <= 5.0) {
         warnings.add("CAP de ${arvore.cap} cm é muito baixo. Verifique.");
       }
@@ -34,7 +34,7 @@ class ValidationService {
 
   ValidationResult validateParcela(List<Arvore> arvores) {
     final arvoresValidasParaAnalise = arvores
-        .where((a) => a.codigo != Codigo.falha && a.codigo != Codigo.caida)
+        .where((a) => a.codigo != Codigo.Falha && a.codigo != Codigo.Caida)
         .toList();
 
     if (arvoresValidasParaAnalise.length < 10) return ValidationResult();

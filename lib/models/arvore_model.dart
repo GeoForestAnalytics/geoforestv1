@@ -5,14 +5,52 @@ import 'package:collection/collection.dart';
 
 /// Códigos primários para classificar uma árvore durante o inventário.
 enum Codigo {
-  normal, falha, bifurcada, multipla, quebrada, morta, caida,
-  ataquemacaco, regenaracao, inclinada, fogo, formiga, outro
+  Normal,
+  Falha, // Já existia
+  Bifurcada,
+  Multipla,
+  Quebrada,
+  Caida, // "Caida" já existia
+  Dominada,
+  Geada,
+  Fogo,
+  PragasOuDoencas,
+  AtaqueMacaco, // Já existia como "ataquemacaco"
+  VespaMadeira,
+  MortaOuSeca, // "Morta" já existia
+  PonteiraSeca,  
+  Rebrota,
+  AtaqueFormiga, // "Formiga" já existia
+  Torta,
+  FoxTail,
+  Inclinada,
+  DeitadaVento,
+  FeridaBase,
+  CaidaRaizVento,
+  Outro // Já existia
+
 }
 
 /// Códigos secundários para adicionar uma segunda característica à árvore.
 enum Codigo2 {
-  bifurcada, multipla, quebrada, morta, caida, ataquemacaco,
-  regenaracao, inclinada, fogo, formiga, outro
+  Bifurcada,
+  Multipla,
+  Quebrada, // Já existia // Já existia como "multipla"    
+  Geada,
+  Fogo,
+  PragasOuDoencas,
+  AtaqueMacaco, // Já existia como "ataquemacaco"
+  VespaMadeira,
+  MortaOuSeca, // "Morta" já existia
+  PonteiraSeca,  
+  Rebrota,
+  AtaqueFormiga, // "Formiga" já existia
+  Torta,
+  FoxTail,
+  Inclinada,
+  DeitadaVento,
+  FeridaBase,
+  Outro // Já existia
 }
 
 /// Representa uma única árvore medida em uma parcela de inventário.
@@ -163,7 +201,7 @@ class Arvore {
       posicaoNaLinha: map['posicaoNaLinha'] ?? 0,
       fimDeLinha: map['fimDeLinha'] == 1,
       dominante: map['dominante'] == 1,
-      codigo: Codigo.values.firstWhere((e) => e.name == map['codigo'], orElse: () => Codigo.normal),
+      codigo: Codigo.values.firstWhere((e) => e.name == map['codigo'], orElse: () => Codigo.Normal),
       // <<< MELHORIA: Lógica mais segura para evitar erros se o texto do banco for inválido >>>
       codigo2: map['codigo2'] != null
           ? Codigo2.values.firstWhereOrNull( // <<< MUDANÇA 1: Usar 'firstWhereOrNull'
