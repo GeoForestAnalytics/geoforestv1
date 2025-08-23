@@ -1,4 +1,4 @@
-// lib/services/pdf_service.dart (VERSÃO COM PDF DE DISTRIBUIÇÃO DE DAP CORRIGIDO)
+// lib/services/pdf_service.dart (VERSÃO ATUALIZADA)
 
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -28,7 +28,6 @@ class PdfService {
   final _analiseRepository = AnaliseRepository();
   final _talhaoRepository = TalhaoRepository();
 
-  // ... (As funções _requestPermission, _getDownloadsDirectory, _salvarEAbriPdf permanecem as mesmas)
   Future<bool> _requestPermission(BuildContext context) async {
     PermissionStatus status;
     if (Platform.isAndroid) {
@@ -118,13 +117,60 @@ class PdfService {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao gerar o PDF: $e')));
     }
   }
+
+  Future<void> gerarRelatorioAnaliseTalhaoPdf({
+    required BuildContext context,
+    required Talhao talhao,
+    required TalhaoAnalysisResult analise,
+    required pw.ImageProvider graficoDispersaoImagem,
+  }) async {
+    final pdf = pw.Document();
+    
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        header: (pw.Context context) => _buildHeader('Análise de Talhão', "${talhao.fazendaNome ?? 'N/A'} / ${talhao.nome}"),
+        footer: (pw.Context context) => _buildFooter(),
+        build: (pw.Context context) {
+          final codeAnalysis = analise.analiseDeCodigos;
+          return [
+            pw.Text(
+              'Relatório de Análise de Inventário',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
+              textAlign: pw.TextAlign.center,
+            ),
+            pw.Divider(height: 20),
+            _buildResumoTalhaoPdf(analise),
+            if (codeAnalysis != null) ...[
+              pw.SizedBox(height: 20),
+              _buildComposicaoPovoamentoPdf(codeAnalysis),
+              pw.SizedBox(height: 20),
+              _buildTabelaEstatisticasCodigoPdf(codeAnalysis),
+            ],
+            pw.SizedBox(height: 20),
+            _buildTabelaDistribuicaoPdf(analise),
+            
+            pw.SizedBox(height: 20),
+            pw.Text('Gráfico de Dispersão CAP vs. Altura', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+            pw.SizedBox(height: 10),
+            pw.Center(child: pw.Image(graficoDispersaoImagem, width: 450)),
+            
+            _buildInsightsPdf("Alertas", analise.warnings, PdfColors.red100),
+            _buildInsightsPdf("Insights", analise.insights, PdfColors.blue100),
+            _buildInsightsPdf("Recomendações", analise.recommendations, PdfColors.orange100),
+          ];
+        },
+      ),
+    );
+    final nomeArquivo = 'Analise_Talhao_${talhao.nome.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.pdf';
+    await _salvarEAbriPdf(context, pdf, nomeArquivo);
+  }
   
-  // <<< INÍCIO DA MODIFICAÇÃO >>>
   Future<void> gerarRelatorioRendimentoPdf({
     required BuildContext context,
     required String nomeFazenda,
     required String nomeTalhao,
-    required List<DapClassResult> dadosRendimento, // <<< Usa o novo modelo
+    required List<DapClassResult> dadosRendimento,
     required TalhaoAnalysisResult analiseGeral,
     required pw.ImageProvider graficoImagem,
   }) async {
@@ -137,7 +183,7 @@ class PdfService {
         build: (pw.Context context) {
           return [
             pw.Text(
-              'Relatório de Distribuição de Indivíduos por Classe de DAP', // <<< Título corrigido
+              'Relatório de Distribuição de Indivíduos por Classe de DAP',
               style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
               textAlign: pw.TextAlign.center,
             ),
@@ -151,7 +197,7 @@ class PdfService {
               ),
             ),
             pw.SizedBox(height: 20),
-            _buildTabelaRendimentoPdf(dadosRendimento), // <<< Chamada para a tabela corrigida
+            _buildTabelaRendimentoPdf(dadosRendimento),
           ];
         },
       ),
@@ -180,9 +226,7 @@ class PdfService {
       },
     );
   }
-  // <<< FIM DA MODIFICAÇÃO >>>
 
-  // ... (O resto do seu arquivo PdfService.dart, sem alterações)
   Future<void> gerarRelatorioDiarioConsolidadoPdf({
     required BuildContext context,
     required DiarioDeCampo diario,
@@ -224,7 +268,8 @@ class PdfService {
     required BuildContext context,
     required Map<String, dynamic> resultadoRegressao,
     required Map<String, dynamic> producaoInventario,
-    required Map<String, dynamic> producaoSortimento,
+    required List<VolumePorSortimento> producaoSortimento,
+    required List<VolumePorCodigo> volumePorCodigo,
   }) async {
     final pdf = pw.Document();
     final nomeTalhoes = producaoInventario['talhoes'] ?? 'Talhões Selecionados';
@@ -247,6 +292,8 @@ class PdfService {
             _buildTabelaProducaoPdf(producaoInventario),
             pw.SizedBox(height: 20),
             _buildTabelaSortimentoPdf(producaoInventario, producaoSortimento),
+            pw.SizedBox(height: 20),
+            _buildTabelaVolumePorCodigoPdf(volumePorCodigo),
           ];
         },
       ),
@@ -663,26 +710,14 @@ class PdfService {
     ]);
   }
 
-  pw.Widget _buildTabelaSortimentoPdf(Map<String, dynamic> producaoInventario, Map<String, dynamic> producaoSortimento) {
-    final Map<String, double> porcentagens = producaoSortimento['porcentagens'] ?? {};
-    if (porcentagens.isEmpty) {
+  pw.Widget _buildTabelaSortimentoPdf(Map<String, dynamic> producaoInventario, List<VolumePorSortimento> producaoSortimento) {
+    if (producaoSortimento.isEmpty) {
       return pw.Text('Nenhuma produção por sortimento foi calculada.');
     }
     
-    final double volumeTotalHa = producaoInventario['volume_ha'] ?? 0.0;
-    
-    final sortedKeys = porcentagens.keys.toList()..sort((a,b) {
-      final numA = double.tryParse(a.split('-').first.replaceAll('>', '')) ?? 99;
-      final numB = double.tryParse(b.split('-').first.replaceAll('>', '')) ?? 99;
-      return numB.compareTo(numA); 
-    });
-
-    final List<List<String>> data = [];
-    for (var key in sortedKeys) {
-      final pct = porcentagens[key]!;
-      final volumeHaSortimento = volumeTotalHa * (pct / 100);
-      data.add([key, '${volumeHaSortimento.toStringAsFixed(2)} m³/ha', '${pct.toStringAsFixed(1)}%']);
-    }
+    final List<List<String>> data = producaoSortimento.map((item) {
+      return [item.nome, '${item.volumeHa.toStringAsFixed(2)} m³/ha', '${item.porcentagem.toStringAsFixed(1)}%'];
+    }).toList();
 
     return pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
       pw.Text('Produção por Sortimento', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
@@ -692,6 +727,27 @@ class PdfService {
         headers: ['Classe', 'Volume por Hectare', '% do Total'],
         headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
         data: data,
+        cellAlignment: pw.Alignment.centerLeft,
+        cellAlignments: {1: pw.Alignment.centerRight, 2: pw.Alignment.centerRight},
+      ),
+    ]);
+  }
+
+  pw.Widget _buildTabelaVolumePorCodigoPdf(List<VolumePorCodigo> data) {
+    if (data.isEmpty) return pw.Container();
+    
+    final List<List<String>> rows = data.map((item) {
+      return [item.codigo, '${item.volumeTotal.toStringAsFixed(2)} m³/ha', '${item.porcentagem.toStringAsFixed(1)}%'];
+    }).toList();
+
+    return pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+      pw.Text('Contribuição Volumétrica por Código', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+      pw.Divider(color: PdfColors.grey, height: 10),
+      pw.SizedBox(height: 5),
+      pw.TableHelper.fromTextArray(
+        headers: ['Código', 'Volume por Hectare', '% do Total'],
+        headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+        data: rows,
         cellAlignment: pw.Alignment.centerLeft,
         cellAlignments: {1: pw.Alignment.centerRight, 2: pw.Alignment.centerRight},
       ),
@@ -784,7 +840,6 @@ class PdfService {
     );
   }
   
- 
   pw.Widget _buildTabelaSimulacaoPdf(TalhaoAnalysisResult antes, TalhaoAnalysisResult depois) {
     final headers = ['Parâmetro', 'Antes', 'Após'];
     
@@ -805,6 +860,97 @@ class PdfService {
       cellAlignments: {0: pw.Alignment.centerLeft},
       cellStyle: const pw.TextStyle(fontSize: 11),
       border: pw.TableBorder.all(color: PdfColors.grey),
+    );
+  }
+
+  pw.Widget _buildComposicaoPovoamentoPdf(CodeAnalysisResult codeAnalysis) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text('Composição do Povoamento', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+        pw.Divider(height: 10),
+        _buildPdfStatRow('Total de Fustes Amostrados:', codeAnalysis.totalFustes.toString()),
+        _buildPdfStatRow('Total de Covas Amostradas:', codeAnalysis.totalCovasAmostradas.toString()),
+        if (codeAnalysis.totalCovasAmostradas > 0)
+          _buildPdfStatRow(
+            'Covas Ocupadas (Sobrevivência):', 
+            '${codeAnalysis.totalCovasOcupadas} (${(codeAnalysis.totalCovasOcupadas / codeAnalysis.totalCovasAmostradas * 100).toStringAsFixed(1)}%)'
+          ),
+      ]
+    );
+  }
+
+  // <<< MÉTODO ATUALIZADO PARA INCLUIR TODAS AS ESTATÍSTICAS >>>
+  pw.Widget _buildTabelaEstatisticasCodigoPdf(CodeAnalysisResult codeAnalysis) {
+    final headers = ['Código', 'Qtd.', 'Média\nCAP', 'Mediana\nCAP', 'Moda\nCAP', 'DP\nCAP', 'Média\nAltura', 'Mediana\nAltura', 'Moda\nAltura', 'DP\nAltura'];
+    
+    final data = codeAnalysis.estatisticasPorCodigo.entries.map((entry) {
+      final stats = entry.value;
+      return [
+        entry.key,
+        codeAnalysis.contagemPorCodigo[entry.key]?.toString() ?? '0',
+        stats.mediaCap.toStringAsFixed(1),
+        stats.medianaCap.toStringAsFixed(1),
+        stats.modaCap.toStringAsFixed(1),
+        stats.desvioPadraoCap.toStringAsFixed(1),
+        stats.mediaAltura.toStringAsFixed(1),
+        stats.medianaAltura.toStringAsFixed(1),
+        stats.modaAltura.toStringAsFixed(1),
+        stats.desvioPadraoAltura.toStringAsFixed(1),
+      ];
+    }).toList();
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text('Estatísticas por Código', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+        pw.SizedBox(height: 5),
+        pw.TableHelper.fromTextArray(
+          headers: headers,
+          data: data,
+          headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+          cellStyle: const pw.TextStyle(fontSize: 8),
+          cellAlignment: pw.Alignment.center,
+          cellAlignments: {0: pw.Alignment.centerLeft},
+        ),
+      ]
+    );
+  }
+
+  pw.Widget _buildInsightsPdf(String title, List<String> items, PdfColor color) {
+    if (items.isEmpty) return pw.SizedBox.shrink();
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 10),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Container(
+            padding: const pw.EdgeInsets.all(8),
+            decoration: pw.BoxDecoration(color: color, borderRadius: pw.BorderRadius.circular(4)),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 4),
+                ...items.map((item) => pw.Text('- $item', style: const pw.TextStyle(fontSize: 10))),
+              ]
+            )
+          )
+        ]
+      )
+    );
+  }
+
+  pw.Widget _buildPdfStatRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2.0),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label, style: const pw.TextStyle(color: PdfColors.grey800, fontSize: 10)),
+          pw.Text(value, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+        ],
+      ),
     );
   }
 }

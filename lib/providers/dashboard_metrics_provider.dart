@@ -1,4 +1,4 @@
-// lib/providers/dashboard_metrics_provider.dart (VERSÃO COM TYPO CORRIGIDO)
+// lib/providers/dashboard_metrics_provider.dart (VERSÃO CORRIGIDA)
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
@@ -7,6 +7,7 @@ import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
+import 'package:geoforestv1/services/analysis_service.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 
@@ -64,7 +65,7 @@ class DashboardMetricsProvider with ChangeNotifier {
   List<DesempenhoFazenda> _desempenhoPorCubagem = [];
   Map<String, int> _progressoPorEquipe = {};
   Map<String, int> _coletasPorAtividade = {};
-  Map<String, int> _coletasPorMes = {}; // Mantido para o gráfico de linha do tempo
+  Map<String, int> _coletasPorMes = {};
   List<DesempenhoFazenda> _desempenhoPorFazenda = [];
   List<ProgressoFazenda> _progressoPorFazenda = [];
   DesempenhoFazendaTotais _desempenhoInventarioTotais = DesempenhoFazendaTotais();
@@ -89,6 +90,8 @@ class DashboardMetricsProvider with ChangeNotifier {
   int get totalCubagensConcluidas => _totalCubagensConcluidas;
   double get mediaDiariaColetas => _mediaDiariaColetas;
 
+  final AnalysisService _analysisService = AnalysisService();
+
   void update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) {
     debugPrint("METRICS PROVIDER UPDATE: Recebeu ${gerenteProvider.parcelasSincronizadas.length} parcelas para calcular.");
 
@@ -97,7 +100,6 @@ class DashboardMetricsProvider with ChangeNotifier {
       ...gerenteProvider.cubagensSincronizadas.map((c) => c.nomeLider),
     }.where((nome) => nome != null && nome.isNotEmpty).cast<String>().toSet().toList();
     
-    // <<< CORREÇÃO DO ERRO DE DIGITAÇÃO AQUI >>>
     filterProvider.updateLideresDisponiveis(lideres);
 
     final projetosAtivos = gerenteProvider.projetos.where((p) => p.status == 'ativo').toList();
@@ -119,7 +121,7 @@ class DashboardMetricsProvider with ChangeNotifier {
     );
 
     _recalcularDesempenhoPorCubagem(gerenteProvider.talhaoToAtividadeMap, atividadeIdToTipoMap);
-    _recalcularKpisDeProjeto();
+    _recalcularKpisDeProjeto(gerenteProvider);
     _recalcularProgressoPorEquipe();
     _recalcularColetasPorAtividade(gerenteProvider);
     _recalcularColetasPorMes();
@@ -145,9 +147,11 @@ class DashboardMetricsProvider with ChangeNotifier {
         if (p.projetoId == null || !idsProjetosAtivos.contains(p.projetoId)) return false;
       }
 
-      if (filterProvider.selectedAtividadeIds.isNotEmpty) {
+      // <<< MUDANÇA: Lógica de filtro por tipo de atividade >>>
+      if (filterProvider.selectedAtividadeTipos.isNotEmpty) {
         final atividadeId = gerenteProvider.talhaoToAtividadeMap[p.talhaoId];
-        if (atividadeId == null || !filterProvider.selectedAtividadeIds.contains(atividadeId)) {
+        final atividade = gerenteProvider.atividades.firstWhereOrNull((a) => a.id == atividadeId);
+        if (atividade == null || !filterProvider.selectedAtividadeTipos.contains(atividade.tipo)) {
           return false;
         }
       }
@@ -182,9 +186,11 @@ class DashboardMetricsProvider with ChangeNotifier {
         if (projetoId == null || !idsProjetosAtivos.contains(projetoId)) return false;
       }
 
-      if (filterProvider.selectedAtividadeIds.isNotEmpty) {
+      // <<< MUDANÇA: Lógica de filtro por tipo de atividade >>>
+      if (filterProvider.selectedAtividadeTipos.isNotEmpty) {
         final atividadeId = gerenteProvider.talhaoToAtividadeMap[c.talhaoId];
-        if (atividadeId == null || !filterProvider.selectedAtividadeIds.contains(atividadeId)) {
+        final atividade = gerenteProvider.atividades.firstWhereOrNull((a) => a.id == atividadeId);
+        if (atividade == null || !filterProvider.selectedAtividadeTipos.contains(atividade.tipo)) {
           return false;
         }
       }
@@ -202,19 +208,45 @@ class DashboardMetricsProvider with ChangeNotifier {
     }).toList();
   }
 
-  void _recalcularKpisDeProjeto() {
+  void _recalcularKpisDeProjeto(GerenteProvider gerenteProvider) {
     final parcelasConcluidas = _parcelasFiltradas
         .where((p) =>
             p.status == StatusParcela.concluida ||
             p.status == StatusParcela.exportada)
         .toList();
+
     _totalAmostrasConcluidas = parcelasConcluidas.length;
-    _volumeTotalColetado = parcelasConcluidas.fold(0.0, (sum, p) {
-      final areaHa = p.areaMetrosQuadrados / 10000;
-      final volumePorHectare = 250.0;
-      return sum + (areaHa * volumePorHectare);
-    });
     _totalCubagensConcluidas = _cubagensFiltradas.where((c) => c.alturaTotal > 0).length;
+
+    if (parcelasConcluidas.isEmpty) {
+      _volumeTotalColetado = 0.0;
+      return;
+    }
+
+    final parcelasPorTalhao = groupBy(parcelasConcluidas, (Parcela p) => p.talhaoId);
+    double volumeTotalAcumulado = 0.0;
+
+    parcelasPorTalhao.forEach((talhaoId, parcelasDoTalhao) {
+      if (talhaoId == null) return;
+      
+      final todasAsArvoresDoTalhao = parcelasDoTalhao
+          .expand((p) => p.arvores)
+          .toList();
+
+      if (todasAsArvoresDoTalhao.isEmpty) return;
+      
+      final analiseTalhao = _analysisService.getTalhaoInsights(parcelasDoTalhao, todasAsArvoresDoTalhao);
+      final volumeHaDoTalhao = analiseTalhao.volumePorHectare;
+
+      final talhaoInfo = gerenteProvider.talhoes.firstWhereOrNull((t) => t.id == talhaoId);
+      final areaHaDoTalhao = talhaoInfo?.areaHa ?? 0.0;
+
+      if (areaHaDoTalhao > 0) {
+        volumeTotalAcumulado += volumeHaDoTalhao * areaHaDoTalhao;
+      }
+    });
+
+    _volumeTotalColetado = volumeTotalAcumulado;
   }
   
   void _recalcularMediaDiariaColetas(DashboardFilterProvider filter) {

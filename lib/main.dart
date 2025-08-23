@@ -1,4 +1,4 @@
-// lib/main.dart (VERSÃO COM ARQUITETURA DE PROVIDERS FINALIZADA)
+// lib/main.dart (VERSÃO CORRIGIDA)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -139,58 +139,54 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Providers Independentes
         ChangeNotifierProvider(create: (_) => LoginController()),
         ChangeNotifierProvider(create: (_) => MapProvider()),
         ChangeNotifierProvider(create: (_) => TeamProvider()),
         ChangeNotifierProvider(create: (_) => LicenseProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider(initialThemeMode)),
         
-        // --- ARQUITETURA DE DADOS E FILTROS PARA OS DASHBOARDS ---
-
-        // 1. Provider de Dados Brutos
         ChangeNotifierProvider(create: (_) => GerenteProvider()),
 
-        // 2. Providers de Filtro (dependem dos dados brutos)
         ChangeNotifierProxyProvider<GerenteProvider, DashboardFilterProvider>(
           create: (_) => DashboardFilterProvider(),
-          // <<< INÍCIO DA LÓGICA ATUALIZADA >>>
           update: (_, gerenteProvider, previous) {
             final filter = previous ?? DashboardFilterProvider();
             
-            // 1. Atualiza projetos disponíveis (sem alteração)
             filter.updateProjetosDisponiveis(gerenteProvider.projetos);
 
-            // 2. ATUALIZA ATIVIDADES DISPONÍVEIS (NOVA LÓGICA)
-            // Filtra as atividades com base nos projetos selecionados.
             List<Atividade> atividadesParaFiltro = filter.selectedProjetoIds.isEmpty
                 ? gerenteProvider.atividades
                 : gerenteProvider.atividades.where((a) => filter.selectedProjetoIds.contains(a.projetoId)).toList();
             filter.updateAtividadesDisponiveis(atividadesParaFiltro);
 
-            // 3. ATUALIZA FAZENDAS DISPONÍVEIS (LÓGICA REFINADA)
-            // Agora, o filtro de fazendas depende tanto do projeto quanto da atividade.
             List<Parcela> parcelasParaFiltroDeFazenda = gerenteProvider.parcelasSincronizadas;
             
-            // Filtra por projetos selecionados
             if (filter.selectedProjetoIds.isNotEmpty) {
               parcelasParaFiltroDeFazenda = parcelasParaFiltroDeFazenda
                   .where((p) => filter.selectedProjetoIds.contains(p.projetoId)).toList();
             }
-
-            // Filtra por atividades selecionadas
-            if (filter.selectedAtividadeIds.isNotEmpty) {
+            
+            // <<< INÍCIO DA CORREÇÃO >>>
+            // A lógica agora usa a nova propriedade 'selectedAtividadeTipos'
+            if (filter.selectedAtividadeTipos.isNotEmpty) {
+              // Primeiro, encontramos os IDs de todas as atividades que correspondem aos tipos selecionados
+              final idsDeAtividadesFiltradas = gerenteProvider.atividades
+                  .where((a) => filter.selectedAtividadeTipos.contains(a.tipo))
+                  .map((a) => a.id)
+                  .toSet();
+                  
+              // Depois, filtramos as parcelas, verificando se o ID da atividade da parcela está no conjunto de IDs que encontramos
               parcelasParaFiltroDeFazenda = parcelasParaFiltroDeFazenda.where((p) {
                 final atividadeId = gerenteProvider.talhaoToAtividadeMap[p.talhaoId];
-                return atividadeId != null && filter.selectedAtividadeIds.contains(atividadeId);
+                return atividadeId != null && idsDeAtividadesFiltradas.contains(atividadeId);
               }).toList();
             }
+            // <<< FIM DA CORREÇÃO >>>
             
             filter.updateFazendasDisponiveis(parcelasParaFiltroDeFazenda);
             
             return filter;
           },
-          // <<< FIM DA LÓGICA ATUALIZADA >>>
         ),
         ChangeNotifierProxyProvider<GerenteProvider, OperacoesFilterProvider>(
           create: (_) => OperacoesFilterProvider(),
@@ -202,7 +198,6 @@ class MyApp extends StatelessWidget {
           },
         ),
         
-        // 3. Providers de Métricas (dependem dos dados brutos e dos filtros)
         ChangeNotifierProxyProvider2<GerenteProvider, DashboardFilterProvider, DashboardMetricsProvider>(
           create: (_) => DashboardMetricsProvider(),
           update: (_, gerenteProvider, filterProvider, previous) {

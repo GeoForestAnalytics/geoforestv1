@@ -1,4 +1,4 @@
-// lib/pages/analises/rendimento_dap_page.dart (VERSÃO COM SINTAXE DA APPBAR CORRIGIDA)
+// lib/pages/analises/rendimento_dap_page.dart (VERSÃO ATUALIZADA)
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -28,10 +28,12 @@ class RendimentoDapPage extends StatefulWidget {
 }
 
 class _RendimentoDapPageState extends State<RendimentoDapPage> {
+  // PASSO 2: Crie a Chave
   final GlobalKey _graficoKey = GlobalKey();
   final PdfService _pdfService = PdfService();
   bool _isExporting = false;
 
+  // PASSO 4: Crie a Função de Exportação
   Future<void> _exportarPdf() async {
     if (_isExporting) return;
     setState(() => _isExporting = true);
@@ -43,6 +45,7 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
       Uint8List pngBytes = byteData!.buffer.asUint8List();
       final graficoImagem = pw.MemoryImage(pngBytes);
 
+      // PASSO 5 (Chamada): Chama o método que criaremos no PdfService
       await _pdfService.gerarRelatorioRendimentoPdf(
         context: context,
         nomeFazenda: widget.nomeFazenda,
@@ -78,9 +81,6 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
       appBar: AppBar(
         title: const Text('Distribuição por DAP'),
         actions: [
-          // <<< AQUI ESTÁ A CORREÇÃO PRINCIPAL >>>
-          // A lógica if/else foi reestruturada para ser um único elemento na lista,
-          // usando uma condição ternária dentro do widget.
           if (_isExporting)
             const Padding(
               padding: EdgeInsets.only(right: 16.0),
@@ -102,6 +102,8 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
             Text('Distribuição de Indivíduos por Classe de DAP', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold), textAlign: TextAlign.center),
             Text('${widget.nomeFazenda} / ${widget.nomeTalhao}', style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey.shade600), textAlign: TextAlign.center),
             const SizedBox(height: 32),
+
+            // PASSO 3: Envolva o Gráfico
             RepaintBoundary(
               key: _graficoKey,
               child: Container(
@@ -110,6 +112,7 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
                 child: SizedBox(
                   height: 300,
                   child: BarChart(
+                    // ... (conteúdo do BarChart continua o mesmo)
                     BarChartData(
                       alignment: BarChartAlignment.spaceAround,
                       barTouchData: BarTouchData(
@@ -118,11 +121,11 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
                           getTooltipItem: (group, groupIndex, rod, rodIndex) {
                             final item = widget.dadosRendimento[groupIndex];
                             return BarTooltipItem(
-                              '${item.classe}\n',
+                              '${item.classe}\\n',
                               const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                               children: <TextSpan>[
                                 TextSpan(
-                                  text: '${item.quantidade} árvores\n',
+                                  text: '${item.quantidade} árvores\\n',
                                   style: const TextStyle(color: Colors.white, fontSize: 12),
                                 ),
                                 TextSpan(
@@ -194,7 +197,7 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
         headingRowColor: MaterialStateProperty.all(theme.primaryColor.withOpacity(0.1)),
         columns: const [
           DataColumn(label: Text('Classe DAP', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Quantidade\n(árvores)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+          DataColumn(label: Text('Quantidade\\n(árvores)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
           DataColumn(label: Text('% do Total', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
         ],
         rows: dados.map((item) {

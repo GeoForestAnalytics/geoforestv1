@@ -1,4 +1,4 @@
-// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO COM FILTRO DE ATIVIDADE)
+// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO ATUALIZADA)
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -36,7 +36,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   final _analysisService = AnalysisService();
   final _pdfService = PdfService();
 
-  // <<< MUDANÇA 1: ADIÇÃO DOS ESTADOS PARA O NOVO FILTRO DE ATIVIDADE >>>
+  // Estados para filtros
   List<Projeto> _projetosDisponiveis = [];
   Projeto? _projetoSelecionado;
   List<Atividade> _atividadesDisponiveis = [];
@@ -69,7 +69,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     setState(() => _isLoading = false);
   }
 
-  // <<< MUDANÇA 2: LÓGICA DE FILTRO EM CASCATA ATUALIZADA >>>
   Future<void> _onProjetoSelecionado(Projeto? projeto) async {
     setState(() {
       _projetoSelecionado = projeto;
@@ -133,23 +132,18 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     setState(() => _isLoading = false);
   }
 
-  // <<< MUDANÇA 3: LÓGICA DE BUSCA DOS TALHÕES COMPLETAMENTE REFEITA >>>
   Future<void> _carregarTalhoesParaSelecao() async {
     if (_projetoSelecionado == null || _atividadeSelecionada == null || _fazendaSelecionada == null) return;
     
-    // 1. Carrega os talhões de INVENTÁRIO (baseado nos filtros que o usuário selecionou)
     final todosTalhoesDaFazendaInventario = await _talhaoRepository.getTalhoesDaFazenda(_fazendaSelecionada!.id, _fazendaSelecionada!.atividadeId);
     final talhoesCompletosInvIds = (await _talhaoRepository.getTalhoesComParcelasConcluidas()).map((t) => t.id).toSet();
     final talhoesInventarioEncontrados = todosTalhoesDaFazendaInventario.where((t) => talhoesCompletosInvIds.contains(t.id)).toList();
 
-    // 2. Procura inteligentemente pelos talhões de CUBAGEM
     List<Talhao> talhoesCubagemEncontrados = [];
-    // Busca todas as atividades do projeto para encontrar uma de cubagem
     final todasAtividadesDoProjeto = await _atividadeRepository.getAtividadesDoProjeto(_projetoSelecionado!.id!);
     final atividadeCub = todasAtividadesDoProjeto.cast<Atividade?>().firstWhere((a) => a?.tipo.toUpperCase().contains('CUB') ?? false, orElse: () => null);
     
     if (atividadeCub != null) {
-      // Encontra a fazenda com o MESMO NOME dentro da atividade de cubagem
       final fazendasDaAtividadeCub = await _fazendaRepository.getFazendasDaAtividade(atividadeCub.id!);
       final fazendaCub = fazendasDaAtividadeCub.cast<Fazenda?>().firstWhere((f) => f?.nome == _fazendaSelecionada!.nome, orElse: () => null);
       
@@ -220,18 +214,12 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   Future<void> _exportarPdf() async {
     if (_analiseResult == null) return;
     
-    final resultadoRegressao = _analiseResult!.resultadoRegressao;
-    final producaoInventario = _analiseResult!.totaisInventario;
-    
-    final producaoSortimento = {
-      'porcentagens': {for (var v in _analiseResult!.producaoPorSortimento) v.nome: v.porcentagem}
-    };
-    
     await _pdfService.gerarRelatorioVolumetricoPdf(
       context: context,
-      resultadoRegressao: resultadoRegressao,
-      producaoInventario: producaoInventario,
-      producaoSortimento: producaoSortimento,
+      resultadoRegressao: _analiseResult!.resultadoRegressao,
+      producaoInventario: _analiseResult!.totaisInventario,
+      producaoSortimento: _analiseResult!.producaoPorSortimento,
+      volumePorCodigo: _analiseResult!.volumePorCodigo,
     );
   }
 
@@ -265,7 +253,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                           onChanged: _onProjetoSelecionado, decoration: const InputDecoration(border: OutlineInputBorder()),
                         ),
                         const SizedBox(height: 10),
-                        // <<< MUDANÇA 4: ADIÇÃO DO DROPDOWN DE ATIVIDADE NA UI >>>
                         DropdownButtonFormField<Atividade>(
                           value: _atividadeSelecionada,
                           hint: const Text('Selecione uma Atividade'),
@@ -330,7 +317,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
             Text(subtitle, style: const TextStyle(color: Colors.grey)),
             const Divider(),
             if (_isLoading) const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))
-            // <<< MUDANÇA 5: TEXTO DE AVISO ATUALIZADO >>>
             else if (_fazendaSelecionada == null) const Center(child: Text('Selecione um projeto, atividade e fazenda para ver os talhões.'))
             else if (talhoesDisponiveis.isEmpty) const Center(child: Padding(padding: EdgeInsets.all(8.0), child: Text('Nenhum talhão com dados encontrado.')))
             else
@@ -368,13 +354,19 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     final data = result.producaoPorSortimento;
     if (data.isEmpty) return const SizedBox.shrink();
     
-    final List<Color> colors = [
-      Colors.blue.shade700,
-      Colors.green.shade700,
-      Colors.orange.shade700,
-      Colors.red.shade700,
-      Colors.purple.shade700
-    ];
+    final barGroups = data.asMap().entries.map((entry) {
+      return BarChartGroupData(
+        x: entry.key,
+        barRods: [
+          BarChartRodData(
+            toY: entry.value.volumeHa,
+            color: Colors.blue.shade700,
+            width: 22,
+            borderRadius: BorderRadius.circular(4)
+          )
+        ],
+      );
+    }).toList();
 
     return Card(
       elevation: 2,
@@ -387,24 +379,39 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
             const Divider(),
             SizedBox(
               height: 200,
-              child: PieChart(
-                PieChartData(
-                  sections: data.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final item = entry.value;
-                    return PieChartSectionData(
-                      value: item.porcentagem,
-                      title: '${item.nome}\n${item.porcentagem.toStringAsFixed(1)}%',
-                      color: colors[index % colors.length],
-                      radius: 80,
-                      titleStyle: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
-                    );
-                  }).toList(),
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 40,
+              child: BarChart(
+                BarChartData(
+                  barGroups: barGroups,
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) => Text(
+                          data[value.toInt()].nome,
+                          style: const TextStyle(fontSize: 10)
+                        ),
+                      ),
+                    ),
+                  ),
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        final item = data[groupIndex];
+                        return BarTooltipItem(
+                          '${item.nome}\n',
+                          const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          children: [
+                            TextSpan(
+                              text: '${item.volumeHa.toStringAsFixed(2)} m³/ha (${item.porcentagem.toStringAsFixed(1)}%)',
+                              style: const TextStyle(color: Color.fromARGB(255, 52, 168, 245)),
+                            )
+                          ],
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -423,6 +430,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
+  // <<< MUDANÇA INICIADA >>>
   Widget _buildVolumePorCodigoCard(AnaliseVolumetricaCompletaResult result) {
     final data = result.volumePorCodigo;
     if (data.isEmpty) return const SizedBox.shrink();
@@ -452,7 +460,25 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (value, meta) => Text(data[value.toInt()].codigo, style: const TextStyle(fontSize: 10)))),
-                )
+                ),
+                // Adiciona o tooltip para formatar o valor
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final item = data[groupIndex];
+                      return BarTooltipItem(
+                        '${item.codigo}\n',
+                        const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        children: [
+                          TextSpan(
+                            text: '${item.volumeTotal.toStringAsFixed(2)} m³/ha (${item.porcentagem.toStringAsFixed(1)}%)',
+                            style: const TextStyle(color: Colors.yellow),
+                          )
+                        ],
+                      );
+                    },
+                  ),
+                ),
               )
             )),
             const SizedBox(height: 20),
@@ -469,6 +495,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       ),
     );
   }
+  // <<< MUDANÇA FINALIZADA >>>
 
   Widget _buildDetailedTable({required List<String> headers, required List<List<String>> rows}) {
     return SingleChildScrollView(

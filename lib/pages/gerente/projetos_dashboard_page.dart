@@ -1,4 +1,4 @@
-// lib/pages/gerente/projetos_dashboard_page.dart (VERSÃO FINAL E LIMPA)
+// lib/pages/gerente/projetos_dashboard_page.dart (VERSÃO CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -11,7 +11,7 @@ import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:geoforestv1/providers/operacoes_provider.dart';
-import 'package:geoforestv1/models/atividade_model.dart';
+
 
 class ProjetosDashboardPage extends StatefulWidget {
   const ProjetosDashboardPage({super.key});
@@ -22,8 +22,7 @@ class ProjetosDashboardPage extends StatefulWidget {
 
 class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
   final _exportService = ExportService();
-  final NumberFormat _volumeFormat = NumberFormat.decimalPattern('pt_BR');
-  // A linha do _currencyFormat foi removida daqui.
+  final NumberFormat _volumeFormat = NumberFormat("#,##0.00", "pt_BR");
 
   @override
   void initState() {
@@ -128,7 +127,6 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
           children: [
             _buildMultiSelectProjectFilter(context, filterProvider),
             const SizedBox(height: 8),
-            // <<< ADICIONE A CHAMADA PARA O NOVO WIDGET DE FILTRO DE ATIVIDADE AQUI >>>
             _buildMultiSelectAtividadeFilter(context, filterProvider),
             const SizedBox(height: 8),
             _buildMultiSelectFazendaFilter(context, filterProvider),
@@ -148,27 +146,31 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
-  // <<< ADICIONE ESTE NOVO WIDGET COMPLETO PARA O FILTRO DE ATIVIDADE >>>
+  // <<< MÉTODO COMPLETAMENTE ATUALIZADO >>>
   Widget _buildMultiSelectAtividadeFilter(BuildContext context, DashboardFilterProvider provider) {
-    if (provider.atividadesDisponiveis.isEmpty) return const SizedBox.shrink();
+    // Usa o novo getter para pegar apenas os tipos únicos de atividade
+    final tiposDisponiveis = provider.atividadesTiposDisponiveis;
+    if (tiposDisponiveis.isEmpty) return const SizedBox.shrink();
 
     String displayText;
-    if (provider.selectedAtividadeIds.isEmpty) {
+    if (provider.selectedAtividadeTipos.isEmpty) {
       displayText = 'Todas as Atividades';
-    } else if (provider.selectedAtividadeIds.length == 1) {
-      displayText = provider.atividadesDisponiveis.firstWhere((a) => a.id == provider.selectedAtividadeIds.first, orElse: () => Atividade(id: 0, projetoId: 0, tipo: '1 atividade', descricao: '', dataCriacao: DateTime.now())).tipo;
+    } else if (provider.selectedAtividadeTipos.length == 1) {
+      displayText = provider.selectedAtividadeTipos.first;
     } else {
-      displayText = '${provider.selectedAtividadeIds.length} atividades selecionadas';
+      displayText = '${provider.selectedAtividadeTipos.length} atividades selecionadas';
     }
 
     return InkWell(
       onTap: () => _showMultiSelectDialog(
         context: context,
         title: 'Filtrar por Atividade',
-        items: provider.atividadesDisponiveis.map((a) => {'id': a.id, 'label': a.tipo}).toList(),
-        selectedItems: provider.selectedAtividadeIds.map((id) => id as dynamic).toSet(),
-        onConfirm: (selected) => context.read<DashboardFilterProvider>().setSelectedAtividades(selected.cast<int>()),
-        onClear: () => context.read<DashboardFilterProvider>().clearAtividadeSelection(),
+        // Cria os itens do diálogo a partir da lista de tipos únicos
+        items: tiposDisponiveis.map((tipo) => {'id': tipo, 'label': tipo}).toList(),
+        selectedItems: provider.selectedAtividadeTipos,
+        // Chama os novos métodos do provider
+        onConfirm: (selected) => context.read<DashboardFilterProvider>().setSelectedAtividadeTipos(selected.cast<String>()),
+        onClear: () => context.read<DashboardFilterProvider>().clearAtividadeTipoSelection(),
       ),
       child: InputDecorator(
         decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0)),
@@ -183,22 +185,34 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
- 
-
   Widget _buildKpiGrid(BuildContext context, DashboardMetricsProvider metrics) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 1.2,
-      children: [
-        _buildKpiCard('Volume Coletado', '${_volumeFormat.format(metrics.volumeTotalColetado)} m³', Icons.forest, Colors.teal),
-        _buildKpiCard('Amostras Concluídas', metrics.totalAmostrasConcluidas.toString(), Icons.checklist, Colors.blue),
-        _buildKpiCard('Cubagens Concluídas', metrics.totalCubagensConcluidas.toString(), Icons.architecture, Colors.orange),
-        _buildKpiCard('Média Diária', '${metrics.mediaDiariaColetas.toStringAsFixed(1)} coletas', Icons.show_chart, Colors.purple),
-      ],
+    final kpiCards = [
+      _buildKpiCard('Volume Coletado', '${_volumeFormat.format(metrics.volumeTotalColetado)} m³', Icons.forest, Colors.teal),
+      _buildKpiCard('Amostras Concluídas', metrics.totalAmostrasConcluidas.toString(), Icons.checklist, Colors.blue),
+      _buildKpiCard('Cubagens Concluídas', metrics.totalCubagensConcluidas.toString(), Icons.architecture, Colors.orange),
+      _buildKpiCard('Média Diária', '${metrics.mediaDiariaColetas.toStringAsFixed(1)} coletas', Icons.show_chart, Colors.purple),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const maxCrossAxisExtent = 200.0;
+        final crossAxisCount = (constraints.maxWidth / maxCrossAxisExtent).floor().clamp(1, 4);
+
+        return GridView.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 1.2,
+          ),
+          itemCount: kpiCards.length,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemBuilder: (context, index) {
+            return kpiCards[index];
+          },
+        );
+      },
     );
   }
 

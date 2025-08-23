@@ -1,18 +1,23 @@
-// lib/providers/dashboard_filter_provider.dart
+// lib/providers/dashboard_filter_provider.dart (VERSÃO CORRIGIDA)
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/models/atividade_model.dart'; // <<< ADICIONE ESTE IMPORT
+import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 
-// Enum copiado do filtro de operações para manter a consistência
 enum PeriodoFiltro { todos, hoje, ultimos7Dias, esteMes, mesPassado, personalizado }
 
 class DashboardFilterProvider with ChangeNotifier {
   // --- Filtros ---
   List<Projeto> _projetosDisponiveis = [];
   Set<int> _selectedProjetoIds = {};
+  
+  // <<< MUDANÇA 1: Armazena a lista completa de atividades disponíveis >>>
+  List<Atividade> _atividadesDisponiveis = [];
+  // <<< MUDANÇA 2: O filtro agora é baseado no TIPO (String) da atividade >>>
+  Set<String> _selectedAtividadeTipos = {};
+
   List<String> _fazendasDisponiveis = [];
   Set<String> _selectedFazendaNomes = {};
   PeriodoFiltro _periodo = PeriodoFiltro.todos;
@@ -20,14 +25,15 @@ class DashboardFilterProvider with ChangeNotifier {
   List<String> _lideresDisponiveis = [];
   Set<String> _lideresSelecionados = {};
 
-  // <<< ADICIONE ESTAS DUAS LINHAS PARA O FILTRO DE ATIVIDADE >>>
-  List<Atividade> _atividadesDisponiveis = [];
-  Set<int> _selectedAtividadeIds = {};
-
-
   // --- Getters ---
   List<Projeto> get projetosDisponiveis => _projetosDisponiveis;
   Set<int> get selectedProjetoIds => _selectedProjetoIds;
+
+  // <<< MUDANÇA 3: Novo getter para os TIPOS únicos de atividade >>>
+  List<String> get atividadesTiposDisponiveis => _atividadesDisponiveis.map((a) => a.tipo).toSet().toList()..sort();
+  List<Atividade> get atividadesDisponiveis => _atividadesDisponiveis; // Mantém o getter antigo se necessário em outro lugar
+  Set<String> get selectedAtividadeTipos => _selectedAtividadeTipos;
+
   List<String> get fazendasDisponiveis => _fazendasDisponiveis;
   Set<String> get selectedFazendaNomes => _selectedFazendaNomes;
   PeriodoFiltro get periodo => _periodo;
@@ -35,21 +41,15 @@ class DashboardFilterProvider with ChangeNotifier {
   List<String> get lideresDisponiveis => _lideresDisponiveis;
   Set<String> get lideresSelecionados => _lideresSelecionados;
   
-  // <<< ADICIONE ESTES DOIS GETTERS PARA O FILTRO DE ATIVIDADE >>>
-  List<Atividade> get atividadesDisponiveis => _atividadesDisponiveis;
-  Set<int> get selectedAtividadeIds => _selectedAtividadeIds;
-
-
   // --- Métodos de atualização chamados pelo ProxyProvider ---
   void updateProjetosDisponiveis(List<Projeto> novosProjetos) {
     _projetosDisponiveis = novosProjetos;
     _selectedProjetoIds.removeWhere((id) => !_projetosDisponiveis.any((p) => p.id == id));
   }
 
-  // <<< ADICIONE ESTE NOVO MÉTODO >>>
   void updateAtividadesDisponiveis(List<Atividade> atividades) {
     _atividadesDisponiveis = atividades;
-    _selectedAtividadeIds.removeWhere((id) => !_atividadesDisponiveis.any((a) => a.id == id));
+    _selectedAtividadeTipos.removeWhere((tipo) => !_atividadesDisponiveis.any((a) => a.tipo == tipo));
   }
 
   void updateFazendasDisponiveis(List<Parcela> parcelas) {
@@ -69,23 +69,22 @@ class DashboardFilterProvider with ChangeNotifier {
   }
 
   // --- Métodos de manipulação dos filtros (chamados pela UI) ---
-
   void setSelectedProjetos(Set<int> newSelection) {
     _selectedProjetoIds = newSelection;
-    _selectedAtividadeIds.clear(); // <<< ADICIONE (Limpa o filtro de atividade)
+    _selectedAtividadeTipos.clear();
     _selectedFazendaNomes.clear();
     _lideresSelecionados.clear();
     notifyListeners();
   }
 
-  // <<< ADICIONE ESTES DOIS NOVOS MÉTODOS >>>
-  void setSelectedAtividades(Set<int> newSelection) {
-    _selectedAtividadeIds = newSelection;
+  // <<< MUDANÇA 4: Métodos de filtro de atividade atualizados >>>
+  void setSelectedAtividadeTipos(Set<String> newSelection) {
+    _selectedAtividadeTipos = newSelection;
     notifyListeners();
   }
 
-  void clearAtividadeSelection() {
-    _selectedAtividadeIds.clear();
+  void clearAtividadeTipoSelection() {
+    _selectedAtividadeTipos.clear();
     notifyListeners();
   }
 
@@ -96,7 +95,7 @@ class DashboardFilterProvider with ChangeNotifier {
 
   void clearProjetoSelection() {
     _selectedProjetoIds.clear();
-    _selectedAtividadeIds.clear(); // <<< ADICIONE (Limpa o filtro de atividade)
+    _selectedAtividadeTipos.clear();
     _selectedFazendaNomes.clear();
     _lideresSelecionados.clear();
     notifyListeners();

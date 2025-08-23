@@ -1,4 +1,4 @@
-// lib/providers/gerente_provider.dart (VERSÃO COM DADOS DO DIÁRIO DE CAMPO)
+// lib/providers/gerente_provider.dart (VERSÃO CORRIGIDA)
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -6,9 +6,10 @@ import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
-import 'package:geoforestv1/models/diario_de_campo_model.dart'; // <<< NOVO IMPORT
+import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
+import 'package:geoforestv1/models/talhao_model.dart'; // <<< IMPORT NECESSÁRIO
 import 'package:geoforestv1/services/gerente_service.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -20,15 +21,16 @@ class GerenteProvider with ChangeNotifier {
   // Stream Subscriptions
   StreamSubscription? _dadosColetaSubscription;
   StreamSubscription? _dadosCubagemSubscription;
-  StreamSubscription? _dadosDiarioSubscription; // <<< NOVA SUBSCRIPTION
+  StreamSubscription? _dadosDiarioSubscription;
 
   // Listas de dados sincronizados
   List<Parcela> _parcelasSincronizadas = [];
   List<CubagemArvore> _cubagensSincronizadas = [];
-  List<DiarioDeCampo> _diariosSincronizados = []; // <<< NOVA LISTA DE DADOS
+  List<DiarioDeCampo> _diariosSincronizados = [];
   List<Projeto> _projetos = [];
   List<Atividade> _atividades = [];
-  
+  List<Talhao> _talhoes = []; // <<< NOVA LISTA DE DADOS
+
   // Mapas auxiliares para resolução de dados
   Map<int, int> _talhaoToProjetoMap = {};
   Map<int, int> _talhaoToAtividadeMap = {};
@@ -43,9 +45,10 @@ class GerenteProvider with ChangeNotifier {
   String? get error => _error;
   List<Projeto> get projetos => _projetos;
   List<Atividade> get atividades => _atividades;
+  List<Talhao> get talhoes => _talhoes; // <<< NOVO GETTER
   List<Parcela> get parcelasSincronizadas => _parcelasSincronizadas;
   List<CubagemArvore> get cubagensSincronizadas => _cubagensSincronizadas;
-  List<DiarioDeCampo> get diariosSincronizados => _diariosSincronizados; // <<< NOVO GETTER
+  List<DiarioDeCampo> get diariosSincronizados => _diariosSincronizados;
   Map<int, int> get talhaoToProjetoMap => _talhaoToProjetoMap;
   Map<int, int> get talhaoToAtividadeMap => _talhaoToAtividadeMap;
 
@@ -54,18 +57,18 @@ class GerenteProvider with ChangeNotifier {
   }
 
   Future<void> _buildAuxiliaryMaps() async {
-    final todosOsTalhoes = await _talhaoRepository.getTodosOsTalhoes();
-    _talhaoToProjetoMap = { for (var talhao in todosOsTalhoes) if (talhao.id != null && talhao.projetoId != null) talhao.id!: talhao.projetoId! };
-    _talhaoToAtividadeMap = { for (var talhao in todosOsTalhoes) if (talhao.id != null) talhao.id!: talhao.fazendaAtividadeId };
-    _talhaoIdToNomeMap = { for (var talhao in todosOsTalhoes) if (talhao.id != null) talhao.id!: talhao.nome };
-    _fazendaIdToNomeMap = { for (var talhao in todosOsTalhoes) if (talhao.fazendaId.isNotEmpty && talhao.fazendaNome != null) talhao.fazendaId: talhao.fazendaNome! };
+    // Agora a lista de talhões é armazenada no estado do provider
+    _talhoes = await _talhaoRepository.getTodosOsTalhoes();
+    _talhaoToProjetoMap = { for (var talhao in _talhoes) if (talhao.id != null && talhao.projetoId != null) talhao.id!: talhao.projetoId! };
+    _talhaoToAtividadeMap = { for (var talhao in _talhoes) if (talhao.id != null) talhao.id!: talhao.fazendaAtividadeId };
+    _talhaoIdToNomeMap = { for (var talhao in _talhoes) if (talhao.id != null) talhao.id!: talhao.nome };
+    _fazendaIdToNomeMap = { for (var talhao in _talhoes) if (talhao.fazendaId.isNotEmpty && talhao.fazendaNome != null) talhao.fazendaId: talhao.fazendaNome! };
   }
 
   Future<void> iniciarMonitoramento() async {
-    // Cancela subscriptions antigas para evitar múltiplos ouvintes
     _dadosColetaSubscription?.cancel();
     _dadosCubagemSubscription?.cancel();
-    _dadosDiarioSubscription?.cancel(); // <<< CANCELA A NOVA SUBSCRIPTION
+    _dadosDiarioSubscription?.cancel();
 
     _isLoading = true;
     _error = null;
@@ -80,7 +83,6 @@ class GerenteProvider with ChangeNotifier {
       
       await _buildAuxiliaryMaps();
 
-      // Listener para PARCELAS
       _dadosColetaSubscription = _gerenteService.getDadosColetaStream().listen(
         (listaDeParcelas) async {
           await _buildAuxiliaryMaps();
@@ -108,7 +110,6 @@ class GerenteProvider with ChangeNotifier {
         },
       );
 
-      // Listener para CUBAGENS
       _dadosCubagemSubscription = _gerenteService.getDadosCubagemStream().listen(
         (listaDeCubagens) async {
           await _buildAuxiliaryMaps();
@@ -119,7 +120,6 @@ class GerenteProvider with ChangeNotifier {
         onError: (e) => debugPrint("Erro no stream de cubagens: $e"),
       );
 
-      // <<< NOVO LISTENER PARA DIÁRIOS DE CAMPO >>>
       _dadosDiarioSubscription = _gerenteService.getDadosDiarioStream().listen(
         (listaDeDiarios) {
           _diariosSincronizados = listaDeDiarios;
@@ -140,7 +140,7 @@ class GerenteProvider with ChangeNotifier {
   void dispose() {
     _dadosColetaSubscription?.cancel();
     _dadosCubagemSubscription?.cancel();
-    _dadosDiarioSubscription?.cancel(); // <<< FAZ O DISPOSE DA NOVA SUBSCRIPTION
+    _dadosDiarioSubscription?.cancel();
     super.dispose();
   }
 }

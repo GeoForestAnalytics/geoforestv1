@@ -1,4 +1,4 @@
-// lib/services/analysis_service.dart (VERSÃO COM CORREÇÃO DE TIPO)
+// lib/services/analysis_service.dart (VERSÃO ATUALIZADA E CORRIGIDA)
 
 import 'dart:math';
 import 'package:collection/collection.dart';
@@ -82,11 +82,8 @@ class AnalysisService {
       'area_total_lote': areaTotalLote,
     };
 
-    // <<< INÍCIO DA CORREÇÃO >>>
-    // O erro estava aqui: o 'as double' garante que o tipo está correto.
     final producaoPorSortimento = await _calcularProducaoPorSortimento(arvoresParaRegressao, totaisInventario['volume_ha'] as double);
     final volumePorCodigo = _calcularVolumePorCodigo(todasAsArvoresDoInventarioComVolume, totaisInventario['volume_ha'] as double);
-    // <<< FIM DA CORREÇÃO >>>
 
     return AnaliseVolumetricaCompletaResult(
       resultadoRegressao: resultadoRegressao,
@@ -156,7 +153,6 @@ class AnalysisService {
     return resultado;
   }
 
-  // ... (o resto do arquivo permanece igual)
   double calcularVolumeComercialSmalian(List<CubagemSecao> secoes) {
     if (secoes.length < 2) return 0.0;
     secoes.sort((a, b) => a.alturaMedicao.compareTo(b.alturaMedicao));
@@ -224,6 +220,7 @@ class AnalysisService {
     }
   }
 
+  // <<< MUDANÇA INICIADA >>>
   List<Arvore> aplicarEquacaoDeVolume({
     required List<Arvore> arvoresDoInventario,
     required double b0,
@@ -233,11 +230,17 @@ class AnalysisService {
     final List<Arvore> arvoresComVolume = [];
     final List<double> alturasValidas = arvoresDoInventario.where((a) => a.altura != null && a.altura! > 0).map((a) => a.altura!).toList();
     final double mediaAltura = alturasValidas.isNotEmpty ? alturasValidas.reduce((a, b) => a + b) / alturasValidas.length : 0.0;
+    
+    // Define quais códigos não devem ter volume calculado
+    const codigosSemVolume = [Codigo.falha, Codigo.morta, Codigo.caida];
+
     for (final arvore in arvoresDoInventario) {
-      if (arvore.cap <= 0 || arvore.codigo != Codigo.normal) {
+      // A condição foi alterada para excluir apenas os códigos sem volume
+      if (arvore.cap <= 0 || codigosSemVolume.contains(arvore.codigo)) {
         arvoresComVolume.add(arvore.copyWith(volume: 0));
         continue;
       }
+
       final alturaParaCalculo = (arvore.altura == null || arvore.altura! <= 0) ? mediaAltura : arvore.altura!;
       if (alturaParaCalculo <= 0) {
         arvoresComVolume.add(arvore.copyWith(volume: 0));
@@ -250,6 +253,7 @@ class AnalysisService {
     }
     return arvoresComVolume;
   }
+  // <<< MUDANÇA FINALIZADA >>>
   
   Map<String, double> classificarSortimentos(List<CubagemSecao> secoes) {
     Map<String, double> volumesPorSortimento = {};
@@ -306,9 +310,14 @@ class AnalysisService {
       return TalhaoAnalysisResult();
     }
     
-    final List<Arvore> arvoresVivas = arvoresDoConjunto.where((a) => a.codigo == Codigo.normal).toList();
+    // <<< MUDANÇA INICIADA >>>
+    // A lista de árvores vivas para cálculo agora inclui todos os códigos, exceto os não-produtivos.
+    const codigosSemVolume = [Codigo.falha, Codigo.morta, Codigo.caida];
+    final List<Arvore> arvoresVivas = arvoresDoConjunto.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
+    // <<< MUDANÇA FINALIZADA >>>
+
     if (arvoresVivas.isEmpty) {
-      return TalhaoAnalysisResult(warnings: ["Nenhuma árvore viva encontrada nas amostras para análise."]);
+      return TalhaoAnalysisResult(warnings: ["Nenhuma árvore com potencial de volume encontrada nas amostras para análise."]);
     }
 
     final double mediaCap = _calculateAverage(arvoresVivas.map((a) => a.cap).toList());
@@ -342,13 +351,14 @@ class AnalysisService {
 
     final Map<double, int> distribuicao = getDistribuicaoDiametrica(arvoresVivas);
 
+    // <<< MUDANÇA INICIADA: CORREÇÃO DO ERRO DE COMPILAÇÃO >>>
     return TalhaoAnalysisResult(
       areaTotalAmostradaHa: areaAmostradaHa,
       totalArvoresAmostradas: arvoresDoConjunto.length,
       totalParcelasAmostradas: numeroDeParcelas,
       mediaCap: mediaCap,
       mediaAltura: mediaAltura,
-      areaBasalPorHectare: areaBasalPorHectare,
+      areaBasalPorHectare: areaBasalPorHectare, // Corrigido de 'areaBasalPorHercate'
       volumePorHectare: volumePorHectare,
       arvoresPorHectare: arvoresPorHectare,
       distribuicaoDiametrica: distribuicao, 
@@ -357,6 +367,7 @@ class AnalysisService {
       insights: insights,
       recommendations: recommendations,
     );
+    // <<< MUDANÇA FINALIZADA >>>
   }
   
   CodeAnalysisResult getTreeCodeAnalysis(List<Arvore> arvores) {
@@ -404,7 +415,8 @@ class AnalysisService {
       return getTalhaoInsights(parcelasOriginais, todasAsArvores);
     }
     
-    final List<Arvore> arvoresVivas = todasAsArvores.where((a) => a.codigo == Codigo.normal).toList();
+    const codigosSemVolume = [Codigo.falha, Codigo.morta, Codigo.caida];
+    final List<Arvore> arvoresVivas = todasAsArvores.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
     if (arvoresVivas.isEmpty) {
       return getTalhaoInsights(parcelasOriginais, todasAsArvores);
     }
@@ -427,7 +439,8 @@ class AnalysisService {
       return [];
     }
     
-    final List<Arvore> arvoresVivas = todasAsArvores.where((a) => a.codigo == Codigo.normal && a.cap > 0).toList();
+    const codigosSemVolume = [Codigo.falha, Codigo.morta, Codigo.caida];
+    final List<Arvore> arvoresVivas = todasAsArvores.where((a) => !codigosSemVolume.contains(a.codigo) && a.cap > 0).toList();
     if (arvoresVivas.isEmpty) return [];
 
     final Map<String, List<Arvore>> arvoresPorClasse = {
@@ -502,7 +515,7 @@ class AnalysisService {
     if (arvores.isEmpty) return {};
     final Map<int, int> contagemPorClasse = {};
     for (final arvore in arvores) {
-      if (arvore.codigo == Codigo.normal && arvore.cap > 0) {
+      if (arvore.cap > 0) {
         final int classeBase = (arvore.cap / larguraClasse).floor() * larguraClasse;
         contagemPorClasse.update(classeBase, (value) => value + 1, ifAbsent: () => 1);
       }

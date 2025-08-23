@@ -1,17 +1,22 @@
-// lib/pages/dashboard/talhao_dashboard_page.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/pages/dashboard/talhao_dashboard_page.dart (VERSÃO ATUALIZADA)
 
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/services/analysis_service.dart';
 import 'package:geoforestv1/services/export_service.dart';
+import 'package:geoforestv1/services/pdf_service.dart';
 import 'package:geoforestv1/widgets/grafico_distribuicao_widget.dart';
 import 'package:geoforestv1/pages/analises/simulacao_desbaste_page.dart';
 import 'package:geoforestv1/pages/analises/rendimento_dap_page.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
 import 'package:geoforestv1/widgets/grafico_dispersao_cap_altura.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 class TalhaoDashboardPage extends StatelessWidget {
   final Talhao talhao;
@@ -61,6 +66,9 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
   final _analiseRepository = AnaliseRepository();
   final _analysisService = AnalysisService();
   final _exportService = ExportService();
+  final _pdfService = PdfService();
+
+  final GlobalKey _graficoDispersaoKey = GlobalKey();
 
   List<Parcela> _parcelasDoTalhao = [];
   List<Arvore> _arvoresDoTalhao = [];
@@ -81,18 +89,29 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
           children: <Widget>[
             ListTile(
               leading: const Icon(Icons.description_outlined, color: Colors.blue),
-              title: const Text('Exportar Relatório (PDF)'),
-              subtitle: const Text('Gera um relatório visual formatado.'),
-              onTap: () {
+              title: const Text('Exportar Relatório Detalhado (PDF)'),
+              subtitle: const Text('Gera um relatório visual completo da análise.'),
+              onTap: () async {
                 Navigator.of(ctx).pop();
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Exportação para PDF a ser implementada.'),
-                ));
+                if (_analysisResult != null) {
+                  RenderRepaintBoundary boundary = _graficoDispersaoKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+                  ui.Image image = await boundary.toImage(pixelRatio: 2.0);
+                  ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+                  Uint8List pngBytes = byteData!.buffer.asUint8List();
+                  final graficoImagem = pw.MemoryImage(pngBytes);
+                  
+                  await _pdfService.gerarRelatorioAnaliseTalhaoPdf(
+                    context: context,
+                    talhao: widget.talhao,
+                    analise: _analysisResult!,
+                    graficoDispersaoImagem: graficoImagem,
+                  );
+                }
               },
             ),
             ListTile(
               leading: const Icon(Icons.table_rows_outlined, color: Colors.green),
-              title: const Text('Exportar Dados (CSV)'),
+              title: const Text('Exportar Dados Resumidos (CSV)'),
               subtitle: const Text('Gera uma planilha com os dados da análise.'),
               onTap: () {
                 Navigator.of(ctx).pop();
@@ -202,10 +221,14 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
                 ),
               ),
               const SizedBox(height: 16),
-              GraficoDispersaoCapAltura(arvores: _arvoresDoTalhao),
+              RepaintBoundary(
+                key: _graficoDispersaoKey,
+                child: Container(
+                  color: Theme.of(context).cardColor,
+                  child: GraficoDispersaoCapAltura(arvores: _arvoresDoTalhao),
+                ),
+              ),
               const SizedBox(height: 16),
-              
-              // <<< CORREÇÃO APLICADA AQUI: REMOVIDA A LINHA DUPLICADA >>>
               _buildInsightsCard("⚠️ Alertas", result.warnings, Colors.red.shade100),
               const SizedBox(height: 12),
               _buildInsightsCard("💡 Insights", result.insights, Colors.blue.shade100),
@@ -233,6 +256,7 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     );
   }
 
+  // <<< MÉTODO ATUALIZADO PARA INCLUIR TODAS AS ESTATÍSTICAS >>>
   Widget _buildCodeAnalysisCard(CodeAnalysisResult codeAnalysis) {
     return Card(
       elevation: 2,
@@ -243,7 +267,6 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
           children: [
             Text('Composição do Povoamento', style: Theme.of(context).textTheme.titleLarge),
             const Divider(height: 20),
-            // Resumo de contagens
             _buildStatRow('Total de Fustes Amostrados:', codeAnalysis.totalFustes.toString()),
             _buildStatRow('Total de Covas Amostradas:', codeAnalysis.totalCovasAmostradas.toString()),
             if (codeAnalysis.totalCovasAmostradas > 0)
@@ -254,12 +277,12 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
             const SizedBox(height: 16),
             Text('Estatísticas por Código', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            // Tabela de estatísticas
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 columnSpacing: 18.0,
                 headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+                // <<< NOVAS COLUNAS ADICIONADAS AQUI >>>
                 columns: const [
                   DataColumn(label: Text('Código')),
                   DataColumn(label: Text('Qtd.'), numeric: true),
@@ -277,6 +300,7 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
                   return DataRow(cells: [
                     DataCell(Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold))),
                     DataCell(Text(codeAnalysis.contagemPorCodigo[entry.key]?.toString() ?? '0')),
+                    // <<< NOVOS DADOS ADICIONADOS AQUI >>>
                     DataCell(Text(stats.mediaCap.toStringAsFixed(1))),
                     DataCell(Text(stats.medianaCap.toStringAsFixed(1))),
                     DataCell(Text(stats.modaCap.toStringAsFixed(1))),
