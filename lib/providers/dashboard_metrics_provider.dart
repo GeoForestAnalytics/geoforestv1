@@ -393,12 +393,13 @@ class DashboardMetricsProvider with ChangeNotifier {
   }
   
   void _recalcularProgressoPorEquipe() {
-    final List<dynamic> todasColetasConcluidas = [
-      ..._parcelasFiltradas.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada),
-      ..._cubagensFiltradas.where((c) => c.alturaTotal > 0)
+    // A lista agora busca apenas coletas EXPORTADAS
+    final List<dynamic> todasColetasExportadas = [
+      ..._parcelasFiltradas.where((p) => p.exportada == true), // <-- MUDANÇA AQUI
+      ..._cubagensFiltradas.where((c) => c.exportada == true), // <-- MUDANÇA AQUI
     ];
-    
-    if (todasColetasConcluidas.isEmpty) {
+
+    if (todasColetasExportadas.isEmpty) {
       _progressoPorEquipe = {};
       return;
     }
@@ -410,12 +411,13 @@ class DashboardMetricsProvider with ChangeNotifier {
       return nome?.isNotEmpty == true ? nome! : 'Gerente';
     }
 
-    final grupoPorEquipe = groupBy(todasColetasConcluidas, getLider);
+    final grupoPorEquipe = groupBy(todasColetasExportadas, getLider);
 
     final mapaContagem = grupoPorEquipe.map((nomeEquipe, listaColetas) => MapEntry(nomeEquipe, listaColetas.length));
-    
-    final sortedEntries = mapaContagem.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    
+
+    final sortedEntries = mapaContagem.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
     _progressoPorEquipe = Map.fromEntries(sortedEntries);
   }
 

@@ -1,11 +1,15 @@
-// lib/pages/menu/conflict_resolution_page.dart (NOVO ARQUIVO)
+// <<< INÍCIO: NOVOS IMPORTS ADICIONADOS >>>
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
+import 'package:geoforestv1/providers/license_provider.dart';
+import 'package:geoforestv1/models/arvore_model.dart';
+// <<< FIM: NOVOS IMPORTS ADICIONADOS >>>
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/sync_conflict_model.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:intl/intl.dart';
-// Adicione outros repositórios conforme necessário para outros tipos de conflito
 
 class ConflictResolutionPage extends StatefulWidget {
   final List<SyncConflict> conflicts;
@@ -26,53 +30,80 @@ class _ConflictResolutionPageState extends State<ConflictResolutionPage> {
     _remainingConflicts = List.from(widget.conflicts);
   }
 
-  // Função para resolver um conflito específico
+  // <<< INÍCIO: MÉTODO _resolveConflict COMPLETAMENTE SUBSTITUÍDO >>>
+  /// Função para resolver um conflito específico, agora com busca de árvores.
   Future<void> _resolveConflict(SyncConflict conflict, bool keepLocal) async {
     try {
       if (keepLocal) {
-        // Se o usuário quer manter a versão local, precisamos "forçar" o upload.
-        // Isso é feito marcando como não-sincronizado e com um timestamp futuro.
+        // Lógica para manter a versão local (não foi alterada)
         if (conflict.type == ConflictType.parcela) {
           final Parcela localParcela = conflict.localData;
           final updatedParcela = localParcela.copyWith(
             isSynced: false,
-            // Damos um "empurrão" no tempo para garantir que ela vença a próxima comparação
             lastModified: DateTime.now().add(const Duration(seconds: 5)),
           );
           await _parcelaRepository.updateParcela(updatedParcela);
         }
         // Adicionar lógica para outros tipos de conflito aqui (ex: cubagem)
       } else {
-        // Se o usuário quer a versão do servidor, nós simplesmente sobrescrevemos
-        // a versão local com os dados que vieram do servidor.
+        // Lógica para aceitar a versão do servidor (CORRIGIDA)
         if (conflict.type == ConflictType.parcela) {
+          // 1. Obter os dados da parcela do servidor e o ID local
           final Parcela serverParcela = conflict.serverData;
           final Parcela localParcela = conflict.localData;
+
+          // 2. Obter a licença para saber onde buscar os dados no Firestore
+          // O `listen: false` é importante para ser usado dentro de uma função assíncrona.
+          final licenseId = context.read<LicenseProvider>().licenseData?.id;
+          if (licenseId == null) {
+            throw Exception("Não foi possível identificar a licença para buscar as árvores.");
+          }
+
+          // 3. Buscar a subcoleção de árvores do servidor
+          final arvoresSnapshot = await FirebaseFirestore.instance
+              .collection('clientes')
+              .doc(licenseId)
+              .collection('dados_coleta')
+              .doc(serverParcela.uuid)
+              .collection('arvores')
+              .get();
+
+          // 4. Converter os documentos do Firestore para objetos Arvore
+          final List<Arvore> serverArvores = arvoresSnapshot.docs
+              .map((doc) => Arvore.fromMap(doc.data()))
+              .toList();
           
+          // 5. Preparar o objeto da parcela para ser salvo localmente
           final updatedParcela = serverParcela.copyWith(
             dbId: localParcela.dbId, // Mantém o ID do banco local
-            isSynced: true, // Já está sincronizada com a versão do servidor
+            isSynced: true,         // Marca como sincronizado
           );
-          
-          // Precisamos buscar as árvores da parcela do servidor
-          // (Lógica a ser implementada se necessário, por enquanto salvamos sem as árvores)
-          await _parcelaRepository.saveFullColeta(updatedParcela, []);
+
+          // 6. Usar o método `saveFullColeta`, que apaga as árvores antigas
+          //    e salva a parcela com sua nova lista de árvores do servidor.
+          await _parcelaRepository.saveFullColeta(updatedParcela, serverArvores);
         }
+        // Adicionar lógica para outros tipos de conflito aqui (ex: cubagem)
       }
+      // <<< FIM: MÉTODO _resolveConflict COMPLETAMENTE SUBSTITUÍDO >>>
 
       // Remove o conflito resolvido da lista
       setState(() {
         _remainingConflicts.remove(conflict);
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Conflito resolvido!'), backgroundColor: Colors.green),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Conflito resolvido!'), backgroundColor: Colors.green),
+        );
+      }
 
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao resolver conflito: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao resolver conflito: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -81,7 +112,7 @@ class _ConflictResolutionPageState extends State<ConflictResolutionPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Resolver Conflitos'),
-        automaticallyImplyLeading: _remainingConflicts.isEmpty, // Esconde o botão voltar se não há mais conflitos
+        automaticallyImplyLeading: _remainingConflicts.isEmpty,
       ),
       body: _remainingConflicts.isEmpty
           ? Center(
@@ -111,7 +142,6 @@ class _ConflictResolutionPageState extends State<ConflictResolutionPage> {
   }
 
   Widget _buildConflictCard(SyncConflict conflict) {
-    // Aqui, construímos a UI para cada tipo de conflito. Começamos com Parcela.
     if (conflict.type == ConflictType.parcela) {
       final Parcela local = conflict.localData;
       final Parcela server = conflict.serverData;
@@ -126,7 +156,6 @@ class _ConflictResolutionPageState extends State<ConflictResolutionPage> {
               Text(conflict.identifier, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const Divider(height: 20),
               
-              // Tabela de comparação
               Table(
                 columnWidths: const {
                   0: IntrinsicColumnWidth(),

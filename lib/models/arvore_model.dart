@@ -27,6 +27,7 @@ enum Codigo {
   DeitadaVento,
   FeridaBase,
   CaidaRaizVento,
+  Resinado,
   Outro // Já existia
 
 }
@@ -50,6 +51,7 @@ enum Codigo2 {
   Inclinada,
   DeitadaVento,
   FeridaBase,
+  Resinado,
   Outro // Já existia
 }
 

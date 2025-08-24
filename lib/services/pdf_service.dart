@@ -159,11 +159,11 @@ class PdfService {
             pw.Divider(height: 20),
             _buildResumoTalhaoPdf(analise),
             if (codeAnalysis != null) ...[
-              pw.SizedBox(height: 20),
-              _buildComposicaoPovoamentoPdf(codeAnalysis),
-              pw.SizedBox(height: 20),
-              _buildTabelaEstatisticasCodigoPdf(codeAnalysis),
-            ],
+                pw.SizedBox(height: 20),
+                _buildComposicaoPovoamentoPdf(codeAnalysis),
+                pw.SizedBox(height: 20),
+                _buildTabelaEstatisticasCodigoPdf(codeAnalysis),
+              ],
             pw.SizedBox(height: 20),
             _buildTabelaDistribuicaoPdf(analise),
             pw.SizedBox(height: 20),
@@ -340,6 +340,9 @@ class PdfService {
               'Análise de Talhão', "${talhao.fazendaNome ?? 'N/A'} / ${talhao.nome}"),
           footer: (pw.Context ctx) => _buildFooter(),
           build: (pw.Context ctx) {
+            // <<< CORREÇÃO 1: A variável é declarada aqui >>>
+            final codeAnalysis = analiseGeral.analiseDeCodigos;
+            
             return [
               _buildTabelaProducaoPdf({
                 'talhoes': talhao.nome,
@@ -352,6 +355,15 @@ class PdfService {
                         : 0.0,
                 'area_total_lote': talhao.areaHa ?? 0.0,
               }),
+              
+              // <<< CORREÇÃO 2: A variável 'codeAnalysis' agora é usada aqui >>>
+              if (codeAnalysis != null) ...[
+                pw.SizedBox(height: 20),
+                _buildComposicaoPovoamentoPdf(codeAnalysis),
+                pw.SizedBox(height: 20),
+                _buildTabelaEstatisticasCodigoPdf(codeAnalysis),
+              ],
+              
               pw.SizedBox(height: 20),
               pw.Text('Distribuição Diamétrica (CAP)',
                   style:
@@ -365,6 +377,7 @@ class PdfService {
       talhoesProcessados++;
     }
 
+    // ... (o resto da função continua igual)
     if (talhoesProcessados == 0 && context.mounted) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

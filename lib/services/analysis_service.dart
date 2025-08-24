@@ -220,7 +220,6 @@ class AnalysisService {
     }
   }
 
-  // <<< MUDANÇA INICIADA >>>
   List<Arvore> aplicarEquacaoDeVolume({
     required List<Arvore> arvoresDoInventario,
     required double b0,
@@ -231,11 +230,9 @@ class AnalysisService {
     final List<double> alturasValidas = arvoresDoInventario.where((a) => a.altura != null && a.altura! > 0).map((a) => a.altura!).toList();
     final double mediaAltura = alturasValidas.isNotEmpty ? alturasValidas.reduce((a, b) => a + b) / alturasValidas.length : 0.0;
     
-    // Define quais códigos não devem ter volume calculado
     const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
 
     for (final arvore in arvoresDoInventario) {
-      // A condição foi alterada para excluir apenas os códigos sem volume
       if (arvore.cap <= 0 || codigosSemVolume.contains(arvore.codigo)) {
         arvoresComVolume.add(arvore.copyWith(volume: 0));
         continue;
@@ -253,7 +250,6 @@ class AnalysisService {
     }
     return arvoresComVolume;
   }
-  // <<< MUDANÇA FINALIZADA >>>
   
   Map<String, double> classificarSortimentos(List<CubagemSecao> secoes) {
     Map<String, double> volumesPorSortimento = {};
@@ -310,11 +306,11 @@ class AnalysisService {
       return TalhaoAnalysisResult();
     }
     
-    // <<< MUDANÇA INICIADA >>>
+    // <<< INÍCIO DA CORREÇÃO >>>
     // A lista de árvores vivas para cálculo agora inclui todos os códigos, exceto os não-produtivos.
     const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
     final List<Arvore> arvoresVivas = arvoresDoConjunto.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
-    // <<< MUDANÇA FINALIZADA >>>
+    // <<< FIM DA CORREÇÃO >>>
 
     if (arvoresVivas.isEmpty) {
       return TalhaoAnalysisResult(warnings: ["Nenhuma árvore com potencial de volume encontrada nas amostras para análise."]);
@@ -351,14 +347,13 @@ class AnalysisService {
 
     final Map<double, int> distribuicao = getDistribuicaoDiametrica(arvoresVivas);
 
-    // <<< MUDANÇA INICIADA: CORREÇÃO DO ERRO DE COMPILAÇÃO >>>
     return TalhaoAnalysisResult(
       areaTotalAmostradaHa: areaAmostradaHa,
       totalArvoresAmostradas: arvoresDoConjunto.length,
       totalParcelasAmostradas: numeroDeParcelas,
       mediaCap: mediaCap,
       mediaAltura: mediaAltura,
-      areaBasalPorHectare: areaBasalPorHectare, // Corrigido de 'areaBasalPorHercate'
+      areaBasalPorHectare: areaBasalPorHectare,
       volumePorHectare: volumePorHectare,
       arvoresPorHectare: arvoresPorHectare,
       distribuicaoDiametrica: distribuicao, 
@@ -367,7 +362,6 @@ class AnalysisService {
       insights: insights,
       recommendations: recommendations,
     );
-    // <<< MUDANÇA FINALIZADA >>>
   }
   
   CodeAnalysisResult getTreeCodeAnalysis(List<Arvore> arvores) {

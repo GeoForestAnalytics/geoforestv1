@@ -57,7 +57,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     Codigo.AtaqueMacaco, Codigo.Fogo, Codigo.PragasOuDoencas,
     Codigo.VespaMadeira, Codigo.MortaOuSeca, Codigo.PonteiraSeca,
     Codigo.Rebrota, Codigo.AtaqueFormiga, Codigo.Torta,
-    Codigo.FoxTail,Codigo.FeridaBase
+    Codigo.FoxTail,Codigo.FeridaBase, Codigo.Resinado, Codigo.Outro
   ];
 
   @override

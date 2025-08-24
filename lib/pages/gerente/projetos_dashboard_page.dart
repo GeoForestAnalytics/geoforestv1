@@ -467,41 +467,52 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
   }
 
   Widget _buildKpiGrid(BuildContext context, DashboardMetricsProvider metrics) {
-    final kpiCards = [
-      _buildKpiCard(
-          'Volume Coletado',
-          '${_volumeFormat.format(metrics.volumeTotalColetado)} m³',
-          Icons.forest,
-          Colors.teal),
-      _buildKpiCard('Amostras Concluídas',
-          metrics.totalAmostrasConcluidas.toString(), Icons.checklist, Colors.blue),
-      _buildKpiCard('Cubagens Concluídas',
-          metrics.totalCubagensConcluidas.toString(), Icons.architecture, Colors.orange),
-      _buildKpiCard('Média Diária',
-          '${metrics.mediaDiariaColetas.toStringAsFixed(1)} coletas', Icons.show_chart, Colors.purple),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const maxCrossAxisExtent = 200.0;
-        final crossAxisCount =
-            (constraints.maxWidth / maxCrossAxisExtent).floor().clamp(1, 4);
-
-        return GridView.builder(
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 1.2,
-          ),
-          itemCount: kpiCards.length,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemBuilder: (context, index) {
-            return kpiCards[index];
-          },
-        );
-      },
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildKpiCard(
+                'Volume Coletado',
+                '${_volumeFormat.format(metrics.volumeTotalColetado)} m³',
+                Icons.forest,
+                Colors.teal,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildKpiCard(
+                'Amostras Concluídas',
+                metrics.totalAmostrasConcluidas.toString(),
+                Icons.checklist,
+                Colors.blue,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildKpiCard(
+                'Cubagens Concluídas',
+                metrics.totalCubagensConcluidas.toString(),
+                Icons.architecture,
+                Colors.orange,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildKpiCard(
+                'Média Diária',
+                '${metrics.mediaDiariaColetas.toStringAsFixed(1)} coletas',
+                Icons.show_chart,
+                Colors.purple,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
