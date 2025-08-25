@@ -114,14 +114,18 @@ class _InventarioPageState extends State<InventarioPage> {
   }
 
   Future<void> _salvarEstadoAtual({bool showSnackbar = true, bool concluir = false}) async {
-    if (_isSaving) return;
-    if (mounted) setState(() => _isSaving = true);
-    try {
-      if (concluir) {
-        _parcelaAtual.status = StatusParcela.concluida;
-        setState(() => _isReadOnly = true);
-        _identificarArvoresDominantes();
-      }
+  if (_isSaving) return;
+  if (mounted) setState(() => _isSaving = true);
+  try {
+    if (concluir) {
+      _parcelaAtual.status = StatusParcela.concluida;
+      setState(() => _isReadOnly = true);
+      _identificarArvoresDominantes(); // Já é chamado aqui, o que está ótimo.
+    } else {
+      // ADICIONE A CHAMADA AQUI TAMBÉM
+      // Isso garante que se um CAP for alterado, a dominância é recalculada no salvamento.
+      _identificarArvoresDominantes(); 
+    }
       _arvoresColetadas.sort((a, b) {
         int compLinha = a.linha.compareTo(b.linha);
         if (compLinha != 0) return compLinha;
@@ -261,6 +265,9 @@ class _InventarioPageState extends State<InventarioPage> {
 
     int proximaLinha = 1;
     int proximaPosicao = 1;
+    
+    // <<< NOVA LÓGICA AQUI >>>
+    Arvore? arvoreTemplate;
 
     if (!isFusteAdicional && _arvoresColetadas.isNotEmpty) {
       final ultimaArvore = _arvoresColetadas.last;
@@ -270,13 +277,23 @@ class _InventarioPageState extends State<InventarioPage> {
       final ultimaArvore = _arvoresColetadas.last;
       proximaLinha = ultimaArvore.linha;
       proximaPosicao = ultimaArvore.posicaoNaLinha;
+      
+      // Se estamos adicionando um fuste, criamos um template com o código Multipla
+      // e os mesmos dados de linha/posição. O CAP e Altura virão em branco.
+      arvoreTemplate = Arvore(
+        cap: 0, // Será preenchido no dialog
+        linha: proximaLinha,
+        posicaoNaLinha: proximaPosicao,
+        codigo: Codigo.Multipla, // O código já vem selecionado!
+      );
     }
 
     final result = await showDialog<DialogResult>(
       context: context,
       barrierDismissible: false,
       builder: (context) => ArvoreDialog(
-        arvoreParaEditar: arvoreInicial,
+        // Usa o template que criamos, se ele existir. Caso contrário, usa o 'arvoreInicial' passado.
+        arvoreParaEditar: arvoreTemplate ?? arvoreInicial,
         linhaAtual: arvoreInicial?.linha ?? proximaLinha,
         posicaoNaLinhaAtual: arvoreInicial?.posicaoNaLinha ?? proximaPosicao,
         isAdicionandoFuste: isFusteAdicional,
@@ -312,7 +329,7 @@ class _InventarioPageState extends State<InventarioPage> {
       arvore.dominante = false;
     }
     final int numeroDeDominantes = (_parcelaAtual.areaMetrosQuadrados / 100).floor();
-    final arvoresCandidatas = _arvoresColetadas.where((a) => a.codigo.name == 'normal').toList();
+    final arvoresCandidatas = _arvoresColetadas.where((a) => a.codigo == Codigo.Normal).toList();
     if (arvoresCandidatas.length <= numeroDeDominantes) {
       for (var arvore in arvoresCandidatas) {
         arvore.dominante = true;

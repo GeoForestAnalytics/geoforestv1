@@ -1,8 +1,9 @@
-// lib/widgets/arvore_dialog.dart (VERSÃO FINAL COM CAMPO DE DANO OPCIONAL)
+// lib/widgets/arvore_dialog.dart (VERSÃO COM LÓGICA DE MÚLTIPLOS FUSTES)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 
+// A classe DialogResult permanece a mesma
 class DialogResult {
   final Arvore arvore;
   final bool irParaProxima;
@@ -52,6 +53,9 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   bool _fimDeLinha = false;
   bool _camposHabilitados = true;
   
+  // <<< NOVA LÓGICA 1: Variável de estado para controlar o fluxo de "Multipla" >>>
+  bool _isInMultiplaFlow = false;
+
   final _codesRequiringAlturaDano = [
     Codigo.Bifurcada, Codigo.Multipla, Codigo.Quebrada,
     Codigo.AtaqueMacaco, Codigo.Fogo, Codigo.PragasOuDoencas,
@@ -74,11 +78,24 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
       _linhaController.text = arvore.linha.toString();
       _posicaoController.text = arvore.posicaoNaLinha.toString();
     } else {
-      _codigo = Codigo.Normal;
+      // Se for um fuste adicional vindo do fluxo de "Multipla", o código já vem setado.
+      _codigo = widget.arvoreParaEditar?.codigo ?? Codigo.Normal;
       _linhaController.text = widget.linhaAtual.toString();
       _posicaoController.text = widget.posicaoNaLinhaAtual.toString();
     }
+    
+    // <<< NOVA LÓGICA 2: Verifica o estado inicial do fluxo >>>
+    _checkMultiplaFlow();
     _atualizarEstadoCampos();
+  }
+
+  // <<< NOVA LÓGICA 3: Função para verificar e ativar/desativar o fluxo >>>
+  void _checkMultiplaFlow() {
+    // O fluxo especial só se aplica ao ADICIONAR uma nova árvore (não ao editar)
+    // E se o código for Multipla.
+    setState(() {
+      _isInMultiplaFlow = !widget.isEditing && _codigo == Codigo.Multipla;
+    });
   }
 
   void _atualizarEstadoCampos() {
@@ -202,10 +219,13 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                         if (value != null) {
                           setState(() => _codigo = value);
                           _atualizarEstadoCampos();
+                          // <<< NOVA LÓGICA 4: Atualiza o fluxo sempre que o código principal muda >>>
+                          _checkMultiplaFlow();
                         }
                       },
                     ),
                     const SizedBox(height: 16),
+                    // ... o resto dos campos do formulário continua igual ...
                     DropdownButtonFormField<Codigo2?>(
                       value: _codigo2,
                       decoration: const InputDecoration(labelText: 'Código 2 (Opcional)'),
@@ -247,7 +267,6 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                           enabled: _camposHabilitados,
                           decoration: const InputDecoration(labelText: 'Altura do Dano/Bifurcação (m)'),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          // <<< ALTERAÇÃO AQUI: O VALIDATOR FOI REMOVIDO >>>
                         ),
                       ),
                     ),
@@ -274,7 +293,8 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                           ],
                         ),
                       ),
-                    if (!widget.isEditing)
+                    // O switch de fim de linha agora só aparece se não estiver no fluxo "Multipla"
+                    if (!widget.isEditing && !_isInMultiplaFlow)
                       Padding(
                         padding: const EdgeInsets.only(top: 8.0),
                         child: SwitchListTile(
@@ -288,29 +308,47 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                 ),
               ),
               const SizedBox(height: 24),
+              
+              // <<< NOVA LÓGICA 5: Renderização condicional dos botões >>>
               Wrap(
                 alignment: WrapAlignment.end,
                 spacing: 8.0,
                 runSpacing: 8.0,
                 children: widget.isEditing
-                    ? [
+                    ? [ // Botões para o modo de EDIÇÃO (permanecem os mesmos)
                         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
                         TextButton(onPressed: () => _submit(atualizarEAnterior: true), child: const Text('Anterior')),
                         ElevatedButton(onPressed: () => _submit(), child: const Text('Atualizar')),
                         TextButton(onPressed: () => _submit(atualizarEProximo: true), child: const Text('Próximo')),
                       ]
-                    : [
-                        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-                        ElevatedButton(onPressed: () => _submit(mesmoFuste: true), child: const Text('Adic. Fuste')),
-                        ElevatedButton(
-                          onPressed: () => _submit(proxima: true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary,
-                            foregroundColor: theme.colorScheme.onPrimary,
+                    : _isInMultiplaFlow 
+                      ? [ // Botões para o modo de ADIÇÃO, quando o código é "Multipla"
+                          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+                          // Botão "Adicionar Fuste" continua na mesma posição
+                          ElevatedButton(onPressed: () => _submit(mesmoFuste: true), child: const Text('Adic. Fuste')),
+                          // Botão "Salvar e Próximo" vai para a PRÓXIMA árvore
+                          ElevatedButton(
+                            onPressed: () => _submit(proxima: true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: theme.colorScheme.primary,
+                              foregroundColor: theme.colorScheme.onPrimary,
+                            ),
+                            child: const Text('Salvar e Próximo'),
                           ),
-                          child: const Text('Salvar e Próximo'),
-                        ),
-                      ],
+                        ]
+                      : [ // Botões para o modo de ADIÇÃO normal
+                          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+                          // Botão "Adic. Fuste" não é o principal aqui
+                          OutlinedButton(onPressed: () => _submit(mesmoFuste: true), child: const Text('Adic. Fuste')),
+                          ElevatedButton(
+                            onPressed: () => _submit(proxima: true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: theme.colorScheme.primary,
+                              foregroundColor: theme.colorScheme.onPrimary,
+                            ),
+                            child: const Text('Salvar e Próximo'),
+                          ),
+                        ],
               )
             ],
           ),
