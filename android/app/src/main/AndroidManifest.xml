@@ -1,19 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- PERMISSÕES NECESSÁRIAS -->
+    <!-- SUAS PERMISSÕES EXISTENTES (INTACTAS) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.CAMERA" />
-
-    <!-- Permissão de escrita para Android 9 (API 28) e inferior. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
-
-    <!-- Permissão de acesso total para Android 11 (API 30) e superior. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
-    <!-- A tag requestLegacyExternalStorage é crucial para o Android 10 (API 29) -->
     <application
         android:label="Geo Forest Analytics"
         android:name="${applicationName}"
@@ -43,10 +38,26 @@
             android:value="2" />
     </application>
     
+    <!-- BLOCO DE QUERIES ATUALIZADO -->
     <queries>
+        <!-- Sua query existente (mantida) -->
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+
+        <!-- INÍCIO DO CÓDIGO ADICIONADO PARA A NAVEGAÇÃO -->
+        <!-- Permite que o app encontre navegadores para abrir links https -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <!-- Permite que o app encontre navegadores para abrir links http -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+        <!-- FIM DO CÓDIGO ADICIONADO -->
     </queries>
+
 </manifest>

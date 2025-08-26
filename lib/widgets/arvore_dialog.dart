@@ -34,7 +34,7 @@ class ArvoreDialog extends StatefulWidget {
     this.isAdicionandoFuste = false,
   });
 
-  bool get isEditing => arvoreParaEditar != null;
+  bool get isEditing => arvoreParaEditar != null && arvoreParaEditar!.id != null;
 
   @override
   State<ArvoreDialog> createState() => _ArvoreDialogState();
@@ -65,36 +65,45 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   ];
 
   @override
-  void initState() {
-    super.initState();
-    if (widget.isEditing) {
-      final arvore = widget.arvoreParaEditar!;
-      _capController.text = arvore.cap.toString().replaceAll('.', ',');
-      _alturaController.text = arvore.altura?.toString().replaceAll('.', ',') ?? '';
-      _alturaDanoController.text = arvore.alturaDano?.toString().replaceAll('.', ',') ?? '';
-      _codigo = arvore.codigo;
-      _codigo2 = arvore.codigo2;
-      _fimDeLinha = arvore.fimDeLinha;
-      _linhaController.text = arvore.linha.toString();
-      _posicaoController.text = arvore.posicaoNaLinha.toString();
-    } else {
-      // Se for um fuste adicional vindo do fluxo de "Multipla", o código já vem setado.
-      _codigo = widget.arvoreParaEditar?.codigo ?? Codigo.Normal;
-      _linhaController.text = widget.linhaAtual.toString();
-      _posicaoController.text = widget.posicaoNaLinhaAtual.toString();
-    }
-    
-    // <<< NOVA LÓGICA 2: Verifica o estado inicial do fluxo >>>
-    _checkMultiplaFlow();
-    _atualizarEstadoCampos();
+void initState() {
+  super.initState();
+
+  // --- INÍCIO DA CORREÇÃO ---
+  final arvore = widget.arvoreParaEditar;
+
+  if (widget.isEditing) {
+    // Modo de EDIÇÃO REAL (a árvore já existe no banco)
+    _capController.text = arvore!.cap.toString().replaceAll('.', ',');
+    _alturaController.text = arvore.altura?.toString().replaceAll('.', ',') ?? '';
+    _alturaDanoController.text = arvore.alturaDano?.toString().replaceAll('.', ',') ?? '';
+    _codigo = arvore.codigo;
+    _codigo2 = arvore.codigo2;
+    _fimDeLinha = arvore.fimDeLinha;
+    _linhaController.text = arvore.linha.toString();
+    _posicaoController.text = arvore.posicaoNaLinha.toString();
+  } else {
+    // Modo de ADIÇÃO (pode ou não ter um template)
+    _capController.text = (arvore?.cap ?? 0) > 0 ? arvore!.cap.toString().replaceAll('.', ',') : '';
+    _alturaController.text = arvore?.altura?.toString().replaceAll('.', ',') ?? '';
+    _alturaDanoController.text = arvore?.alturaDano?.toString().replaceAll('.', ',') ?? '';
+    _codigo = arvore?.codigo ?? Codigo.Normal; // Usa o código do template se existir!
+    _codigo2 = arvore?.codigo2;
+    _fimDeLinha = arvore?.fimDeLinha ?? false;
+    _linhaController.text = (arvore?.linha ?? widget.linhaAtual).toString();
+    _posicaoController.text = (arvore?.posicaoNaLinha ?? widget.posicaoNaLinhaAtual).toString();
   }
+  // --- FIM DA CORREÇÃO ---
+
+  _checkMultiplaFlow(); // A lógica dos botões agora vai funcionar corretamente
+  _atualizarEstadoCampos();
+}
 
   // <<< NOVA LÓGICA 3: Função para verificar e ativar/desativar o fluxo >>>
   void _checkMultiplaFlow() {
     // O fluxo especial só se aplica ao ADICIONAR uma nova árvore (não ao editar)
     // E se o código for Multipla.
     setState(() {
-      _isInMultiplaFlow = !widget.isEditing && _codigo == Codigo.Multipla;
+      _isInMultiplaFlow = _codigo == Codigo.Multipla;
     });
   }
 

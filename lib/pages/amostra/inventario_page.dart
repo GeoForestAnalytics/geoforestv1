@@ -223,12 +223,30 @@ class _InventarioPageState extends State<InventarioPage> {
     await _salvarEstadoAtual(showSnackbar: !(result.irParaProxima || result.continuarNaMesmaPosicao || result.atualizarEProximo || result.atualizarEAnterior));
 
     if (result.irParaProxima) {
-      Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore());
-    } 
-    else if (result.continuarNaMesmaPosicao) {
-      Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore(isFusteAdicional: true));
-    } 
-    else if (result.atualizarEProximo && indexOriginal != null) {
+  Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore());
+} 
+else if (result.continuarNaMesmaPosicao) {
+  // --- INÍCIO DA CORREÇÃO ---
+  // 1. Pegamos a árvore que acabamos de salvar.
+  final ultimoFusteSalvo = result.arvore;
+
+  // 2. Criamos um "template" para a próxima, mas sem ID,
+  //    indicando que é uma nova árvore, não uma edição.
+  final proximoFusteTemplate = Arvore(
+    cap: 0, // CAP em branco
+    linha: ultimoFusteSalvo.linha, // Mantém a mesma linha
+    posicaoNaLinha: ultimoFusteSalvo.posicaoNaLinha, // Mantém a mesma posição
+    codigo: Codigo.Multipla, // Já vem com o código correto
+  );
+
+  // 3. Chamamos _adicionarNovaArvore passando este template.
+  Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore(
+    arvoreInicial: proximoFusteTemplate, 
+    isFusteAdicional: true
+  ));
+  // --- FIM DA CORREÇÃO ---
+} 
+else if (result.atualizarEProximo && indexOriginal != null) {
       _arvoresColetadas.sort((a, b) {
         int compLinha = a.linha.compareTo(b.linha);
         if (compLinha != 0) return compLinha;
