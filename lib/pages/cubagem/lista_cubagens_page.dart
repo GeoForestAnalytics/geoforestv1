@@ -43,7 +43,7 @@ class _ListaCubagensPageState extends State<ListaCubagensPage> {
       context,
       MaterialPageRoute(
         builder: (context) => CubagemDadosPage(
-          metodo: "Fixas", // Pode ser dinâmico se você tiver essa lógica
+          metodo: "Relativas", // Pode ser dinâmico se você tiver essa lógica
           arvoreParaEditar: arvore,
         ),
       ),
