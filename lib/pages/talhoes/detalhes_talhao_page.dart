@@ -174,7 +174,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
   }
   
   Future<void> _navegarParaDetalhesCubagem(CubagemArvore arvore) async {
-    final metodoCorreto = widget.atividade.metodoCubagem ?? 'Fixas';
+    final metodoCorreto = arvore.metodoCubagem ?? widget.atividade.metodoCubagem ?? 'Fixas';
 
     final resultado = await Navigator.push(
       context,

@@ -1,5 +1,3 @@
-// lib/pages/menu/map_import_page.dart (VERSÃO FINAL E CORRIGIDA)
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -51,6 +49,14 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
     if (mapProvider.isFollowingUser) {
       mapProvider.toggleFollowingUser();
     }
+    
+    // <<< ADIÇÃO RECOMENDADA AQUI >>>
+    // Para o modo "Ir para" se ele estiver ativo ao sair da tela
+    if (mapProvider.isGoToModeActive) {
+      mapProvider.stopGoTo();
+    }
+    // <<< FIM DA ADIÇÃO >>>
+
     super.dispose();
   }
 
@@ -172,6 +178,88 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
     }
   }
 
+  /// Exibe o menu de opções ao segurar um marcador.
+  void _showMarkerOptions(BuildContext context, SamplePoint samplePoint) {
+    final mapProvider = context.read<MapProvider>();
+
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Wrap(
+        children: <Widget>[
+          ListTile(
+            title: Text('Amostra ${samplePoint.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('Lat: ${samplePoint.position.latitude.toStringAsFixed(5)}, Lon: ${samplePoint.position.longitude.toStringAsFixed(5)}'),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.navigation_outlined, color: Colors.blue),
+            title: const Text('Navegar para amostra'),
+            subtitle: const Text('Usar app de mapas (ex: Google Maps)'),
+            onTap: () async {
+              Navigator.pop(ctx); // Fecha o menu
+              try {
+                await mapProvider.launchNavigation(samplePoint.position);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.track_changes_outlined, color: Colors.green),
+            title: const Text('Ir para'),
+            subtitle: const Text('Navegação em linha reta (off-road)'),
+            onTap: () {
+              Navigator.pop(ctx); // Fecha o menu
+              mapProvider.startGoTo(samplePoint);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Constrói a caixa de informações do modo "Ir para".
+  Widget _buildGoToInfoCard(MapProvider mapProvider) {
+    if (!mapProvider.isGoToModeActive) {
+      return const SizedBox.shrink(); // Retorna um widget vazio se o modo não estiver ativo
+    }
+
+    final info = mapProvider.getGoToInfo();
+
+    return Positioned(
+      bottom: 20,
+      left: 20,
+      right: 20,
+      child: Card(
+        elevation: 4,
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Distância: ${info['distance']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Direção: ${info['bearing']}'),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.red),
+                tooltip: 'Parar navegação',
+                onPressed: () => mapProvider.stopGoTo(),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   AppBar _buildAppBar(MapProvider mapProvider) {
     final atividadeTipo = mapProvider.currentAtividade?.tipo ?? 'Planejamento';
 
@@ -269,6 +357,9 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
                           MaterialPageRoute(builder: (context) => ColetaDadosPage(parcelaParaEditar: parcela))
                         );
                       },
+                      onLongPress: () {
+                        _showMarkerOptions(context, samplePoint);
+                      },
                       child: Container(
                         decoration: BoxDecoration(color: color, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 4, offset: const Offset(2, 2))]),
                         child: Center(child: Text(samplePoint.id.toString(), style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14))),
@@ -277,6 +368,20 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
                   );
                 }).toList(),
               ),
+
+              if (mapProvider.isGoToModeActive && currentUserPosition != null)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: [
+                        LatLng(currentUserPosition.latitude, currentUserPosition.longitude),
+                        mapProvider.goToTarget!.position,
+                      ],
+                      strokeWidth: 3.0,
+                      color: Colors.redAccent,                      
+                    ),
+                  ],
+                ),
               
               if (isDrawing && mapProvider.drawnPoints.isNotEmpty)
                 PolylineLayer(polylines: [ Polyline(points: mapProvider.drawnPoints, strokeWidth: 2.0, color: Colors.red.withOpacity(0.8)), ]),
@@ -325,6 +430,9 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
                 )
               )
             ),
+          
+          _buildGoToInfoCard(mapProvider),
+
           if (!isDrawing)
             Positioned(
               top: 10,

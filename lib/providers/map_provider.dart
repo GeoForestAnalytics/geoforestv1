@@ -1,4 +1,4 @@
-// lib/providers/map_provider.dart (VERSÃO FINAL COM IMPORTAÇÃO COMPLETA DE ATRIBUTOS)
+// lib/providers/map_provider.dart
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -17,13 +17,10 @@ import 'package:geoforestv1/services/geojson_service.dart';
 import 'package:geoforestv1/services/sampling_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-
-
-
+import 'package:url_launcher/url_launcher.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
-
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 enum MapLayerType { ruas, satelite, sateliteMapbox }
@@ -66,6 +63,68 @@ class MapProvider with ChangeNotifier {
   MapLayerType get currentLayer => _currentLayer;
   Position? get currentUserPosition => _currentUserPosition;
   bool get isFollowingUser => _isFollowingUser;
+
+  // <<< INÍCIO DAS NOVAS ADIÇÕES >>>
+
+  SamplePoint? _goToTarget; // Armazena a amostra de destino no modo "Ir para"
+  
+  SamplePoint? get goToTarget => _goToTarget;
+  bool get isGoToModeActive => _goToTarget != null;
+
+  /// Inicia o modo de navegação "Ir para" (linha reta).
+  void startGoTo(SamplePoint target) {
+    _goToTarget = target;
+    notifyListeners(); // Avisa a UI que o modo mudou
+  }
+
+  /// Para o modo de navegação "Ir para".
+  void stopGoTo() {
+    _goToTarget = null;
+    notifyListeners(); // Avisa a UI que o modo mudou
+  }
+
+  /// Abre um aplicativo de mapa externo (Google Maps) para navegar até o ponto.
+  Future<void> launchNavigation(LatLng destination) async {
+    final url = 'https://www.google.com/maps/dir/?api=1&destination=${destination.latitude},${destination.longitude}';
+    final uri = Uri.parse(url);
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      // Lança uma exceção ou mostra um erro se não conseguir abrir
+      throw 'Não foi possível abrir o aplicativo de mapas.';
+    }
+  }
+
+  /// Retorna as informações de distância e direção para a UI.
+  Map<String, String> getGoToInfo() {
+    if (!isGoToModeActive || _currentUserPosition == null) {
+      return {'distance': '- m', 'bearing': '- °'};
+    }
+
+    const distance = Distance();
+    final start = LatLng(_currentUserPosition!.latitude, _currentUserPosition!.longitude);
+    final end = _goToTarget!.position;
+
+    final distanceInMeters = distance.as(LengthUnit.Meter, start, end);
+    
+    // <<< CORREÇÃO APLICADA AQUI >>>
+    // O nome correto do método é 'bearing'
+    final bearing = distance.bearing(start, end);
+
+    return {
+      'distance': '${distanceInMeters.toStringAsFixed(0)} m',
+      'bearing': '${bearing.toStringAsFixed(0)}° ${_formatBearing(bearing)}'
+    };
+  }
+
+  /// Função auxiliar para converter o ângulo em uma direção cardinal (N, NE, S, etc.)
+  String _formatBearing(double bearing) {
+    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW', 'N'];
+    return directions[((bearing % 360) / 45).round()];
+  }
+
+  // <<< FIM DAS NOVAS ADIÇÕES >>>
 
   final Map<MapLayerType, String> _tileUrls = {
     MapLayerType.ruas: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -274,6 +333,7 @@ class MapProvider with ChangeNotifier {
                   nomeFazendaController.dispose();
                   codigoFazendaController.dispose();
                   nomeTalhaoController.dispose();
+  
                   upController.dispose();
                   hectaresController.dispose();
                   Navigator.pop(context, result);
