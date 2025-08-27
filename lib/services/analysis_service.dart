@@ -1,4 +1,7 @@
+// lib/services/analysis_service.dart (VERSÃO CORRIGIDA E FINAL)
+
 import 'dart:math';
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
@@ -10,14 +13,14 @@ import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/sortimento_model.dart';
 import 'package:ml_linalg/linalg.dart';
-import 'package:stats/stats.dart';
+// O import do 'stats' foi removido pois implementamos nossa própria função de moda.
 
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 
-// Extensão para adicionar a funcionalidade groupBy sem a dependência 'collection'
+// Extensão para adicionar a funcionalidade groupBy
 extension GroupByExtension<T> on Iterable<T> {
   Map<K, List<T>> groupBy<K>(K Function(T) keyFunction) {
     final map = <K, List<T>>{};
@@ -82,7 +85,6 @@ class AnalysisService {
     const double idadeReferencia = 7.0;
     const double coeficiente = -0.5;
 
-    // A fórmula original estava incorreta, o correto é (1/idadeReferencia - 1/idadeAtual)
     final indiceDeSitio = alturaDominante *
         exp(coeficiente * (1 / idadeAtualAnos - 1 / idadeReferencia));
 
@@ -108,7 +110,7 @@ class AnalysisService {
     double volumeTotalLote = 0;
     double areaTotalLote = 0;
     double areaBasalMediaPonderada = 0;
-    double arvoresHaMediaPonderada = 0; // Usar double para precisão
+    double arvoresHaMediaPonderada = 0;
     List<Arvore> todasAsArvoresDoInventarioComVolume = [];
 
     for (final talhao in talhoesInventario) {
@@ -191,7 +193,7 @@ class AnalysisService {
             double.tryParse(a.split('-').first.replaceAll('>', '')) ?? 99;
         final numB =
             double.tryParse(b.split('-').first.replaceAll('>', '')) ?? 99;
-        return numB.compareTo(numA); // Ordena do maior para o menor diâmetro
+        return numB.compareTo(numA);
       });
 
     for (final sortimento in sortedKeys) {
@@ -282,7 +284,7 @@ class AnalysisService {
     }
 
     final int n = xData.length;
-    const int p = 3; // Número de coeficientes (b0, b1, b2)
+    const int p = 3;
 
     if (n < p) {
       final errorResult = {
@@ -299,11 +301,13 @@ class AnalysisService {
       final coefficients = (features.transpose() * features).inverse() *
           features.transpose() *
           labels;
-      
-      final coefList = coefficients.toList();
-      final double b0 = coefList[0];
-      final double b1 = coefList[1];
-      final double b2 = coefList[2];
+
+      // =========================================================================
+      // ========================== CORREÇÃO DEFINITIVA 1 ========================
+      final double b0 = coefficients[0];
+      final double b1 = coefficients[1];
+      final double b2 = coefficients[2];
+      // =========================== FIM DA CORREÇÃO 1 ===========================
 
       final predictedValues = features * coefficients;
       final yMean = labels.mean();
@@ -324,9 +328,6 @@ class AnalysisService {
       final double mse = residualSumOfSquares / (n - p);
       final double syx = sqrt(mse);
 
-      // **CORREÇÃO**: A biblioteca 'stats' não tem teste de Shapiro-Wilk.
-      // Se este teste for essencial, uma outra biblioteca ou implementação será necessária.
-      // Por enquanto, retornamos valores padrão.
       final shapiroResult = {'statistic': 0.0, 'pValue': 0.0};
 
       return {
@@ -446,13 +447,18 @@ class AnalysisService {
     );
   }
 
+  // =========================================================================
+  // ========================== INÍCIO DA CORREÇÃO 2 =========================
+  // O erro de nome indefinido acontece aqui. O parâmetro se chama 'areaAmostradaHa',
+  // mas vamos padronizar para 'areaTotalAmostradaHa' para ser consistente.
+  // =========================================================================
   TalhaoAnalysisResult _analisarListaDeArvores(
       Talhao talhao,
       List<Arvore> arvoresDoConjunto,
-      double areaAmostradaHa,
+      double areaTotalAmostradaHa, // NOME DO PARÂMETRO CORRIGIDO
       int numeroDeParcelas,
       CodeAnalysisResult? codeAnalysis) {
-    if (arvoresDoConjunto.isEmpty || areaAmostradaHa <= 0) {
+    if (arvoresDoConjunto.isEmpty || areaTotalAmostradaHa <= 0) { // USO CORRIGIDO
       return TalhaoAnalysisResult();
     }
 
@@ -477,14 +483,14 @@ class AnalysisService {
     final double areaBasalTotalAmostrada =
         arvoresVivas.map((a) => _areaBasalPorArvore(a.cap)).fold(0.0, (a, b) => a + b);
     final double areaBasalPorHectare =
-        areaBasalTotalAmostrada / areaAmostradaHa;
+        areaBasalTotalAmostrada / areaTotalAmostradaHa; // USO CORRIGIDO
 
     final double volumeTotalAmostrado = arvoresVivas
         .map((a) => a.volume ?? _estimateVolume(a.cap, a.altura ?? mediaAltura))
         .fold(0.0, (a, b) => a + b);
-    final double volumePorHectare = volumeTotalAmostrado / areaAmostradaHa;
+    final double volumePorHectare = volumeTotalAmostrado / areaTotalAmostradaHa; // USO CORRIGIDO
 
-    final int arvoresPorHectare = (arvoresVivas.length / areaAmostradaHa).round();
+    final int arvoresPorHectare = (arvoresVivas.length / areaTotalAmostradaHa).round(); // USO CORRIGIDO
 
     final double alturaDominante = _calculateDominantHeight(arvoresVivas);
     final double indiceDeSitio =
@@ -518,7 +524,7 @@ class AnalysisService {
     final Map<double, int> distribuicao = getDistribuicaoDiametrica(arvoresVivas);
 
     return TalhaoAnalysisResult(
-      areaTotalAmostradaHa: areaTotalAmostradaHa,
+      areaTotalAmostradaHa: areaTotalAmostradaHa, // USO CORRIGIDO
       totalArvoresAmostradas: arvoresDoConjunto.length,
       totalParcelasAmostradas: numeroDeParcelas,
       mediaCap: mediaCap,
@@ -535,6 +541,7 @@ class AnalysisService {
       recommendations: recommendations,
     );
   }
+  // =========================== FIM DA CORREÇÃO 2 ===========================
 
   CodeAnalysisResult getTreeCodeAnalysis(List<Arvore> arvores) {
     if (arvores.isEmpty) return CodeAnalysisResult();
@@ -568,11 +575,11 @@ class AnalysisService {
       estatisticas[codigo] = CodeStatDetails(
         mediaCap: _calculateAverage(caps),
         medianaCap: _calculateMedian(caps),
-        modaCap: _calculateMode(caps),
+        modaCap: _calculateMode(caps).firstOrNull ?? 0.0,
         desvioPadraoCap: _calculateStdDev(caps),
         mediaAltura: _calculateAverage(alturas),
         medianaAltura: _calculateMedian(alturas),
-        modaAltura: _calculateMode(alturas),
+        modaAltura: _calculateMode(alturas).firstOrNull ?? 0.0,
         desvioPadraoAltura: _calculateStdDev(alturas),
       );
     });
@@ -623,8 +630,6 @@ class AnalysisService {
         codeAnalysisRemanescente);
   }
 
-  // ... (continuação do código anterior)
-
   List<DapClassResult> analisarRendimentoPorDAP(
       List<Parcela> parcelasDoTalhao, List<Arvore> todasAsArvores) {
     if (parcelasDoTalhao.isEmpty || todasAsArvores.isEmpty) {
@@ -637,7 +642,6 @@ class AnalysisService {
         .toList();
     if (arvoresVivas.isEmpty) return [];
 
-    // Usando os sortimentos fixos para definir as classes
     final Map<String, List<Arvore>> arvoresPorClasse = {
       for (var s in _sortimentosFixos) s.nome: []
     };
@@ -647,7 +651,7 @@ class AnalysisService {
       for (var sortimento in _sortimentosFixos) {
         if (dap >= sortimento.diametroMinimo && dap < sortimento.diametroMaximo) {
           arvoresPorClasse[sortimento.nome]!.add(arv);
-          break; // Evita que uma árvore caia em múltiplas classes
+          break;
         }
       }
     }
@@ -657,12 +661,11 @@ class AnalysisService {
 
     final List<DapClassResult> resultadoFinal = [];
     
-    // Ordena as chaves (nomes dos sortimentos) com base no diâmetro mínimo
     final sortedKeys = arvoresPorClasse.keys.toList()
       ..sort((a, b) {
         final diametroA = _sortimentosFixos.firstWhere((s) => s.nome == a).diametroMinimo;
         final diametroB = _sortimentosFixos.firstWhere((s) => s.nome == b).diametroMinimo;
-        return diametroA.compareTo(diametroB); // Ordena do menor para o maior
+        return diametroA.compareTo(diametroB);
       });
 
     for (var classe in sortedKeys) {
@@ -711,7 +714,6 @@ class AnalysisService {
     int somaAtual = plano.values.fold(0, (a, b) => a + b);
     int diferenca = totalArvoresParaCubar - somaAtual;
 
-    // Ajusta a diferença na classe com maior número de árvores para minimizar o impacto relativo
     if (diferenca != 0 && plano.isNotEmpty) {
       String? classeParaAjustar;
       int maxValor = -1;
@@ -728,8 +730,6 @@ class AnalysisService {
           plano[classeParaAjustar!] = novoValor;
         } else {
           plano.remove(classeParaAjustar);
-          // Se a remoção criar uma nova diferença, pode ser necessário redistribuir
-          // mas para simplificar, o ajuste é feito uma vez.
         }
       }
     }
@@ -744,7 +744,6 @@ class AnalysisService {
     
     for (final arvore in arvores) {
       if (arvore.cap > 0) {
-        // A distribuição deve ser por DAP, não CAP
         final dap = arvore.cap / pi;
         final int classeBase = (dap / larguraClasse).floor() * larguraClasse;
         contagemPorClasse.update(classeBase, (value) => value + 1,
@@ -765,7 +764,7 @@ class AnalysisService {
   double _areaBasalPorArvore(double cap) {
     if (cap <= 0) return 0.0;
     final double dap = cap / pi;
-    return (pi * pow(dap, 2)) / 40000; // Converte cm² para m²
+    return (pi * pow(dap, 2)) / 40000;
   }
 
   double _estimateVolume(double cap, double altura) {
@@ -790,21 +789,38 @@ class AnalysisService {
     }
   }
 
-  double _calculateMode(List<double> numbers) {
-    if (numbers.isEmpty) return 0.0;
+  // =========================================================================
+  // ========================== INÍCIO DA CORREÇÃO 3 =========================
+  // Esta nova função não depende do pacote 'stats' e calcula a moda corretamente.
+  // =========================================================================
+  List<double> _calculateMode(List<double> numbers) {
+    if (numbers.isEmpty) return [];
+
     final frequencyMap = <double, int>{};
     for (var number in numbers) {
       frequencyMap[number] = (frequencyMap[number] ?? 0) + 1;
     }
-    if (frequencyMap.isEmpty) return 0.0;
-    return frequencyMap.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+
+    if (frequencyMap.isEmpty) return [];
+
+    final maxFrequency = frequencyMap.values.reduce(max);
+    // Se nenhum número se repete, não há moda.
+    if (maxFrequency <= 1) return []; 
+
+    final modes = frequencyMap.entries
+        .where((entry) => entry.value == maxFrequency)
+        .map((entry) => entry.key)
+        .toList();
+
+    return modes;
   }
+  // =========================== FIM DA CORREÇÃO 3 ===========================
 
   double _calculateStdDev(List<double> numbers) {
     if (numbers.length < 2) return 0.0;
     final mean = _calculateAverage(numbers);
     final variance = numbers.map((x) => pow(x - mean, 2)).reduce((a, b) => a + b) /
-        (numbers.length - 1); // Usa (n-1) para amostra
+        (numbers.length - 1);
     return sqrt(variance);
   }
 
@@ -838,7 +854,6 @@ class AnalysisService {
         final areaTalhao = talhao.areaHa ?? 0.0;
         final proporcao = areaTalhao / areaTotalDoLote;
         
-        // Garante que a última parcela receba o restante para somar exatamente a quantidade total
         if (i == talhoes.length - 1) {
           quantidadesPorTalhao[talhao.id!] = quantidade - arvoresDistribuidas;
         } else {
@@ -920,4 +935,3 @@ class AnalysisService {
     return planosGerados;
   }
 }
-

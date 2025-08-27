@@ -1,4 +1,4 @@
-// Arquivo: lib\services\pdf_service.dart (VERSÃO CORRIGIDA FINAL)
+// lib/services/pdf_service.dart (VERSÃO CORRIGIDA FINAL)
 
 import 'dart:io';
 import 'package:collection/collection.dart';
@@ -833,13 +833,20 @@ class PdfService {
         cellAlignments: {
           1: pw.Alignment.centerRight,
         },
-        // <<< CORREÇÃO AQUI >>>
+        // =========================================================================
+        // ========================== INÍCIO DA CORREÇÃO =========================
+        // O erro ocorre porque a função cellDecoration não pode retornar 'null'.
+        // Devemos retornar uma decoração vazia para as células que não queremos colorir.
+        // =========================================================================
         cellDecoration: (index, data, rowNum) {
-           if (rowNum == 3 && index == 1) { // Linha do Shapiro-Wilk, coluna do valor
-             return pw.BoxDecoration(color: corShapiro.shade(0.2));
-           }
-           return null;
+          if (rowNum == 3 && index == 1) { // Linha do Shapiro-Wilk, coluna do valor
+            return pw.BoxDecoration(color: corShapiro.shade(0.2));
+          }
+          return const pw.BoxDecoration(); // Retorna uma decoração vazia em vez de null
         },
+        // =========================================================================
+        // =========================== FIM DA CORREÇÃO ===========================
+        // =========================================================================
       ),
     ]);
   }
@@ -1033,7 +1040,6 @@ class PdfService {
                 padding: const pw.EdgeInsets.all(8),
                 child: pw.Text(
                   cellText,
-                  // <<< CORREÇÃO AQUI >>>
                   textAlign:
                       colIndex == 1 ? pw.TextAlign.center : pw.TextAlign.left,
                   style: isLastRow

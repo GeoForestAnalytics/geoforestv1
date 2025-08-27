@@ -1,3 +1,5 @@
+// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO CORRIGIDA)
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
@@ -47,7 +49,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   final Set<int> _talhoesInventarioSelecionados = {};
 
   AnaliseVolumetricaCompletaResult? _analiseResult;
-  
+
   // Controle de UI
   bool _isLoading = true;
   bool _isAnalyzing = false;
@@ -84,7 +86,8 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       _isLoading = true;
     });
 
-    _atividadesDisponiveis = await _atividadeRepository.getAtividadesDoProjeto(projeto!.id!);
+    _atividadesDisponiveis =
+        await _atividadeRepository.getAtividadesDoProjeto(projeto!.id!);
     setState(() => _isLoading = false);
   }
 
@@ -105,7 +108,8 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       _isLoading = true;
     });
 
-    _fazendasDisponiveis = await _fazendaRepository.getFazendasDaAtividade(atividade!.id!);
+    _fazendasDisponiveis =
+        await _fazendaRepository.getFazendasDaAtividade(atividade!.id!);
     setState(() => _isLoading = false);
   }
 
@@ -123,59 +127,89 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       }
       _isLoading = true;
     });
-    
+
     await _carregarTalhoesParaSelecao();
     setState(() => _isLoading = false);
   }
 
   Future<void> _carregarTalhoesParaSelecao() async {
-    if (_projetoSelecionado == null || _atividadeSelecionada == null || _fazendaSelecionada == null) return;
-    
-    final todosTalhoesDaFazendaInventario = await _talhaoRepository.getTalhoesDaFazenda(_fazendaSelecionada!.id, _fazendaSelecionada!.atividadeId);
-    final talhoesCompletosInvIds = (await _talhaoRepository.getTalhoesComParcelasConcluidas()).map((t) => t.id).toSet();
-    final talhoesInventarioEncontrados = todosTalhoesDaFazendaInventario.where((t) => talhoesCompletosInvIds.contains(t.id)).toList();
+    if (_projetoSelecionado == null ||
+        _atividadeSelecionada == null ||
+        _fazendaSelecionada == null) return;
+
+    final todosTalhoesDaFazendaInventario =
+        await _talhaoRepository.getTalhoesDaFazenda(
+            _fazendaSelecionada!.id, _fazendaSelecionada!.atividadeId);
+    final talhoesCompletosInvIds = (await _talhaoRepository
+            .getTalhoesComParcelasConcluidas())
+        .map((t) => t.id)
+        .toSet();
+    final talhoesInventarioEncontrados = todosTalhoesDaFazendaInventario
+        .where((t) => talhoesCompletosInvIds.contains(t.id))
+        .toList();
 
     List<Talhao> talhoesCubagemEncontrados = [];
-    final todasAtividadesDoProjeto = await _atividadeRepository.getAtividadesDoProjeto(_projetoSelecionado!.id!);
-    final atividadeCub = todasAtividadesDoProjeto.cast<Atividade?>().firstWhere((a) => a?.tipo.toUpperCase().contains('CUB') ?? false, orElse: () => null);
-    
+    final todasAtividadesDoProjeto =
+        await _atividadeRepository.getAtividadesDoProjeto(_projetoSelecionado!.id!);
+    final atividadeCub = todasAtividadesDoProjeto
+        .cast<Atividade?>()
+        .firstWhere((a) => a?.tipo.toUpperCase().contains('CUB') ?? false,
+            orElse: () => null);
+
     if (atividadeCub != null) {
-      final fazendasDaAtividadeCub = await _fazendaRepository.getFazendasDaAtividade(atividadeCub.id!);
-      final fazendaCub = fazendasDaAtividadeCub.cast<Fazenda?>().firstWhere((f) => f?.nome == _fazendaSelecionada!.nome, orElse: () => null);
-      
+      final fazendasDaAtividadeCub =
+          await _fazendaRepository.getFazendasDaAtividade(atividadeCub.id!);
+      final fazendaCub = fazendasDaAtividadeCub
+          .cast<Fazenda?>()
+          .firstWhere((f) => f?.nome == _fazendaSelecionada!.nome,
+              orElse: () => null);
+
       if (fazendaCub != null) {
-        final todosTalhoesDaFazendaCub = await _talhaoRepository.getTalhoesDaFazenda(fazendaCub.id, fazendaCub.atividadeId);
+        final todosTalhoesDaFazendaCub =
+            await _talhaoRepository.getTalhoesDaFazenda(
+                fazendaCub.id, fazendaCub.atividadeId);
         final todasCubagens = await _cubagemRepository.getTodasCubagens();
-        final talhoesCompletosCubIds = todasCubagens.where((c) => c.alturaTotal > 0 && c.talhaoId != null).map((c) => c.talhaoId!).toSet();
-        talhoesCubagemEncontrados = todosTalhoesDaFazendaCub.where((t) => talhoesCompletosCubIds.contains(t.id)).toList();
+        final talhoesCompletosCubIds = todasCubagens
+            .where((c) => c.alturaTotal > 0 && c.talhaoId != null)
+            .map((c) => c.talhaoId!)
+            .toSet();
+        talhoesCubagemEncontrados = todosTalhoesDaFazendaCub
+            .where((t) => talhoesCompletosCubIds.contains(t.id))
+            .toList();
       }
     }
 
     setState(() {
-        _talhoesComInventarioDisponiveis = talhoesInventarioEncontrados;
-        _talhoesComCubagemDisponiveis = talhoesCubagemEncontrados;
+      _talhoesComInventarioDisponiveis = talhoesInventarioEncontrados;
+      _talhoesComCubagemDisponiveis = talhoesCubagemEncontrados;
     });
   }
-  
+
   void _limparResultados() {
     setState(() {
-        _analiseResult = null;
+      _analiseResult = null;
     });
   }
 
   Future<void> _gerarAnaliseCompleta() async {
-    if (_talhoesCubadosSelecionados.isEmpty || _talhoesInventarioSelecionados.isEmpty) {
+    if (_talhoesCubadosSelecionados.isEmpty ||
+        _talhoesInventarioSelecionados.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Selecione ao menos um talhão de cubagem E um de inventário.'),
           backgroundColor: Colors.orange));
       return;
     }
-    setState(() { _isAnalyzing = true; _errorMessage = null; _limparResultados(); });
-    
+    setState(() {
+      _isAnalyzing = true;
+      _errorMessage = null;
+      _limparResultados();
+    });
+
     try {
       List<CubagemArvore> arvoresParaRegressao = [];
-      for(final talhaoId in _talhoesCubadosSelecionados) {
-        arvoresParaRegressao.addAll(await _cubagemRepository.getTodasCubagensDoTalhao(talhaoId));
+      for (final talhaoId in _talhoesCubadosSelecionados) {
+        arvoresParaRegressao
+            .addAll(await _cubagemRepository.getTodasCubagensDoTalhao(talhaoId));
       }
 
       List<Talhao> talhoesInventarioAnalisados = [];
@@ -184,7 +218,8 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         if (talhao != null) talhoesInventarioAnalisados.add(talhao);
       }
 
-      final resultadoCompleto = await _analysisService.gerarAnaliseVolumetricaCompleta(
+      final resultadoCompleto =
+          await _analysisService.gerarAnaliseVolumetricaCompleta(
         arvoresParaRegressao: arvoresParaRegressao,
         talhoesInventario: talhoesInventarioAnalisados,
       );
@@ -202,19 +237,20 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       }
     } finally {
       if (mounted) {
-        setState(() { _isAnalyzing = false; });
+        setState(() {
+          _isAnalyzing = false;
+        });
       }
     }
   }
 
   Future<void> _exportarPdf() async {
     if (_analiseResult == null) return;
-    
-    // <<< ATUALIZADO PARA PASSAR O NOVO CAMPO >>>
+
     await _pdfService.gerarRelatorioVolumetricoPdf(
       context: context,
       resultadoRegressao: _analiseResult!.resultadoRegressao,
-      // diagnosticoRegressao: _analiseResult!.diagnosticoRegressao, // O PDF Service ainda não está pronto para isso
+      diagnosticoRegressao: _analiseResult!.diagnosticoRegressao,
       producaoInventario: _analiseResult!.totaisInventario,
       producaoSortimento: _analiseResult!.producaoPorSortimento,
       volumePorCodigo: _analiseResult!.volumePorCodigo,
@@ -235,7 +271,15 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         ],
       ),
       body: _errorMessage != null
-          ? Center(child: Padding(padding: const EdgeInsets.all(16.0), child: Text(_errorMessage!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center,)))
+          ? Center(
+              child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(_errorMessage!,
+                      style: const TextStyle(color: Colors.red),
+                      textAlign: TextAlign.center,
+                  ),
+              ),
+            )
           : ListView(
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 90),
               children: [
@@ -246,29 +290,56 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                     child: Column(
                       children: [
                         DropdownButtonFormField<Projeto>(
-                          value: _projetoSelecionado, hint: const Text('Selecione um Projeto'), isExpanded: true,
-                          items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome, overflow: TextOverflow.ellipsis))).toList(),
-                          onChanged: _onProjetoSelecionado, decoration: const InputDecoration(border: OutlineInputBorder()),
+                          value: _projetoSelecionado,
+                          hint: const Text('Selecione um Projeto'),
+                          isExpanded: true,
+                          items: _projetosDisponiveis
+                              .map((p) => DropdownMenuItem(
+                                  value: p,
+                                  child: Text(p.nome,
+                                      overflow: TextOverflow.ellipsis)))
+                              .toList(),
+                          onChanged: _onProjetoSelecionado,
+                          decoration:
+                              const InputDecoration(border: OutlineInputBorder()),
                         ),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<Atividade>(
                           value: _atividadeSelecionada,
                           hint: const Text('Selecione uma Atividade'),
-                          disabledHint: const Text('Selecione um projeto primeiro'),
+                          disabledHint:
+                              const Text('Selecione um projeto primeiro'),
                           isExpanded: true,
-                          items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo, overflow: TextOverflow.ellipsis))).toList(),
-                          onChanged: _projetoSelecionado == null ? null : _onAtividadeSelecionada,
-                          decoration: const InputDecoration(border: OutlineInputBorder()),
+                          items: _atividadesDisponiveis
+                              .map((a) => DropdownMenuItem(
+                                  value: a,
+                                  child: Text(a.tipo,
+                                      overflow: TextOverflow.ellipsis)))
+                              .toList(),
+                          onChanged: _projetoSelecionado == null
+                              ? null
+                              : _onAtividadeSelecionada,
+                          decoration:
+                              const InputDecoration(border: OutlineInputBorder()),
                         ),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<Fazenda>(
                           value: _fazendaSelecionada,
                           hint: const Text('Selecione uma Fazenda'),
-                          disabledHint: const Text('Selecione uma atividade primeiro'),
+                          disabledHint:
+                              const Text('Selecione uma atividade primeiro'),
                           isExpanded: true,
-                          items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome, overflow: TextOverflow.ellipsis))).toList(),
-                          onChanged: _atividadeSelecionada == null ? null : _onFazendaSelecionada,
-                          decoration: const InputDecoration(border: OutlineInputBorder()),
+                          items: _fazendasDisponiveis
+                              .map((f) => DropdownMenuItem(
+                                  value: f,
+                                  child: Text(f.nome,
+                                      overflow: TextOverflow.ellipsis)))
+                              .toList(),
+                          onChanged: _atividadeSelecionada == null
+                              ? null
+                              : _onFazendaSelecionada,
+                          decoration:
+                              const InputDecoration(border: OutlineInputBorder()),
                         ),
                       ],
                     ),
@@ -276,17 +347,27 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                 ),
                 const SizedBox(height: 16),
                 _buildTalhaoSelectionCard(
-                  title: '1. Selecione os Talhões CUBADOS', subtitle: 'Serão usados para gerar a equação de volume.',
-                  talhoesDisponiveis: _talhoesComCubagemDisponiveis, talhoesSelecionadosSet: _talhoesCubadosSelecionados,
+                  title: '1. Selecione os Talhões CUBADOS',
+                  subtitle: 'Serão usados para gerar a equação de volume.',
+                  talhoesDisponiveis: _talhoesComCubagemDisponiveis,
+                  talhoesSelecionadosSet: _talhoesCubadosSelecionados,
                 ),
                 const SizedBox(height: 16),
                 _buildTalhaoSelectionCard(
-                  title: '2. Selecione os Talhões de INVENTÁRIO', subtitle: 'A equação será aplicada nestes talhões.',
-                  talhoesDisponiveis: _talhoesComInventarioDisponiveis, talhoesSelecionadosSet: _talhoesInventarioSelecionados,
+                  title: '2. Selecione os Talhões de INVENTÁRIO',
+                  subtitle: 'A equação será aplicada nestes talhões.',
+                  talhoesDisponiveis: _talhoesComInventarioDisponiveis,
+                  talhoesSelecionadosSet: _talhoesInventarioSelecionados,
                 ),
                 if (_analiseResult != null) ...[
-                  // <<< ATUALIZADO PARA PASSAR OS DOIS MAPAS PARA O WIDGET >>>
+                  // =========================================================================
+                  // ========================== INÍCIO DA CORREÇÃO =========================
+                  // Aqui passamos o segundo argumento que estava faltando
+                  // =========================================================================
                   _buildResultCard(_analiseResult!.resultadoRegressao, _analiseResult!.diagnosticoRegressao),
+                  // =========================================================================
+                  // =========================== FIM DA CORREÇÃO ===========================
+                  // =========================================================================
                   _buildProductionTable(_analiseResult!),
                   _buildProducaoComercialCard(_analiseResult!),
                   _buildVolumePorCodigoCard(_analiseResult!),
@@ -295,15 +376,23 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isAnalyzing ? null : _gerarAnaliseCompleta,
-        icon: _isAnalyzing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.functions),
+        icon: _isAnalyzing
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2))
+            : const Icon(Icons.functions),
         label: Text(_isAnalyzing ? 'Analisando...' : 'Gerar Análise Completa'),
       ),
     );
   }
 
   Widget _buildTalhaoSelectionCard({
-    required String title, required String subtitle,
-    required List<Talhao> talhoesDisponiveis, required Set<int> talhoesSelecionadosSet,
+    required String title,
+    required String subtitle,
+    required List<Talhao> talhoesDisponiveis,
+    required Set<int> talhoesSelecionadosSet,
   }) {
     return Card(
       elevation: 2,
@@ -315,20 +404,37 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
             Text(title, style: Theme.of(context).textTheme.titleLarge),
             Text(subtitle, style: const TextStyle(color: Colors.grey)),
             const Divider(),
-            if (_isLoading) const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))
-            else if (_fazendaSelecionada == null) const Center(child: Text('Selecione um projeto, atividade e fazenda para ver os talhões.'))
-            else if (talhoesDisponiveis.isEmpty) const Center(child: Padding(padding: EdgeInsets.all(8.0), child: Text('Nenhum talhão com dados encontrado.')))
+            if (_isLoading)
+              const Center(
+                  child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator()))
+            else if (_fazendaSelecionada == null)
+              const Center(
+                  child: Text(
+                      'Selecione um projeto, atividade e fazenda para ver os talhões.'))
+            else if (talhoesDisponiveis.isEmpty)
+              const Center(
+                  child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Text('Nenhum talhão com dados encontrado.')))
             else
               ListView.builder(
-                shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: talhoesDisponiveis.length,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: talhoesDisponiveis.length,
                 itemBuilder: (context, index) {
                   final talhao = talhoesDisponiveis[index];
                   return CheckboxListTile(
-                    title: Text(talhao.nome), value: talhoesSelecionadosSet.contains(talhao.id!),
+                    title: Text(talhao.nome),
+                    value: talhoesSelecionadosSet.contains(talhao.id!),
                     onChanged: (isSelected) {
                       setState(() {
-                        if (isSelected == true) { talhoesSelecionadosSet.add(talhao.id!); }
-                        else { talhoesSelecionadosSet.remove(talhao.id!); }
+                        if (isSelected == true) {
+                          talhoesSelecionadosSet.add(talhao.id!);
+                        } else {
+                          talhoesSelecionadosSet.remove(talhao.id!);
+                        }
                       });
                     },
                   );
@@ -339,9 +445,9 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       ),
     );
   }
-  
-  // <<< O WIDGET FOI COMPLETAMENTE ATUALIZADO >>>
-  Widget _buildResultCard(Map<String, dynamic> resultados, Map<String, dynamic> diagnostico) {
+
+  Widget _buildResultCard(
+      Map<String, dynamic> resultados, Map<String, dynamic> diagnostico) {
     final pValue = diagnostico['shapiro_wilk_p_value'] as double?;
     String resultadoShapiro;
     Color corShapiro;
@@ -357,58 +463,86 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       corShapiro = Colors.red;
     }
 
-    return Card( 
-      elevation: 2, 
-      color: Colors.blueGrey.shade50, 
-      child: Padding( 
-        padding: const EdgeInsets.all(16.0), 
-        child: Column( 
-          crossAxisAlignment: CrossAxisAlignment.start, 
-          children: [ 
-            Text('Resultados da Regressão', style: Theme.of(context).textTheme.titleLarge), 
-            const Divider(), 
-            Text('Equação Gerada:', style: Theme.of(context).textTheme.titleMedium), 
-            SelectableText( 
-              resultados['equacao'], 
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12, backgroundColor: Colors.black12), 
-            ), 
-            const SizedBox(height: 12),
-            _buildStatRow('Coeficiente (R²):', (resultados['R2'] as double).toStringAsFixed(4)), 
-            _buildStatRow('Nº de Amostras Usadas:', '${resultados['n_amostras']}'),
-            const Divider(height: 20),
-            Text('Diagnóstico do Modelo', style: Theme.of(context).textTheme.titleMedium),
-            _buildStatRow('Erro Padrão Residual (Syx):', (diagnostico['syx'] as double).toStringAsFixed(4)),
-            _buildStatRow('Syx (%):', '${(diagnostico['syx_percent'] as double).toStringAsFixed(2)}%'),
-            _buildStatRow(
-              'Normalidade dos Resíduos (Shapiro-Wilk):',
-              resultadoShapiro,
-              valueColor: corShapiro
+    return Card(
+      elevation: 2,
+      color: Colors.blueGrey.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Resultados da Regressão',
+                style: Theme.of(context).textTheme.titleLarge),
+            const Divider(),
+            Text('Equação Gerada:',
+                style: Theme.of(context).textTheme.titleMedium),
+            SelectableText(
+              resultados['equacao'],
+              style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  backgroundColor: Colors.black12),
             ),
-          ], 
-        ), 
-      ), 
+            const SizedBox(height: 12),
+            _buildStatRow('Coeficiente (R²):',
+                (resultados['R2'] as double).toStringAsFixed(4)),
+            _buildStatRow(
+                'Nº de Amostras Usadas:', '${resultados['n_amostras']}'),
+            const Divider(height: 20),
+            Text('Diagnóstico do Modelo',
+                style: Theme.of(context).textTheme.titleMedium),
+            _buildStatRow('Erro Padrão Residual (Syx):',
+                (diagnostico['syx'] as double).toStringAsFixed(4)),
+            _buildStatRow('Syx (%):',
+                '${(diagnostico['syx_percent'] as double).toStringAsFixed(2)}%'),
+            _buildStatRow('Normalidade dos Resíduos (Shapiro-Wilk):',
+                resultadoShapiro,
+                valueColor: corShapiro),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildProductionTable(AnaliseVolumetricaCompletaResult result) {
     final totais = result.totaisInventario;
-    return Card( elevation: 2, child: Padding( padding: const EdgeInsets.all(16.0), child: Column( crossAxisAlignment: CrossAxisAlignment.start, children: [ Text('Totais do Inventário', style: Theme.of(context).textTheme.titleLarge), const Divider(), _buildStatRow('Talhões Aplicados:', '${totais['talhoes']}'), _buildStatRow('Volume por Hectare:', '${(totais['volume_ha'] as double).toStringAsFixed(2)} m³/ha'), _buildStatRow('Árvores por Hectare:', '${totais['arvores_ha']}'), _buildStatRow('Área Basal por Hectare:', '${(totais['area_basal_ha'] as double).toStringAsFixed(2)} m²/ha'), const Divider(height: 15), _buildStatRow('Volume Total para ${(totais['area_total_lote'] as double).toStringAsFixed(2)} ha:', '${(totais['volume_total_lote'] as double).toStringAsFixed(2)} m³'), ], ), ), );
+    return Card(
+        elevation: 2,
+        child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Totais do Inventário',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const Divider(),
+                  _buildStatRow('Talhões Aplicados:', '${totais['talhoes']}'),
+                  _buildStatRow('Volume por Hectare:',
+                      '${(totais['volume_ha'] as double).toStringAsFixed(2)} m³/ha'),
+                  _buildStatRow(
+                      'Árvores por Hectare:', '${totais['arvores_ha']}'),
+                  _buildStatRow('Área Basal por Hectare:',
+                      '${(totais['area_basal_ha'] as double).toStringAsFixed(2)} m²/ha'),
+                  const Divider(height: 15),
+                  _buildStatRow(
+                      'Volume Total para ${(totais['area_total_lote'] as double).toStringAsFixed(2)} ha:',
+                      '${(totais['volume_total_lote'] as double).toStringAsFixed(2)} m³'),
+                ])));
   }
 
   Widget _buildProducaoComercialCard(AnaliseVolumetricaCompletaResult result) {
     final data = result.producaoPorSortimento;
     if (data.isEmpty) return const SizedBox.shrink();
-    
+
     final barGroups = data.asMap().entries.map((entry) {
       return BarChartGroupData(
         x: entry.key,
         barRods: [
           BarChartRodData(
-            toY: entry.value.volumeHa,
-            color: Colors.blue.shade700,
-            width: 22,
-            borderRadius: BorderRadius.circular(4)
-          )
+              toY: entry.value.volumeHa,
+              color: Colors.blue.shade700,
+              width: 22,
+              borderRadius: BorderRadius.circular(4))
         ],
       );
     }).toList();
@@ -420,7 +554,8 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Produção Comercial Estimada', style: Theme.of(context).textTheme.titleLarge),
+            Text('Produção Comercial Estimada',
+                style: Theme.of(context).textTheme.titleLarge),
             const Divider(),
             SizedBox(
               height: 200,
@@ -428,15 +563,16 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                 BarChartData(
                   barGroups: barGroups,
                   titlesData: FlTitlesData(
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles:
+                        const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles:
+                        const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
                         getTitlesWidget: (value, meta) => Text(
-                          data[value.toInt()].nome,
-                          style: const TextStyle(fontSize: 10)
-                        ),
+                            data[value.toInt()].nome,
+                            style: const TextStyle(fontSize: 10)),
                       ),
                     ),
                   ),
@@ -446,11 +582,14 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                         final item = data[groupIndex];
                         return BarTooltipItem(
                           '${item.nome}\n',
-                          const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          const TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.bold),
                           children: [
                             TextSpan(
-                              text: '${item.volumeHa.toStringAsFixed(2)} m³/ha (${item.porcentagem.toStringAsFixed(1)}%)',
-                              style: const TextStyle(color: Color.fromARGB(255, 52, 168, 245)),
+                              text:
+                                  '${item.volumeHa.toStringAsFixed(2)} m³/ha (${item.porcentagem.toStringAsFixed(1)}%)',
+                              style: const TextStyle(
+                                  color: Color.fromARGB(255, 52, 168, 245)),
                             )
                           ],
                         );
@@ -463,11 +602,13 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
             const SizedBox(height: 20),
             _buildDetailedTable(
               headers: ['Sortimento', 'Volume (m³/ha)', '% Total'],
-              rows: data.map((item) => [
-                item.nome,
-                item.volumeHa.toStringAsFixed(2),
-                '${item.porcentagem.toStringAsFixed(1)}%',
-              ]).toList(),
+              rows: data
+                  .map((item) => [
+                        item.nome,
+                        item.volumeHa.toStringAsFixed(2),
+                        '${item.porcentagem.toStringAsFixed(1)}%',
+                      ])
+                  .toList(),
             ),
           ],
         ),
@@ -483,7 +624,11 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       return BarChartGroupData(
         x: entry.key,
         barRods: [
-          BarChartRodData(toY: entry.value.volumeTotal, color: Colors.teal, width: 20, borderRadius: BorderRadius.circular(4))
+          BarChartRodData(
+              toY: entry.value.volumeTotal,
+              color: Colors.teal,
+              width: 20,
+              borderRadius: BorderRadius.circular(4))
         ],
       );
     }).toList();
@@ -495,43 +640,56 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Contribuição Volumétrica por Código', style: Theme.of(context).textTheme.titleLarge),
+            Text('Contribuição Volumétrica por Código',
+                style: Theme.of(context).textTheme.titleLarge),
             const Divider(),
-            SizedBox(height: 200, child: BarChart(
-              BarChartData(
-                barGroups: barGroups,
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (value, meta) => Text(data[value.toInt()].codigo, style: const TextStyle(fontSize: 10)))),
-                ),
-                barTouchData: BarTouchData(
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      final item = data[groupIndex];
-                      return BarTooltipItem(
-                        '${item.codigo}\n',
-                        const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                        children: [
-                          TextSpan(
-                            text: '${item.volumeTotal.toStringAsFixed(2)} m³/ha (${item.porcentagem.toStringAsFixed(1)}%)',
-                            style: const TextStyle(color: Colors.yellow),
-                          )
-                        ],
-                      );
-                    },
+            SizedBox(
+                height: 200,
+                child: BarChart(
+                    BarChartData(
+                  barGroups: barGroups,
+                  titlesData: FlTitlesData(
+                    topTitles:
+                        const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles:
+                        const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, meta) => Text(
+                                data[value.toInt()].codigo,
+                                style: const TextStyle(fontSize: 10)))),
                   ),
-                ),
-              )
-            )),
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        final item = data[groupIndex];
+                        return BarTooltipItem(
+                          '${item.codigo}\n',
+                          const TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.bold),
+                          children: [
+                            TextSpan(
+                              text:
+                                  '${item.volumeTotal.toStringAsFixed(2)} m³/ha (${item.porcentagem.toStringAsFixed(1)}%)',
+                              style: const TextStyle(color: Colors.yellow),
+                            )
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ))),
             const SizedBox(height: 20),
             _buildDetailedTable(
               headers: ['Código', 'Volume (m³/ha)', '% Total'],
-              rows: data.map((item) => [
-                item.codigo,
-                item.volumeTotal.toStringAsFixed(2),
-                '${item.porcentagem.toStringAsFixed(1)}%',
-              ]).toList(),
+              rows: data
+                  .map((item) => [
+                        item.codigo,
+                        item.volumeTotal.toStringAsFixed(2),
+                        '${item.porcentagem.toStringAsFixed(1)}%',
+                      ])
+                  .toList(),
             ),
           ],
         ),
@@ -539,32 +697,39 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
-  Widget _buildDetailedTable({required List<String> headers, required List<List<String>> rows}) {
+  Widget _buildDetailedTable(
+      {required List<String> headers, required List<List<String>> rows}) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
         columnSpacing: 24,
         headingRowHeight: 32,
         headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
-        columns: headers.map((h) => DataColumn(label: Text(h, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
-        rows: rows.map((row) => DataRow(
-          cells: row.map((cell) => DataCell(Text(cell))).toList()
-        )).toList(),
+        columns: headers
+            .map((h) => DataColumn(
+                label: Text(h, style: const TextStyle(fontWeight: FontWeight.bold))))
+            .toList(),
+        rows: rows
+            .map((row) =>
+                DataRow(cells: row.map((cell) => DataCell(Text(cell))).toList()))
+            .toList(),
       ),
     );
   }
 
-  // <<< ATUALIZADO PARA ACEITAR UMA COR NO VALOR >>>
   Widget _buildStatRow(String label, String value, {Color? valueColor}) {
-    return Padding( 
-      padding: const EdgeInsets.symmetric(vertical: 4.0), 
-      child: Row( 
-        mainAxisAlignment: MainAxisAlignment.spaceBetween, 
-        children: [ 
-          Expanded(child: Text(label, style: const TextStyle(color: Colors.black54))), 
-          Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: valueColor)), 
-        ], 
-      ), 
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+              child: Text(label, style: const TextStyle(color: Colors.black54))),
+          Text(value,
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 15, color: valueColor)),
+        ],
+      ),
     );
   }
 }

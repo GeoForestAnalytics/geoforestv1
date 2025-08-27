@@ -62,7 +62,7 @@ dependencies:
   flutter_archive: ^6.0.3 # Compactar/descompactar arquivos ZIP
   uuid: ^4.3.3 # Gerar identificadores únicos
   pie_chart: ^5.4.0
-  stats: ^2.1.0 # Estatísticas descritivas
+  stats: ^3.0.0 # Estatísticas descritivas
 
   # Imagens
   image_picker: ^1.0.7 # Capturar ou escolher imagens
