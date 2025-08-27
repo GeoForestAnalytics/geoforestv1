@@ -8,8 +8,8 @@ import 'package:geoforestv1/pages/menu/register_page.dart';
 import 'package:geoforestv1/pages/menu/forgot_password_page.dart';
 
 
-const Color primaryColor = Color(0xFF1D4433);
-const Color secondaryTextColor = Color(0xFF617359);
+const Color primaryColor = Color.fromARGB(255, 13, 58, 89);
+const Color secondaryTextColor = Color.fromARGB(255, 19, 98, 151);
 const Color backgroundColor = Color(0xFFF3F3F4);
 
 class LoginPage extends StatefulWidget {
@@ -122,7 +122,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
                   child: Image.asset(
-                    'assets/images/icon3.png',
+                    'assets/images/icon_azul.png',
                     fit: BoxFit.cover,
                   ),
                 ),
@@ -133,7 +133,7 @@ class _LoginPageState extends State<LoginPage> {
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: primaryColor,
+                  color: Color.fromARGB(255, 13, 58, 89),
                 ),
               ),
               const SizedBox(height: 8),
@@ -141,7 +141,7 @@ class _LoginPageState extends State<LoginPage> {
                 'Faça login para continuar',
                 style: TextStyle(
                   fontSize: 16,
-                  color: secondaryTextColor,
+                  color: Color.fromARGB(255, 114, 160, 189),
                 ),
               ),
               const SizedBox(height: 40),
@@ -166,10 +166,10 @@ class _LoginPageState extends State<LoginPage> {
                         keyboardType: TextInputType.emailAddress,
                         decoration: const InputDecoration(
                           labelText: 'Email',
-                          prefixIcon: Icon(Icons.email_outlined, color: secondaryTextColor),
+                          prefixIcon: Icon(Icons.email_outlined, color: Color.fromARGB(255, 114, 160, 189)),
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.all(16),
-                          labelStyle: TextStyle(color: secondaryTextColor),
+                          labelStyle: TextStyle(color: Color.fromARGB(255, 13, 58, 899)),
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
@@ -202,11 +202,11 @@ class _LoginPageState extends State<LoginPage> {
                         obscureText: _obscurePassword,
                         decoration: InputDecoration(
                           labelText: 'Senha',
-                          prefixIcon: const Icon(Icons.lock_outlined, color: secondaryTextColor),
+                          prefixIcon: const Icon(Icons.lock_outlined, color: Color.fromARGB(255, 114, 160, 189)),
                           suffixIcon: IconButton(
                             icon: Icon(
                               _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                              color: secondaryTextColor,
+                              color: const Color.fromARGB(255, 13, 58, 89),
                             ),
                             onPressed: () {
                               setState(() {
@@ -216,7 +216,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.all(16),
-                          labelStyle: const TextStyle(color: secondaryTextColor),
+                          labelStyle: const TextStyle(color: Color.fromARGB(255, 13, 58, 89)),
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
@@ -252,7 +252,7 @@ class _LoginPageState extends State<LoginPage> {
                         child: const Text(
                           'Esqueci minha senha',
                           style: TextStyle(
-                            color: secondaryTextColor,
+                            color: Color.fromARGB(255, 25, 115, 175),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -265,7 +265,7 @@ class _LoginPageState extends State<LoginPage> {
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _login,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
+                          backgroundColor: const Color.fromARGB(255, 13, 58, 89),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -304,7 +304,7 @@ class _LoginPageState extends State<LoginPage> {
                           child: Text(
                             'ou',
                             style: TextStyle(
-                              color: secondaryTextColor,
+                              color: Color.fromARGB(255, 82, 95, 119),
                               fontWeight: FontWeight.w500,
                             ),
                           ),

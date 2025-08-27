@@ -270,7 +270,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         String key = despesasValidas.keys.elementAt(group.x.toInt());
                         return BarTooltipItem(
-                          '$key\\n',
+                          '$key\n',
                           const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                           children: <TextSpan>[
                             TextSpan(

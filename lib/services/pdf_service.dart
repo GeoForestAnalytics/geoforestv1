@@ -1,5 +1,6 @@
-import 'dart:io';
+// Arquivo: lib\services\pdf_service.dart (VERSÃO CORRIGIDA FINAL)
 
+import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
@@ -268,6 +269,7 @@ class PdfService {
   Future<void> gerarRelatorioVolumetricoPdf({
     required BuildContext context,
     required Map<String, dynamic> resultadoRegressao,
+    required Map<String, dynamic> diagnosticoRegressao,
     required Map<String, dynamic> producaoInventario,
     required List<VolumePorSortimento> producaoSortimento,
     required List<VolumePorCodigo> volumePorCodigo,
@@ -290,6 +292,8 @@ class PdfService {
             ),
             pw.Divider(height: 20),
             _buildTabelaEquacaoPdf(resultadoRegressao),
+            pw.SizedBox(height: 10),
+            _buildTabelaDiagnosticoPdf(diagnosticoRegressao),
             pw.SizedBox(height: 20),
             _buildTabelaProducaoPdf(producaoInventario),
             pw.SizedBox(height: 20),
@@ -331,7 +335,7 @@ class PdfService {
         continue;
       }
 
-      final analiseGeral = analysisService.getTalhaoInsights(parcelas, arvores);
+      final analiseGeral = analysisService.getTalhaoInsights(talhao, parcelas, arvores);
 
       pdf.addPage(
         pw.MultiPage(
@@ -340,23 +344,11 @@ class PdfService {
               'Análise de Talhão', "${talhao.fazendaNome ?? 'N/A'} / ${talhao.nome}"),
           footer: (pw.Context ctx) => _buildFooter(),
           build: (pw.Context ctx) {
-            // <<< CORREÇÃO 1: A variável é declarada aqui >>>
             final codeAnalysis = analiseGeral.analiseDeCodigos;
             
             return [
-              _buildTabelaProducaoPdf({
-                'talhoes': talhao.nome,
-                'volume_ha': analiseGeral.volumePorHectare,
-                'arvores_ha': analiseGeral.arvoresPorHectare,
-                'area_basal_ha': analiseGeral.areaBasalPorHectare,
-                'volume_total_lote':
-                    (talhao.areaHa != null && talhao.areaHa! > 0)
-                        ? analiseGeral.volumePorHectare * talhao.areaHa!
-                        : 0.0,
-                'area_total_lote': talhao.areaHa ?? 0.0,
-              }),
+              _buildResumoTalhaoPdf(analiseGeral),
               
-              // <<< CORREÇÃO 2: A variável 'codeAnalysis' agora é usada aqui >>>
               if (codeAnalysis != null) ...[
                 pw.SizedBox(height: 20),
                 _buildComposicaoPovoamentoPdf(codeAnalysis),
@@ -377,7 +369,6 @@ class PdfService {
       talhoesProcessados++;
     }
 
-    // ... (o resto da função continua igual)
     if (talhoesProcessados == 0 && context.mounted) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -592,6 +583,10 @@ class PdfService {
             _buildPdfStat('Árvores/ha', result.arvoresPorHectare.toString()),
             _buildPdfStat('Área Basal',
                 '${result.areaBasalPorHectare.toStringAsFixed(1)} m²'),
+            if (result.alturaDominante > 0)
+              _buildPdfStat('HD', '${result.alturaDominante.toStringAsFixed(1)} m'),
+            if (result.indiceDeSitio > 0)
+              _buildPdfStat('Sítio (7a)', result.indiceDeSitio.toStringAsFixed(1)),
           ],
         ));
   }
@@ -787,6 +782,68 @@ class PdfService {
     ]);
   }
 
+  pw.Widget _buildTabelaDiagnosticoPdf(Map<String, dynamic> diagnostico) {
+    final pValue = diagnostico['shapiro_wilk_p_value'] as double?;
+    String resultadoShapiro;
+    PdfColor corShapiro;
+
+    if (pValue == null) {
+      resultadoShapiro = "N/A";
+      corShapiro = PdfColors.grey;
+    } else if (pValue > 0.05) {
+      resultadoShapiro = "Aprovado (p > 0.05)";
+      corShapiro = PdfColors.green;
+    } else {
+      resultadoShapiro = "Rejeitado (p <= 0.05)";
+      corShapiro = PdfColors.red;
+    }
+
+    return pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+      pw.Text('Diagnóstico do Modelo Estatístico',
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+      pw.Divider(color: PdfColors.grey, height: 10),
+      pw.SizedBox(height: 5),
+      pw.TableHelper.fromTextArray(
+        cellAlignment: pw.Alignment.centerLeft,
+        headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+        data: <List<String>>[
+          ['Métrica', 'Valor', 'Interpretação'],
+          [
+            'Erro Padrão Residual (Syx)',
+            (diagnostico['syx'] as double).toStringAsFixed(4),
+            'Dispersão média dos dados em torno da regressão.'
+          ],
+          [
+            'Syx (%)',
+            '${(diagnostico['syx_percent'] as double).toStringAsFixed(2)}%',
+            'Erro padrão em termos percentuais (geralmente < 10% é bom).'
+          ],
+          [
+            'Normalidade (Shapiro-Wilk)',
+            resultadoShapiro,
+            'Verifica se os erros do modelo são normalmente distribuídos.'
+          ],
+        ],
+        cellStyle: const pw.TextStyle(fontSize: 10),
+        columnWidths: {
+          0: const pw.FlexColumnWidth(1.5),
+          1: const pw.FlexColumnWidth(1),
+          2: const pw.FlexColumnWidth(2),
+        },
+        cellAlignments: {
+          1: pw.Alignment.centerRight,
+        },
+        // <<< CORREÇÃO AQUI >>>
+        cellDecoration: (index, data, rowNum) {
+           if (rowNum == 3 && index == 1) { // Linha do Shapiro-Wilk, coluna do valor
+             return pw.BoxDecoration(color: corShapiro.shade(0.2));
+           }
+           return null;
+        },
+      ),
+    ]);
+  }
+
   pw.Widget _buildTabelaProducaoPdf(Map<String, dynamic> producaoInventario) {
     return pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
       pw.Text('Totais do Inventário',
@@ -976,6 +1033,7 @@ class PdfService {
                 padding: const pw.EdgeInsets.all(8),
                 child: pw.Text(
                   cellText,
+                  // <<< CORREÇÃO AQUI >>>
                   textAlign:
                       colIndex == 1 ? pw.TextAlign.center : pw.TextAlign.left,
                   style: isLastRow
@@ -1132,6 +1190,4 @@ class PdfService {
           style: const pw.TextStyle(color: PdfColors.grey, fontSize: 10)),
     ]);
   }
-
-  //endregion
 }

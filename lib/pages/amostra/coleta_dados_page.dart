@@ -1,5 +1,3 @@
-// lib/pages/amostra/coleta_dados_page.dart (VERSÃO FINAL COM LÓGICA DE TIPO CORRIGIDA)
-
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -118,14 +116,12 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     _observacaoController.text = p.observacao ?? '';
     _referenciaRfController.text = p.referenciaRf ?? '';
     
-    // <<< CORREÇÃO 1: Lógica robusta para traduzir o valor do banco para o dropdown >>>
     if (p.tipoParcela != null) {
       if (p.tipoParcela!.toUpperCase() == 'I') {
         _tipoParcelaSelecionado = 'Instalação';
       } else if (p.tipoParcela!.toUpperCase() == 'R') {
         _tipoParcelaSelecionado = 'Remedição';
       } else {
-        // Se o valor salvo já for o texto completo, usa ele. Senão, usa o padrão.
         final opcoesValidas = ['Instalação', 'Remedição'];
         _tipoParcelaSelecionado = opcoesValidas.contains(p.tipoParcela) ? p.tipoParcela! : 'Instalação';
       }
@@ -162,7 +158,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     _lado1Controller.dispose();
     _lado2Controller.dispose();
     _referenciaRfController.dispose();
-    // _tipoParcelaController não é mais necessário
     super.dispose();
   }
   
@@ -188,7 +183,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       observacao: _observacaoController.text.trim(),
       areaMetrosQuadrados: area,
       referenciaRf: _referenciaRfController.text.trim(),
-      tipoParcela: _tipoParcelaSelecionado, // Salva o valor completo (ex: "Instalação")
+      tipoParcela: _tipoParcelaSelecionado,
       formaParcela: _formaDaParcela.name,
       lado1: lado1,
       lado2: lado2,
@@ -293,12 +288,10 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   Future<void> _reabrirParaEdicao() async {
   setState(() => _salvando = true);
   try {
-    // 1. Chama o método específico e mais seguro para atualizar apenas o status.
     await _parcelaRepository.updateParcelaStatus(_parcelaAtual.dbId!, StatusParcela.emAndamento);
     
     if(mounted) {
       setState(() {
-        // 2. Atualiza o objeto local para refletir a mudança.
         _parcelaAtual = _parcelaAtual.copyWith(status: StatusParcela.emAndamento);
         _isReadOnly = false;
         _salvando = false;
@@ -535,7 +528,6 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           value: _tipoParcelaSelecionado,
-                          // <<< CORREÇÃO 3: Adicionando as novas opções ao dropdown >>>
                           items: const [
                             DropdownMenuItem(value: 'Instalação', child: Text('Instalação')),
                             DropdownMenuItem(value: 'Remedição', child: Text('Remedição')),
@@ -558,10 +550,22 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
                   const SizedBox(height: 16),
                   TextFormField(controller: _talhaoParcelaController, enabled: false, decoration: const InputDecoration(labelText: 'Talhão', border: OutlineInputBorder(), prefixIcon: Icon(Icons.grid_on))),
                   const SizedBox(height: 16),
-                  TextFormField(controller: _idParcelaController,enabled: false,decoration: const InputDecoration(labelText: 'ID da parcela',border: OutlineInputBorder(),prefixIcon: Icon(Icons.tag),filled: true, fillColor: Colors.black12,
-                   ), 
-                   validator: (v) => v == null || v.trim().isEmpty ? 'Campo obrigatório' : null
+                  
+                  // <<< CORREÇÃO AQUI >>>
+                  TextFormField(
+                    controller: _idParcelaController,
+                    enabled: !_isModoEdicao, // Habilitado apenas se NÃO for modo de edição
+                    decoration: InputDecoration(
+                      labelText: 'ID da parcela (Ex: P01, A05)',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.tag),
+                      filled: _isModoEdicao, // Preenche com cor apenas se for modo de edição
+                      fillColor: _isModoEdicao ? Colors.black12 : null,
+                    ), 
+                    validator: (v) => v == null || v.trim().isEmpty ? 'Campo obrigatório' : null
                   ),
+                  // <<< FIM DA CORREÇÃO >>>
+
                   const SizedBox(height: 16),
                   _buildCalculadoraArea(area),
                   const SizedBox(height: 16),

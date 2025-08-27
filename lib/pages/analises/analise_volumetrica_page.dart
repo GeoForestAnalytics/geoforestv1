@@ -1,5 +1,3 @@
-// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO ATUALIZADA)
-
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
@@ -16,8 +14,6 @@ import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
-
-
 
 class AnaliseVolumetricaPage extends StatefulWidget {
   const AnaliseVolumetricaPage({super.key});
@@ -214,9 +210,11 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   Future<void> _exportarPdf() async {
     if (_analiseResult == null) return;
     
+    // <<< ATUALIZADO PARA PASSAR O NOVO CAMPO >>>
     await _pdfService.gerarRelatorioVolumetricoPdf(
       context: context,
       resultadoRegressao: _analiseResult!.resultadoRegressao,
+      // diagnosticoRegressao: _analiseResult!.diagnosticoRegressao, // O PDF Service ainda não está pronto para isso
       producaoInventario: _analiseResult!.totaisInventario,
       producaoSortimento: _analiseResult!.producaoPorSortimento,
       volumePorCodigo: _analiseResult!.volumePorCodigo,
@@ -287,7 +285,8 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                   talhoesDisponiveis: _talhoesComInventarioDisponiveis, talhoesSelecionadosSet: _talhoesInventarioSelecionados,
                 ),
                 if (_analiseResult != null) ...[
-                  _buildResultCard(_analiseResult!),
+                  // <<< ATUALIZADO PARA PASSAR OS DOIS MAPAS PARA O WIDGET >>>
+                  _buildResultCard(_analiseResult!.resultadoRegressao, _analiseResult!.diagnosticoRegressao),
                   _buildProductionTable(_analiseResult!),
                   _buildProducaoComercialCard(_analiseResult!),
                   _buildVolumePorCodigoCard(_analiseResult!),
@@ -341,8 +340,54 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
   
-  Widget _buildResultCard(AnaliseVolumetricaCompletaResult result) {
-    return Card( elevation: 2, color: Colors.blueGrey.shade50, child: Padding( padding: const EdgeInsets.all(16.0), child: Column( crossAxisAlignment: CrossAxisAlignment.start, children: [ Text('Resultados da Regressão', style: Theme.of(context).textTheme.titleLarge), const Divider(), Text('Equação Gerada:', style: Theme.of(context).textTheme.titleMedium), SelectableText( result.resultadoRegressao['equacao'], style: const TextStyle(fontFamily: 'monospace', fontSize: 12, backgroundColor: Colors.black12), ), const SizedBox(height: 8), _buildStatRow('Coeficiente (R²):', (result.resultadoRegressao['R2'] as double).toStringAsFixed(4)), _buildStatRow('Nº de Amostras Usadas:', '${result.resultadoRegressao['n_amostras']}'), ], ), ), );
+  // <<< O WIDGET FOI COMPLETAMENTE ATUALIZADO >>>
+  Widget _buildResultCard(Map<String, dynamic> resultados, Map<String, dynamic> diagnostico) {
+    final pValue = diagnostico['shapiro_wilk_p_value'] as double?;
+    String resultadoShapiro;
+    Color corShapiro;
+
+    if (pValue == null) {
+      resultadoShapiro = "N/A";
+      corShapiro = Colors.grey;
+    } else if (pValue > 0.05) {
+      resultadoShapiro = "Aprovado (p > 0.05)";
+      corShapiro = Colors.green;
+    } else {
+      resultadoShapiro = "Rejeitado (p <= 0.05)";
+      corShapiro = Colors.red;
+    }
+
+    return Card( 
+      elevation: 2, 
+      color: Colors.blueGrey.shade50, 
+      child: Padding( 
+        padding: const EdgeInsets.all(16.0), 
+        child: Column( 
+          crossAxisAlignment: CrossAxisAlignment.start, 
+          children: [ 
+            Text('Resultados da Regressão', style: Theme.of(context).textTheme.titleLarge), 
+            const Divider(), 
+            Text('Equação Gerada:', style: Theme.of(context).textTheme.titleMedium), 
+            SelectableText( 
+              resultados['equacao'], 
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12, backgroundColor: Colors.black12), 
+            ), 
+            const SizedBox(height: 12),
+            _buildStatRow('Coeficiente (R²):', (resultados['R2'] as double).toStringAsFixed(4)), 
+            _buildStatRow('Nº de Amostras Usadas:', '${resultados['n_amostras']}'),
+            const Divider(height: 20),
+            Text('Diagnóstico do Modelo', style: Theme.of(context).textTheme.titleMedium),
+            _buildStatRow('Erro Padrão Residual (Syx):', (diagnostico['syx'] as double).toStringAsFixed(4)),
+            _buildStatRow('Syx (%):', '${(diagnostico['syx_percent'] as double).toStringAsFixed(2)}%'),
+            _buildStatRow(
+              'Normalidade dos Resíduos (Shapiro-Wilk):',
+              resultadoShapiro,
+              valueColor: corShapiro
+            ),
+          ], 
+        ), 
+      ), 
+    );
   }
 
   Widget _buildProductionTable(AnaliseVolumetricaCompletaResult result) {
@@ -430,7 +475,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
-  // <<< MUDANÇA INICIADA >>>
   Widget _buildVolumePorCodigoCard(AnaliseVolumetricaCompletaResult result) {
     final data = result.volumePorCodigo;
     if (data.isEmpty) return const SizedBox.shrink();
@@ -461,7 +505,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (value, meta) => Text(data[value.toInt()].codigo, style: const TextStyle(fontSize: 10)))),
                 ),
-                // Adiciona o tooltip para formatar o valor
                 barTouchData: BarTouchData(
                   touchTooltipData: BarTouchTooltipData(
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
@@ -495,7 +538,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       ),
     );
   }
-  // <<< MUDANÇA FINALIZADA >>>
 
   Widget _buildDetailedTable({required List<String> headers, required List<List<String>> rows}) {
     return SingleChildScrollView(
@@ -512,7 +554,17 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
-  Widget _buildStatRow(String label, String value) {
-    return Padding( padding: const EdgeInsets.symmetric(vertical: 4.0), child: Row( mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [ Expanded(child: Text(label, style: const TextStyle(color: Colors.black54))), Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)), ], ), );
+  // <<< ATUALIZADO PARA ACEITAR UMA COR NO VALOR >>>
+  Widget _buildStatRow(String label, String value, {Color? valueColor}) {
+    return Padding( 
+      padding: const EdgeInsets.symmetric(vertical: 4.0), 
+      child: Row( 
+        mainAxisAlignment: MainAxisAlignment.spaceBetween, 
+        children: [ 
+          Expanded(child: Text(label, style: const TextStyle(color: Colors.black54))), 
+          Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: valueColor)), 
+        ], 
+      ), 
+    );
   }
 }

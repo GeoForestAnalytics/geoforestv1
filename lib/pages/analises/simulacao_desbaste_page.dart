@@ -1,19 +1,22 @@
-// lib/pages/analises/simulacao_desbaste_page.dart (VERSÃO COM EXPORTAÇÃO FUNCIONAL)
+// Arquivo: lib\pages\analises\simulacao_desbaste_page.dart (VERSÃO CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
+import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/services/analysis_service.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
-import 'package:geoforestv1/services/pdf_service.dart'; // <<< 1. IMPORTAR PDF SERVICE
+import 'package:geoforestv1/services/pdf_service.dart';
 
 class SimulacaoDesbastePage extends StatefulWidget {
+  final Talhao talhao;
   final List<Parcela> parcelas;
   final List<Arvore> arvores;
   final TalhaoAnalysisResult analiseInicial;
 
   const SimulacaoDesbastePage({
     super.key,
+    required this.talhao,
     required this.parcelas,
     required this.arvores,
     required this.analiseInicial,
@@ -25,23 +28,22 @@ class SimulacaoDesbastePage extends StatefulWidget {
 
 class _SimulacaoDesbastePageState extends State<SimulacaoDesbastePage> {
   final _analysisService = AnalysisService();
-  final _pdfService = PdfService(); // <<< 2. INSTANCIAR PDF SERVICE
-  double _intensidadeDesbaste = 0.0; // Em porcentagem (0 a 40)
+  final _pdfService = PdfService();
+  double _intensidadeDesbaste = 0.0;
   late TalhaoAnalysisResult _resultadoSimulacao;
   bool _isExporting = false;
 
   @override
   void initState() {
     super.initState();
-    // O estado inicial da simulação é a própria análise inicial
     _resultadoSimulacao = widget.analiseInicial;
   }
 
   void _rodarSimulacao(double novaIntensidade) {
     setState(() {
       _intensidadeDesbaste = novaIntensidade;
-      // Chama o serviço de análise para obter os resultados pós-desbaste
       _resultadoSimulacao = _analysisService.simularDesbaste(
+        widget.talhao,
         widget.parcelas,
         widget.arvores,
         _intensidadeDesbaste,
@@ -49,42 +51,40 @@ class _SimulacaoDesbastePageState extends State<SimulacaoDesbastePage> {
     });
   }
 
-  // <<< 3. FUNÇÃO DE EXPORTAÇÃO IMPLEMENTADA >>>
   Future<void> _exportarSimulacaoPdf() async {
-  if (_isExporting) return;
-  if (widget.parcelas.isEmpty) {
-     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Não há dados para exportar.')),
-    );
-    return;
-  }
-  setState(() => _isExporting = true);
-  
-  final nomeFazenda = widget.parcelas.first.nomeFazenda ?? 'Fazenda Desconhecida';
-  final nomeTalhao = widget.parcelas.first.nomeTalhao ?? 'Talhão Desconhecido';
-
-  try {
-    // A chamada para o serviço é a mesma, mas ele agora lida com a permissão.
-    await _pdfService.gerarRelatorioSimulacaoPdf(
-      context: context,
-      nomeFazenda: nomeFazenda,
-      nomeTalhao: nomeTalhao,
-      intensidade: _intensidadeDesbaste,
-      analiseInicial: widget.analiseInicial,
-      resultadoSimulacao: _resultadoSimulacao,
-    );
-  } catch(e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erro ao exportar: $e"), backgroundColor: Colors.red),
+    if (_isExporting) return;
+    if (widget.parcelas.isEmpty) {
+       ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não há dados para exportar.')),
       );
+      return;
     }
-  } finally {
-    if(mounted) {
-      setState(() => _isExporting = false);
+    setState(() => _isExporting = true);
+    
+    final nomeFazenda = widget.parcelas.first.nomeFazenda ?? 'Fazenda Desconhecida';
+    final nomeTalhao = widget.parcelas.first.nomeTalhao ?? 'Talhão Desconhecido';
+
+    try {
+      await _pdfService.gerarRelatorioSimulacaoPdf(
+        context: context,
+        nomeFazenda: nomeFazenda,
+        nomeTalhao: nomeTalhao,
+        intensidade: _intensidadeDesbaste,
+        analiseInicial: widget.analiseInicial,
+        resultadoSimulacao: _resultadoSimulacao,
+      );
+    } catch(e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro ao exportar: $e"), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if(mounted) {
+        setState(() => _isExporting = false);
+      }
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +92,6 @@ class _SimulacaoDesbastePageState extends State<SimulacaoDesbastePage> {
       appBar: AppBar(
         title: const Text('Simulador de Desbaste'),
         actions: [
-          // <<< 4. BOTÃO DE AÇÃO NA APPBAR >>>
           if (_isExporting)
             const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white,)))
           else

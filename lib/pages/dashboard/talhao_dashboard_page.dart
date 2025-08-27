@@ -1,4 +1,4 @@
-// lib/pages/dashboard/talhao_dashboard_page.dart (VERSÃO ATUALIZADA)
+// Arquivo: lib\pages\dashboard\talhao_dashboard_page.dart (VERSÃO CORRIGIDA)
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -137,7 +137,7 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     _arvoresDoTalhao = dadosAgregados['arvores'] as List<Arvore>;
     if (!mounted || _parcelasDoTalhao.isEmpty || _arvoresDoTalhao.isEmpty) return;
     
-    final resultado = _analysisService.getTalhaoInsights(_parcelasDoTalhao, _arvoresDoTalhao);
+    final resultado = _analysisService.getTalhaoInsights(widget.talhao, _parcelasDoTalhao, _arvoresDoTalhao);
     if (mounted) {
       setState(() => _analysisResult = resultado);
     }
@@ -149,6 +149,8 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
       context,
       MaterialPageRoute(
         builder: (context) => SimulacaoDesbastePage(
+          // <<< CORREÇÃO AQUI >>>
+          talhao: widget.talhao,
           parcelas: _parcelasDoTalhao,
           arvores: _arvoresDoTalhao,
           analiseInicial: _analysisResult!,
@@ -256,7 +258,6 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     );
   }
 
-  // <<< MÉTODO ATUALIZADO PARA INCLUIR TODAS AS ESTATÍSTICAS >>>
   Widget _buildCodeAnalysisCard(CodeAnalysisResult codeAnalysis) {
     return Card(
       elevation: 2,
@@ -282,7 +283,6 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
               child: DataTable(
                 columnSpacing: 18.0,
                 headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
-                // <<< NOVAS COLUNAS ADICIONADAS AQUI >>>
                 columns: const [
                   DataColumn(label: Text('Código')),
                   DataColumn(label: Text('Qtd.'), numeric: true),
@@ -300,7 +300,6 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
                   return DataRow(cells: [
                     DataCell(Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold))),
                     DataCell(Text(codeAnalysis.contagemPorCodigo[entry.key]?.toString() ?? '0')),
-                    // <<< NOVOS DADOS ADICIONADOS AQUI >>>
                     DataCell(Text(stats.mediaCap.toStringAsFixed(1))),
                     DataCell(Text(stats.medianaCap.toStringAsFixed(1))),
                     DataCell(Text(stats.modaCap.toStringAsFixed(1))),
@@ -334,6 +333,12 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
             _buildStatRow('Altura Média:', '${result.mediaAltura.toStringAsFixed(1)} m'),
             _buildStatRow('Área Basal (G):', '${result.areaBasalPorHectare.toStringAsFixed(2)} m²/ha'),
             _buildStatRow('Volume Estimado:', '${result.volumePorHectare.toStringAsFixed(2)} m³/ha'),
+            
+            if (result.alturaDominante > 0)
+              _buildStatRow('Altura Dominante (HD):', '${result.alturaDominante.toStringAsFixed(1)} m'),
+            if (result.indiceDeSitio > 0)
+              _buildStatRow('Índice de Sítio (7 anos):', result.indiceDeSitio.toStringAsFixed(1)),
+
             const Divider(height: 20, thickness: 0.5, indent: 20, endIndent: 20),
             _buildStatRow('Nº de Parcelas Amostradas:', result.totalParcelasAmostradas.toString()),
             _buildStatRow('Nº de Árvores Medidas:', result.totalArvoresAmostradas.toString()),

@@ -1,8 +1,10 @@
+// Arquivo: lib\providers\dashboard_metrics_provider.dart (VERSÃO COMPLETA E CORRIGIDA)
+
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/data/repositories/parcela_repository.dart'; // Import da Versão 1
-import 'package:geoforestv1/models/arvore_model.dart'; // Import da Versão 1
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
@@ -91,9 +93,8 @@ class DashboardMetricsProvider with ChangeNotifier {
   double get mediaDiariaColetas => _mediaDiariaColetas;
 
   final AnalysisService _analysisService = AnalysisService();
-  final ParcelaRepository _parcelaRepository = ParcelaRepository(); // Instância da Versão 1
+  final ParcelaRepository _parcelaRepository = ParcelaRepository();
 
-  // Método update agora é ASYNC, como na Versão 1
   Future<void> update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) async {
     debugPrint("METRICS PROVIDER UPDATE: Recebeu ${gerenteProvider.parcelasSincronizadas.length} parcelas para calcular.");
 
@@ -123,7 +124,7 @@ class DashboardMetricsProvider with ChangeNotifier {
     );
 
     _recalcularDesempenhoPorCubagem(gerenteProvider.talhaoToAtividadeMap, atividadeIdToTipoMap);
-    await _recalcularKpisDeProjeto(gerenteProvider); // Chamada agora usa 'await'
+    await _recalcularKpisDeProjeto(gerenteProvider);
     _recalcularProgressoPorEquipe();
     _recalcularColetasPorAtividade(gerenteProvider);
     _recalcularColetasPorMes();
@@ -149,7 +150,6 @@ class DashboardMetricsProvider with ChangeNotifier {
         if (p.projetoId == null || !idsProjetosAtivos.contains(p.projetoId)) return false;
       }
 
-      // Lógica de filtro por tipo de atividade da Versão 2
       if (filterProvider.selectedAtividadeTipos.isNotEmpty) {
         final atividadeId = gerenteProvider.talhaoToAtividadeMap[p.talhaoId];
         final atividade = gerenteProvider.atividades.firstWhereOrNull((a) => a.id == atividadeId);
@@ -188,7 +188,6 @@ class DashboardMetricsProvider with ChangeNotifier {
         if (projetoId == null || !idsProjetosAtivos.contains(projetoId)) return false;
       }
       
-      // Lógica de filtro por tipo de atividade da Versão 2
       if (filterProvider.selectedAtividadeTipos.isNotEmpty) {
         final atividadeId = gerenteProvider.talhaoToAtividadeMap[c.talhaoId];
         final atividade = gerenteProvider.atividades.firstWhereOrNull((a) => a.id == atividadeId);
@@ -210,7 +209,6 @@ class DashboardMetricsProvider with ChangeNotifier {
     }).toList();
   }
 
-  // Método de cálculo de volume ASYNC e CORRETO da Versão 1
   Future<void> _recalcularKpisDeProjeto(GerenteProvider gerenteProvider) async {
     final parcelasConcluidas = _parcelasFiltradas
         .where((p) =>
@@ -235,6 +233,9 @@ class DashboardMetricsProvider with ChangeNotifier {
 
       if (talhaoId == null) continue;
       
+      final talhaoInfo = gerenteProvider.talhoes.firstWhereOrNull((t) => t.id == talhaoId);
+      if (talhaoInfo == null) continue;
+      
       List<Arvore> todasAsArvoresDoTalhao = [];
       for (final parcela in parcelasDoTalhao) {
         if (parcela.dbId != null) {
@@ -245,11 +246,10 @@ class DashboardMetricsProvider with ChangeNotifier {
 
       if (todasAsArvoresDoTalhao.isEmpty) continue;
       
-      final analiseTalhao = _analysisService.getTalhaoInsights(parcelasDoTalhao, todasAsArvoresDoTalhao);
+      final analiseTalhao = _analysisService.getTalhaoInsights(talhaoInfo, parcelasDoTalhao, todasAsArvoresDoTalhao);
       final volumeHaDoTalhao = analiseTalhao.volumePorHectare;
 
-      final talhaoInfo = gerenteProvider.talhoes.firstWhereOrNull((t) => t.id == talhaoId);
-      final areaHaDoTalhao = talhaoInfo?.areaHa ?? 0.0;
+      final areaHaDoTalhao = talhaoInfo.areaHa ?? 0.0;
 
       if (areaHaDoTalhao > 0) {
         volumeTotalAcumulado += volumeHaDoTalhao * areaHaDoTalhao;
@@ -393,10 +393,9 @@ class DashboardMetricsProvider with ChangeNotifier {
   }
   
   void _recalcularProgressoPorEquipe() {
-    // A lista agora busca apenas coletas EXPORTADAS
     final List<dynamic> todasColetasExportadas = [
-      ..._parcelasFiltradas.where((p) => p.exportada == true), // <-- MUDANÇA AQUI
-      ..._cubagensFiltradas.where((c) => c.exportada == true), // <-- MUDANÇA AQUI
+      ..._parcelasFiltradas.where((p) => p.exportada == true),
+      ..._cubagensFiltradas.where((c) => c.exportada == true),
     ];
 
     if (todasColetasExportadas.isEmpty) {

@@ -52,6 +52,8 @@ class TalhaoAnalysisResult {
   final double areaBasalPorHectare;
   final double volumePorHectare;
   final int arvoresPorHectare;
+  final double alturaDominante;
+  final double indiceDeSitio;
   final Map<double, int> distribuicaoDiametrica;
   final CodeAnalysisResult? analiseDeCodigos;
   final List<String> warnings;
@@ -61,14 +63,15 @@ class TalhaoAnalysisResult {
   TalhaoAnalysisResult({
     this.areaTotalAmostradaHa = 0, this.totalArvoresAmostradas = 0, this.totalParcelasAmostradas = 0,
     this.mediaCap = 0, this.mediaAltura = 0, this.areaBasalPorHectare = 0, this.volumePorHectare = 0,
-    this.arvoresPorHectare = 0, this.distribuicaoDiametrica = const {}, this.analiseDeCodigos,
+    this.arvoresPorHectare = 0, 
+    this.alturaDominante = 0, this.indiceDeSitio = 0,
+    this.distribuicaoDiametrica = const {}, this.analiseDeCodigos,
     this.warnings = const [], this.insights = const [], this.recommendations = const [],
   });
 }
 
 // --- NOVOS MODELOS PARA ANÁLISE VOLUMÉTRICA (AnaliseVolumetricaPage) ---
 
-// Modelo para o resultado da produção por sortimento
 class VolumePorSortimento {
   final String nome;
   final double volumeHa;
@@ -77,7 +80,6 @@ class VolumePorSortimento {
   VolumePorSortimento({required this.nome, required this.volumeHa, required this.porcentagem});
 }
 
-// Modelo para o resultado do volume por código de árvore
 class VolumePorCodigo {
   final String codigo;
   final double volumeTotal;
@@ -86,15 +88,20 @@ class VolumePorCodigo {
   VolumePorCodigo({required this.codigo, required this.volumeTotal, required this.porcentagem});
 }
 
-// Modelo principal que agrupa todos os resultados da Análise Volumétrica
 class AnaliseVolumetricaCompletaResult {
   final Map<String, dynamic> resultadoRegressao;
+  // <<< INÍCIO DA MUDANÇA >>>
+  final Map<String, dynamic> diagnosticoRegressao;
+  // <<< FIM DA MUDANÇA >>>
   final Map<String, dynamic> totaisInventario;
   final List<VolumePorSortimento> producaoPorSortimento;
   final List<VolumePorCodigo> volumePorCodigo;
 
   AnaliseVolumetricaCompletaResult({
     required this.resultadoRegressao,
+    // <<< INÍCIO DA MUDANÇA >>>
+    required this.diagnosticoRegressao,
+    // <<< FIM DA MUDANÇA >>>
     required this.totaisInventario,
     required this.producaoPorSortimento,
     required this.volumePorCodigo,

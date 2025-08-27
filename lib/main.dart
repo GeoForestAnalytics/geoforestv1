@@ -255,7 +255,7 @@ class MyApp extends StatelessWidget {
   }
 
   ThemeData _buildThemeData(Brightness brightness) {
-    final baseColor = const Color(0xFF617359);
+    final baseColor = const Color.fromARGB(255, 13, 58, 89);
     final isLight = brightness == Brightness.light;
 
     return ThemeData(
@@ -263,31 +263,31 @@ class MyApp extends StatelessWidget {
       colorScheme: ColorScheme.fromSeed(
         seedColor: baseColor,
         brightness: brightness,
-        surface: isLight ? const Color(0xFFF3F3F4) : Colors.grey[900],
-        background: isLight ? Colors.white : Colors.black,
+        surface: isLight ? const Color.fromARGB(255, 255, 255, 255) : Colors.grey[900],
+        background: isLight ? const Color.fromARGB(255, 255, 255, 255) : Colors.black,
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: isLight ? baseColor : Colors.grey[850],
-        foregroundColor: Colors.white,
+        foregroundColor: const Color.fromARGB(255, 255, 255, 255),
         elevation: 0,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: baseColor,
-          foregroundColor: Colors.white,
+          foregroundColor: const Color.fromARGB(255, 255, 255, 255),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
       cardTheme: CardThemeData(
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        color: isLight ? Colors.white : Colors.grey.shade800,
+        color: isLight ? const Color.fromARGB(255, 255, 255, 255) : Colors.grey.shade800,
       ),
       textTheme: TextTheme(
-        headlineMedium: TextStyle(color: isLight ? const Color(0xFF1D4433) : Colors.white, fontWeight: FontWeight.bold),
-        bodyLarge: TextStyle(color: isLight ? const Color(0xFF1D4433) : Colors.grey.shade300),
-        bodyMedium: TextStyle(color: isLight ? const Color(0xFF1D4433) : Colors.grey.shade300),
-        titleLarge: TextStyle(color: isLight ? const Color(0xFF1D4433) : Colors.white, fontWeight: FontWeight.bold),
+        headlineMedium: TextStyle(color: isLight ? const Color.fromARGB(255, 13, 58, 89) : Colors.white, fontWeight: FontWeight.bold),
+        bodyLarge: TextStyle(color: isLight ? const Color.fromARGB(255, 13, 58, 89) : Colors.grey.shade300),
+        bodyMedium: TextStyle(color: isLight ? const Color.fromARGB(255, 13, 58, 89) : Colors.grey.shade300),
+        titleLarge: TextStyle(color: isLight ? const Color.fromARGB(255, 13, 58, 89) : Colors.white, fontWeight: FontWeight.bold),
       ),
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
@@ -364,7 +364,7 @@ class ErrorScreen extends StatelessWidget {
               const SizedBox(height: 30),
               if (onRetry != null)
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF617359), foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 9, 12, 65), foregroundColor: Colors.white),
                   onPressed: onRetry,
                   child: const Text('Tentar Novamente'),
                 ),
