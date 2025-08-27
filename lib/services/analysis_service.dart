@@ -304,9 +304,9 @@ class AnalysisService {
 
       // =========================================================================
       // ========================== CORREÇÃO DEFINITIVA 1 ========================
-      final double b0 = coefficients[0];
-      final double b1 = coefficients[1];
-      final double b2 = coefficients[2];
+      final  b0 = coefficients[0];
+      final  b1 = coefficients[1];
+      final  b2 = coefficients[2];
       // =========================== FIM DA CORREÇÃO 1 ===========================
 
       final predictedValues = features * coefficients;
@@ -337,7 +337,7 @@ class AnalysisService {
           'b2': b2,
           'R2': rSquared,
           'equacao':
-              'ln(V) = ${b0.toStringAsFixed(5)} + ${b1.toStringAsFixed(5)}*ln(DAP) + ${b2.toStringAsFixed(5)}*ln(H)',
+              'ln(V) = ${b0.(5)} + ${b1.(5)}*ln(DAP) + ${b2.(5)}*ln(H)',
           'n_amostras': n,
         },
         'diagnostico': {

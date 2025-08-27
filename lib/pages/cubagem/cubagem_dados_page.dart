@@ -125,9 +125,9 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     List<double> alturasDeMedicao = [];
 
     if (metodoParaGerar.toUpperCase().contains('RELATIVA')) {
-      alturasDeMedicao = [0.01, 0.02, 0.03, 0.04, 0.05, 0.10, 0.15, 0.20, 0.25, 0.35, 0.45, 0.50, 0.55, 0.65, 0.75, 0.85, 0.90, 0.95].map((p) => alturaTotal * p).toList();
+      alturasDeMedicao = [0.0,0.01, 0.02, 0.03, 0.04, 0.05, 0.10, 0.15, 0.20, 0.25, 0.35, 0.45, 0.50, 0.55, 0.65, 0.75, 0.85, 0.90, 0.95].map((p) => alturaTotal * p).toList();
     } else { // Assume 'FIXA' como padrão
-      alturasDeMedicao = [0.1, 0.3, 0.7, 1.0, 2.0];
+      alturasDeMedicao = [0.0,0.1, 0.3, 0.7, 1.0, 2.0];
       for (double h = 4.0; h < alturaTotal; h += 2.0) {
         alturasDeMedicao.add(h);
       }
