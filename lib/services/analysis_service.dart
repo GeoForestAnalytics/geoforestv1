@@ -258,103 +258,104 @@ class AnalysisService {
     return volumeTotal;
   }
 
-  Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
-      List<CubagemArvore> arvoresCubadas) async {
-    final List<Vector> xData = [];
-    final List<double> yData = [];
+  // =========================================================================
+  // ============ A ÚNICA ALTERAÇÃO FOI FEITA NESTA FUNÇÃO ABAIXO ============
+  // =========================================================================
+  // SUBSTITUA A FUNÇÃO INTEIRA POR ESTA VERSÃO FINAL
 
-    for (final arvoreCubada in arvoresCubadas) {
-      if (arvoreCubada.id == null) continue;
-      final secoes =
-          await _cubagemRepository.getSecoesPorArvoreId(arvoreCubada.id!);
-      final volumeReal = calcularVolumeComercialSmalian(secoes);
+Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
+    List<CubagemArvore> arvoresCubadas) async {
+  final List<Vector> xData = [];
+  final List<double> yData = [];
 
-      if (volumeReal <= 0 ||
-          arvoreCubada.valorCAP <= 0 ||
-          arvoreCubada.alturaTotal <= 0) {
-        continue;
-      }
-      final dap = arvoreCubada.valorCAP / pi;
-      final altura = arvoreCubada.alturaTotal;
-      final lnVolume = log(volumeReal);
-      final lnDAP = log(dap);
-      final lnAltura = log(altura);
-      xData.add(Vector.fromList([1.0, lnDAP, lnAltura]));
-      yData.add(lnVolume);
+  for (final arvoreCubada in arvoresCubadas) {
+    if (arvoreCubada.id == null) continue;
+    final secoes =
+        await _cubagemRepository.getSecoesPorArvoreId(arvoreCubada.id!);
+    final volumeReal = calcularVolumeComercialSmalian(secoes);
+
+    if (volumeReal <= 0 ||
+        arvoreCubada.valorCAP <= 0 ||
+        arvoreCubada.alturaTotal <= 0) {
+      continue;
     }
-
-    final int n = xData.length;
-    const int p = 3;
-
-    if (n < p) {
-      final errorResult = {
-        'error':
-            'Dados insuficientes. Pelo menos $p árvores cubadas completas são necessárias.'
-      };
-      return {'resultados': errorResult, 'diagnostico': {}};
-    }
-
-    final features = Matrix.fromRows(xData);
-    final labels = Vector.fromList(yData);
-
-    try {
-      final coefficients = (features.transpose() * features).inverse() *
-          features.transpose() *
-          labels;
-
-      // =========================================================================
-      // ========================== CORREÇÃO DEFINITIVA 1 ========================
-      final  b0 = coefficients[0];
-      final  b1 = coefficients[1];
-      final  b2 = coefficients[2];
-      // =========================== FIM DA CORREÇÃO 1 ===========================
-
-      final predictedValues = features * coefficients;
-      final yMean = labels.mean();
-      final totalSumOfSquares =
-          labels.fold(0.0, (sum, val) => sum + pow(val - yMean, 2));
-      final residuals = labels - predictedValues;
-      final residualSumOfSquares =
-          residuals.fold(0.0, (sum, val) => sum + pow(val, 2));
-
-      if (totalSumOfSquares == 0) {
-        final errorResult = {
-          'error': 'Não foi possível calcular R², variação nula nos dados.'
-        };
-        return {'resultados': errorResult, 'diagnostico': {}};
-      }
-      final rSquared = 1 - (residualSumOfSquares / totalSumOfSquares);
-
-      final double mse = residualSumOfSquares / (n - p);
-      final double syx = sqrt(mse);
-
-      final shapiroResult = {'statistic': 0.0, 'pValue': 0.0};
-
-      return {
-        'resultados': {
-          'b0': b0,
-          'b1': b1,
-          'b2': b2,
-          'R2': rSquared,
-          'equacao':
-              'ln(V) = ${b0.(5)} + ${b1.(5)}*ln(DAP) + ${b2.(5)}*ln(H)',
-          'n_amostras': n,
-        },
-        'diagnostico': {
-          'syx': syx,
-          'syx_percent': yMean != 0 ? (syx / yMean) * 100 : 0.0,
-          'shapiro_wilk_w': shapiroResult['statistic']!,
-          'shapiro_wilk_p_value': shapiroResult['pValue']!,
-        }
-      };
-    } catch (e) {
-      final errorResult = {
-        'error':
-            'Erro matemático na regressão. Verifique a variação dos dados de DAP e Altura. Detalhe: $e'
-      };
-      return {'resultados': errorResult, 'diagnostico': {}};
-    }
+    final dap = arvoreCubada.valorCAP / pi;
+    final altura = arvoreCubada.alturaTotal;
+    final lnVolume = log(volumeReal);
+    final lnDAP = log(dap);
+    final lnAltura = log(altura);
+    xData.add(Vector.fromList([1.0, lnDAP, lnAltura]));
+    yData.add(lnVolume);
   }
+
+  final int n = xData.length;
+  const int p = 3;
+
+  if (n < p) {
+    final errorResult = {
+      'error':
+          'Dados insuficientes. Pelo menos $p árvores cubadas completas são necessárias.'
+    };
+    return {'resultados': errorResult, 'diagnostico': {}};
+  }
+
+  final features = Matrix.fromRows(xData);
+  final labels = Vector.fromList(yData);
+
+  try {
+    final coefficients = (features.transpose() * features).inverse() *
+        features.transpose() *
+        labels;
+
+    // ===== AJUSTE FINAL APLICADO AQUI =====
+    // Forçamos o Dart a entender que b0, b1 e b2 são números (double).
+    final  b0 = coefficients[0] as  double;
+    final  b1 = coefficients[1] as  double;
+    final  b2 = coefficients[2] as  double;
+
+    final predictedValues = features * coefficients;
+    final yMean = labels.mean();
+    final totalSumOfSquares =
+        labels.fold(0.0, (sum, val) => sum + pow(val - yMean, 2));
+    final residuals = labels - predictedValues;
+    final residualSumOfSquares =
+        residuals.fold(0.0, (sum, val) => sum + pow(val, 2));
+
+    if (totalSumOfSquares == 0) {
+      final errorResult = {
+        'error': 'Não foi possível calcular R², variação nula nos dados.'
+      };
+      return {'resultados': errorResult, 'diagnostico': {}};
+    }
+    final rSquared = 1 - (residualSumOfSquares / totalSumOfSquares);
+
+    final double mse = residualSumOfSquares / (n - p);
+    final double syx = sqrt(mse);
+    
+    return {
+      'resultados': {
+        'b0': b0,
+        'b1': b1,
+        'b2': b2,
+        'R2': rSquared,
+        // Agora que b0, b1 e b2 são 'double', esta linha funciona perfeitamente.
+        'equacao':
+            'ln(V) = ${b0.toStringAsFixed(5)} + ${b1.toStringAsFixed(5)}*ln(DAP) + ${b2.toStringAsFixed(5)}*ln(H)',
+        'n_amostras': n,
+      },
+      'diagnostico': {
+        'syx': syx,
+        'syx_percent': yMean != 0 ? (syx / yMean) * 100 : 0.0,
+      }
+    };
+  } catch (e) {
+    final errorResult = {
+      'error':
+          'Erro matemático na regressão. Verifique a variação dos dados de DAP e Altura. Detalhe: $e'
+    };
+    return {'resultados': errorResult, 'diagnostico': {}};
+  }
+}
 
   List<Arvore> aplicarEquacaoDeVolume({
     required List<Arvore> arvoresDoInventario,
@@ -446,19 +447,14 @@ class AnalysisService {
       codeAnalysis,
     );
   }
-
-  // =========================================================================
-  // ========================== INÍCIO DA CORREÇÃO 2 =========================
-  // O erro de nome indefinido acontece aqui. O parâmetro se chama 'areaAmostradaHa',
-  // mas vamos padronizar para 'areaTotalAmostradaHa' para ser consistente.
-  // =========================================================================
+  
   TalhaoAnalysisResult _analisarListaDeArvores(
       Talhao talhao,
       List<Arvore> arvoresDoConjunto,
-      double areaTotalAmostradaHa, // NOME DO PARÂMETRO CORRIGIDO
+      double areaTotalAmostradaHa,
       int numeroDeParcelas,
       CodeAnalysisResult? codeAnalysis) {
-    if (arvoresDoConjunto.isEmpty || areaTotalAmostradaHa <= 0) { // USO CORRIGIDO
+    if (arvoresDoConjunto.isEmpty || areaTotalAmostradaHa <= 0) {
       return TalhaoAnalysisResult();
     }
 
@@ -483,14 +479,14 @@ class AnalysisService {
     final double areaBasalTotalAmostrada =
         arvoresVivas.map((a) => _areaBasalPorArvore(a.cap)).fold(0.0, (a, b) => a + b);
     final double areaBasalPorHectare =
-        areaBasalTotalAmostrada / areaTotalAmostradaHa; // USO CORRIGIDO
+        areaBasalTotalAmostrada / areaTotalAmostradaHa;
 
     final double volumeTotalAmostrado = arvoresVivas
         .map((a) => a.volume ?? _estimateVolume(a.cap, a.altura ?? mediaAltura))
         .fold(0.0, (a, b) => a + b);
-    final double volumePorHectare = volumeTotalAmostrado / areaTotalAmostradaHa; // USO CORRIGIDO
+    final double volumePorHectare = volumeTotalAmostrado / areaTotalAmostradaHa;
 
-    final int arvoresPorHectare = (arvoresVivas.length / areaTotalAmostradaHa).round(); // USO CORRIGIDO
+    final int arvoresPorHectare = (arvoresVivas.length / areaTotalAmostradaHa).round();
 
     final double alturaDominante = _calculateDominantHeight(arvoresVivas);
     final double indiceDeSitio =
@@ -524,7 +520,7 @@ class AnalysisService {
     final Map<double, int> distribuicao = getDistribuicaoDiametrica(arvoresVivas);
 
     return TalhaoAnalysisResult(
-      areaTotalAmostradaHa: areaTotalAmostradaHa, // USO CORRIGIDO
+      areaTotalAmostradaHa: areaTotalAmostradaHa,
       totalArvoresAmostradas: arvoresDoConjunto.length,
       totalParcelasAmostradas: numeroDeParcelas,
       mediaCap: mediaCap,
@@ -541,8 +537,7 @@ class AnalysisService {
       recommendations: recommendations,
     );
   }
-  // =========================== FIM DA CORREÇÃO 2 ===========================
-
+  
   CodeAnalysisResult getTreeCodeAnalysis(List<Arvore> arvores) {
     if (arvores.isEmpty) return CodeAnalysisResult();
 
@@ -789,10 +784,6 @@ class AnalysisService {
     }
   }
 
-  // =========================================================================
-  // ========================== INÍCIO DA CORREÇÃO 3 =========================
-  // Esta nova função não depende do pacote 'stats' e calcula a moda corretamente.
-  // =========================================================================
   List<double> _calculateMode(List<double> numbers) {
     if (numbers.isEmpty) return [];
 
@@ -804,7 +795,7 @@ class AnalysisService {
     if (frequencyMap.isEmpty) return [];
 
     final maxFrequency = frequencyMap.values.reduce(max);
-    // Se nenhum número se repete, não há moda.
+    
     if (maxFrequency <= 1) return []; 
 
     final modes = frequencyMap.entries
@@ -814,8 +805,7 @@ class AnalysisService {
 
     return modes;
   }
-  // =========================== FIM DA CORREÇÃO 3 ===========================
-
+  
   double _calculateStdDev(List<double> numbers) {
     if (numbers.length < 2) return 0.0;
     final mean = _calculateAverage(numbers);

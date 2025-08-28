@@ -529,9 +529,9 @@ else if (result.atualizarEProximo && indexOriginal != null) {
     }
     final int totalCovas = covas.length;
 
-    final int contagemAlturaNormal = _arvoresColetadas.where((a) => a.codigo.name == 'normal' && a.altura != null && a.altura! > 0).length;
+    final int contagemAlturaNormal = _arvoresColetadas.where((a) => a.codigo.name == 'Normal' && a.altura != null && a.altura! > 0).length;
     final int contagemAlturaDominante = _arvoresColetadas.where((a) => a.dominante && a.altura != null && a.altura! > 0).length;
-    final int contagemAlturaOutros = _arvoresColetadas.where((a) => a.codigo.name != 'normal' && a.altura != null && a.altura! > 0).length;
+    final int contagemAlturaOutros = _arvoresColetadas.where((a) => a.codigo.name != 'Normal' && a.altura != null && a.altura! > 0).length;
 
     return Card(
       margin: const EdgeInsets.all(8),
