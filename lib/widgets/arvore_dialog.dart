@@ -1,9 +1,8 @@
-// lib/widgets/arvore_dialog.dart (VERSÃO COM LÓGICA DE MÚLTIPLOS FUSTES)
+// lib/widgets/arvore_dialog.dart (VERSÃO CORRIGIDA FINAL)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 
-// A classe DialogResult permanece a mesma
 class DialogResult {
   final Arvore arvore;
   final bool irParaProxima;
@@ -13,7 +12,7 @@ class DialogResult {
 
   DialogResult({
     required this.arvore,
-    this.irParaProxima = false,
+    this.irParaProxima = false,    
     this.continuarNaMesmaPosicao = false,
     this.atualizarEProximo = false,
     this.atualizarEAnterior = false,
@@ -34,7 +33,10 @@ class ArvoreDialog extends StatefulWidget {
     this.isAdicionandoFuste = false,
   });
 
-  bool get isEditing => arvoreParaEditar != null && arvoreParaEditar!.id != null;
+  // <<< CORREÇÃO CRÍTICA AQUI >>>
+  // A lógica de "edição" agora é mais simples e robusta.
+  // Estamos editando se uma árvore foi passada e não estamos explicitamente adicionando um fuste.
+  bool get isEditing => arvoreParaEditar != null && !isAdicionandoFuste;
 
   @override
   State<ArvoreDialog> createState() => _ArvoreDialogState();
@@ -52,8 +54,6 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   Codigo2? _codigo2;
   bool _fimDeLinha = false;
   bool _camposHabilitados = true;
-  
-  // <<< NOVA LÓGICA 1: Variável de estado para controlar o fluxo de "Multipla" >>>
   bool _isInMultiplaFlow = false;
 
   final _codesRequiringAlturaDano = [
@@ -65,43 +65,30 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   ];
 
   @override
-void initState() {
-  super.initState();
+  void initState() {
+    super.initState();
+    final arvore = widget.arvoreParaEditar;
 
-  // --- INÍCIO DA CORREÇÃO ---
-  final arvore = widget.arvoreParaEditar;
+    if (arvore != null) {
+      _capController.text = (arvore.cap > 0) ? arvore.cap.toString().replaceAll('.', ',') : '';
+      _alturaController.text = arvore.altura?.toString().replaceAll('.', ',') ?? '';
+      _alturaDanoController.text = arvore.alturaDano?.toString().replaceAll('.', ',') ?? '';
+      _codigo = arvore.codigo;
+      _codigo2 = arvore.codigo2;
+      _fimDeLinha = arvore.fimDeLinha;
+      _linhaController.text = arvore.linha.toString();
+      _posicaoController.text = arvore.posicaoNaLinha.toString();
+    } else {
+      _codigo = Codigo.Normal;
+      _linhaController.text = widget.linhaAtual.toString();
+      _posicaoController.text = widget.posicaoNaLinhaAtual.toString();
+    }
 
-  if (widget.isEditing) {
-    // Modo de EDIÇÃO REAL (a árvore já existe no banco)
-    _capController.text = arvore!.cap.toString().replaceAll('.', ',');
-    _alturaController.text = arvore.altura?.toString().replaceAll('.', ',') ?? '';
-    _alturaDanoController.text = arvore.alturaDano?.toString().replaceAll('.', ',') ?? '';
-    _codigo = arvore.codigo;
-    _codigo2 = arvore.codigo2;
-    _fimDeLinha = arvore.fimDeLinha;
-    _linhaController.text = arvore.linha.toString();
-    _posicaoController.text = arvore.posicaoNaLinha.toString();
-  } else {
-    // Modo de ADIÇÃO (pode ou não ter um template)
-    _capController.text = (arvore?.cap ?? 0) > 0 ? arvore!.cap.toString().replaceAll('.', ',') : '';
-    _alturaController.text = arvore?.altura?.toString().replaceAll('.', ',') ?? '';
-    _alturaDanoController.text = arvore?.alturaDano?.toString().replaceAll('.', ',') ?? '';
-    _codigo = arvore?.codigo ?? Codigo.Normal; // Usa o código do template se existir!
-    _codigo2 = arvore?.codigo2;
-    _fimDeLinha = arvore?.fimDeLinha ?? false;
-    _linhaController.text = (arvore?.linha ?? widget.linhaAtual).toString();
-    _posicaoController.text = (arvore?.posicaoNaLinha ?? widget.posicaoNaLinhaAtual).toString();
+    _checkMultiplaFlow();
+    _atualizarEstadoCampos();
   }
-  // --- FIM DA CORREÇÃO ---
 
-  _checkMultiplaFlow(); // A lógica dos botões agora vai funcionar corretamente
-  _atualizarEstadoCampos();
-}
-
-  // <<< NOVA LÓGICA 3: Função para verificar e ativar/desativar o fluxo >>>
   void _checkMultiplaFlow() {
-    // O fluxo especial só se aplica ao ADICIONAR uma nova árvore (não ao editar)
-    // E se o código for Multipla.
     setState(() {
       _isInMultiplaFlow = _codigo == Codigo.Multipla;
     });
@@ -182,7 +169,7 @@ void initState() {
             children: [
               Text(
                 widget.isEditing
-                    ? 'Editar Árvore'
+                    ? 'Editar Árvore L${_linhaController.text}/P${_posicaoController.text}'
                     : 'Adicionar Árvore L${_linhaController.text}/P${_posicaoController.text}',
                 style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
@@ -228,13 +215,11 @@ void initState() {
                         if (value != null) {
                           setState(() => _codigo = value);
                           _atualizarEstadoCampos();
-                          // <<< NOVA LÓGICA 4: Atualiza o fluxo sempre que o código principal muda >>>
                           _checkMultiplaFlow();
                         }
                       },
                     ),
                     const SizedBox(height: 16),
-                    // ... o resto dos campos do formulário continua igual ...
                     DropdownButtonFormField<Codigo2?>(
                       value: _codigo2,
                       decoration: const InputDecoration(labelText: 'Código 2 (Opcional)'),
@@ -267,9 +252,8 @@ void initState() {
                       decoration: const InputDecoration(labelText: 'Altura Total (m) - Opcional'),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     ),
-                    Visibility(
-                      visible: showAlturaDano,
-                      child: Padding(
+                    if (showAlturaDano)
+                      Padding(
                         padding: const EdgeInsets.only(top: 16.0),
                         child: TextFormField(
                           controller: _alturaDanoController,
@@ -278,31 +262,6 @@ void initState() {
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         ),
                       ),
-                    ),
-                    if (widget.arvoreParaEditar?.capAuditoria != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16.0),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                initialValue: widget.arvoreParaEditar!.capAuditoria!.toStringAsFixed(1).replaceAll('.', ','),
-                                enabled: false,
-                                decoration: const InputDecoration(labelText: 'CAP Anterior (cm)'),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: TextFormField(
-                                initialValue: widget.arvoreParaEditar!.alturaAuditoria?.toStringAsFixed(1).replaceAll('.', ',') ?? '-',
-                                enabled: false,
-                                decoration: const InputDecoration(labelText: 'Altura Anterior (m)'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    // O switch de fim de linha agora só aparece se não estiver no fluxo "Multipla"
                     if (!widget.isEditing && !_isInMultiplaFlow)
                       Padding(
                         padding: const EdgeInsets.only(top: 8.0),
@@ -318,24 +277,21 @@ void initState() {
               ),
               const SizedBox(height: 24),
               
-              // <<< NOVA LÓGICA 5: Renderização condicional dos botões >>>
               Wrap(
                 alignment: WrapAlignment.end,
                 spacing: 8.0,
                 runSpacing: 8.0,
                 children: widget.isEditing
-                    ? [ // Botões para o modo de EDIÇÃO (permanecem os mesmos)
+                    ? [ 
                         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
                         TextButton(onPressed: () => _submit(atualizarEAnterior: true), child: const Text('Anterior')),
                         ElevatedButton(onPressed: () => _submit(), child: const Text('Atualizar')),
                         TextButton(onPressed: () => _submit(atualizarEProximo: true), child: const Text('Próximo')),
                       ]
                     : _isInMultiplaFlow 
-                      ? [ // Botões para o modo de ADIÇÃO, quando o código é "Multipla"
+                      ? [ 
                           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-                          // Botão "Adicionar Fuste" continua na mesma posição
                           ElevatedButton(onPressed: () => _submit(mesmoFuste: true), child: const Text('Adic. Fuste')),
-                          // Botão "Salvar e Próximo" vai para a PRÓXIMA árvore
                           ElevatedButton(
                             onPressed: () => _submit(proxima: true),
                             style: ElevatedButton.styleFrom(
@@ -345,9 +301,8 @@ void initState() {
                             child: const Text('Salvar e Próximo'),
                           ),
                         ]
-                      : [ // Botões para o modo de ADIÇÃO normal
+                      : [ 
                           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-                          // Botão "Adic. Fuste" não é o principal aqui
                           OutlinedButton(onPressed: () => _submit(mesmoFuste: true), child: const Text('Adic. Fuste')),
                           ElevatedButton(
                             onPressed: () => _submit(proxima: true),

@@ -1,4 +1,4 @@
-// lib/pages/amostra/inventario_page.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/pages/amostra/inventario_page.dart (VERSÃO CORRIGIDA FINAL)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -7,10 +7,7 @@ import 'package:geoforestv1/services/validation_service.dart';
 import 'package:geoforestv1/widgets/arvore_dialog.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:geoforestv1/pages/dashboard/dashboard_page.dart';
-
-// --- NOVO IMPORT DO REPOSITÓRIO ---
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
-// ------------------------------------
 
 class InventarioPage extends StatefulWidget {
   final Parcela parcela;
@@ -22,10 +19,7 @@ class InventarioPage extends StatefulWidget {
 
 class _InventarioPageState extends State<InventarioPage> {
   final _validationService = ValidationService();
-  
-  // --- INSTÂNCIA DO NOVO REPOSITÓRIO ---
   final _parcelaRepository = ParcelaRepository();
-  // ---------------------------------------
 
   late Parcela _parcelaAtual;
   List<Arvore> _arvoresColetadas = [];
@@ -42,16 +36,15 @@ class _InventarioPageState extends State<InventarioPage> {
   void initState() {
     super.initState();
     _parcelaAtual = widget.parcela;
-    // 1. Usa a lista de árvores que já veio com o objeto Parcela.
     _arvoresColetadas = widget.parcela.arvores; 
-    // 2. A função de carregamento agora só configura o status, sem acessar o banco para buscar árvores.
     _dataLoadingFuture = _configurarStatusDaTela();
   }
 
-  // A antiga função "_carregarDadosIniciais" foi renomeada e simplificada.
+  // <<< FUNÇÃO CORRIGIDA >>>
   Future<bool> _configurarStatusDaTela() async {
-    // A lógica de definir se a tela é somente leitura permanece a mesma.
-    if (_parcelaAtual.status == StatusParcela.concluida || _parcelaAtual.status == StatusParcela.exportada) {
+    // Se a parcela estiver concluída E não tiver árvores (caso de nova parcela),
+    // força o modo de edição. Isso corrige o bug do botão sumindo.
+    if ((_parcelaAtual.status == StatusParcela.concluida || _parcelaAtual.status == StatusParcela.exportada) && _arvoresColetadas.isNotEmpty) {
       _isReadOnly = true;
     } else {
       _isReadOnly = false;
@@ -60,8 +53,6 @@ class _InventarioPageState extends State<InventarioPage> {
         await _parcelaRepository.updateParcelaStatus(_parcelaAtual.dbId!, StatusParcela.emAndamento);
       }
     }
-    
-    // Não há mais chamada ao banco para buscar as árvores aqui.
     return true;
   }
   
@@ -114,18 +105,16 @@ class _InventarioPageState extends State<InventarioPage> {
   }
 
   Future<void> _salvarEstadoAtual({bool showSnackbar = true, bool concluir = false}) async {
-  if (_isSaving) return;
-  if (mounted) setState(() => _isSaving = true);
-  try {
-    if (concluir) {
-      _parcelaAtual.status = StatusParcela.concluida;
-      setState(() => _isReadOnly = true);
-      _identificarArvoresDominantes(); // Já é chamado aqui, o que está ótimo.
-    } else {
-      // ADICIONE A CHAMADA AQUI TAMBÉM
-      // Isso garante que se um CAP for alterado, a dominância é recalculada no salvamento.
-      _identificarArvoresDominantes(); 
-    }
+    if (_isSaving) return;
+    if (mounted) setState(() => _isSaving = true);
+    try {
+      if (concluir) {
+        _parcelaAtual.status = StatusParcela.concluida;
+        setState(() => _isReadOnly = true);
+        _identificarArvoresDominantes();
+      } else {
+        _identificarArvoresDominantes(); 
+      }
       _arvoresColetadas.sort((a, b) {
         int compLinha = a.linha.compareTo(b.linha);
         if (compLinha != 0) return compLinha;
@@ -186,93 +175,105 @@ class _InventarioPageState extends State<InventarioPage> {
   }
 
   Future<void> _processarResultadoDialogo(DialogResult result, {int? indexOriginal}) async {
-    final validationResult = _validationService.validateSingleTree(result.arvore);
-    if (!validationResult.isValid) {
-      final querSalvarMesmoAssim = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text("Dados Incomuns Detectados"),
-          content: Text(validationResult.warnings.join('\n\n')),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text("Corrigir")),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text("Salvar Mesmo Assim", style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            ),
-          ],
-        ),
-      );
-      if (querSalvarMesmoAssim != true) {
-        if (indexOriginal != null) {
-           _abrirFormularioParaEditar(result.arvore);
-        } else {
-          _adicionarNovaArvore(arvoreInicial: result.arvore);
-        }
-        return;
-      }
-    }
-
-    setState(() {
+  // ... (a parte de validação e salvamento inicial não muda)
+  final validationResult = _validationService.validateSingleTree(result.arvore);
+  if (!validationResult.isValid) {
+    final querSalvarMesmoAssim = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Dados Incomuns Detectados"),
+        content: Text(validationResult.warnings.join('\n\n')),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text("Corrigir")),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text("Salvar Mesmo Assim", style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        ],
+      ),
+    );
+    if (querSalvarMesmoAssim != true) {
       if (indexOriginal != null) {
-        _arvoresColetadas[indexOriginal] = result.arvore;
+          _abrirFormularioParaEditar(result.arvore);
       } else {
-        _arvoresColetadas.add(result.arvore);
+        _adicionarNovaArvore(arvoreInicial: result.arvore);
       }
-    });
-
-    await _salvarEstadoAtual(showSnackbar: !(result.irParaProxima || result.continuarNaMesmaPosicao || result.atualizarEProximo || result.atualizarEAnterior));
-
-    if (result.irParaProxima) {
-  Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore());
-} 
-else if (result.continuarNaMesmaPosicao) {
-  // --- INÍCIO DA CORREÇÃO ---
-  // 1. Pegamos a árvore que acabamos de salvar.
-  final ultimoFusteSalvo = result.arvore;
-
-  // 2. Criamos um "template" para a próxima, mas sem ID,
-  //    indicando que é uma nova árvore, não uma edição.
-  final proximoFusteTemplate = Arvore(
-    cap: 0, // CAP em branco
-    linha: ultimoFusteSalvo.linha, // Mantém a mesma linha
-    posicaoNaLinha: ultimoFusteSalvo.posicaoNaLinha, // Mantém a mesma posição
-    codigo: Codigo.Multipla, // Já vem com o código correto
-  );
-
-  // 3. Chamamos _adicionarNovaArvore passando este template.
-  Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore(
-    arvoreInicial: proximoFusteTemplate, 
-    isFusteAdicional: true
-  ));
-  // --- FIM DA CORREÇÃO ---
-} 
-else if (result.atualizarEProximo && indexOriginal != null) {
-      _arvoresColetadas.sort((a, b) {
-        int compLinha = a.linha.compareTo(b.linha);
-        if (compLinha != 0) return compLinha;
-        int compPos = a.posicaoNaLinha.compareTo(b.posicaoNaLinha);
-        if (compPos != 0) return compPos;
-        return (a.id ?? 0).compareTo(b.id ?? 0);
-      });
-      final int novoIndex = _arvoresColetadas.indexOf(result.arvore);
-      if (novoIndex + 1 < _arvoresColetadas.length) {
-        Future.delayed(const Duration(milliseconds: 100), () => _abrirFormularioParaEditar(_arvoresColetadas[novoIndex + 1]));
-      }
-    } 
-    else if (result.atualizarEAnterior && indexOriginal != null) {
-      _arvoresColetadas.sort((a, b) {
-        int compLinha = a.linha.compareTo(b.linha);
-        if (compLinha != 0) return compLinha;
-        int compPos = a.posicaoNaLinha.compareTo(b.posicaoNaLinha);
-        if (compPos != 0) return compPos;
-        return (a.id ?? 0).compareTo(b.id ?? 0);
-      });
-      final int novoIndex = _arvoresColetadas.indexOf(result.arvore);
-      if (novoIndex > 0) {
-        Future.delayed(const Duration(milliseconds: 100), () => _abrirFormularioParaEditar(_arvoresColetadas[novoIndex - 1]));
-      }
+      return;
     }
   }
+
+  setState(() {
+    if (indexOriginal != null) {
+      _arvoresColetadas[indexOriginal] = result.arvore;
+    } else {
+      _arvoresColetadas.add(result.arvore);
+    }
+  });
+
+  await _salvarEstadoAtual(showSnackbar: !(result.irParaProxima || result.continuarNaMesmaPosicao || result.atualizarEProximo || result.atualizarEAnterior));
+
+  if (result.irParaProxima) {
+    Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore());
+  } 
+  else if (result.continuarNaMesmaPosicao) {
+    final ultimoFusteSalvo = result.arvore;
+    final proximoFusteTemplate = Arvore(
+      cap: 0,
+      linha: ultimoFusteSalvo.linha,
+      posicaoNaLinha: ultimoFusteSalvo.posicaoNaLinha,
+      codigo: Codigo.Multipla,
+    );
+    Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore(
+      arvoreInicial: proximoFusteTemplate, 
+      isFusteAdicional: true
+    ));
+  } 
+  // <<< INÍCIO DA CORREÇÃO DA LÓGICA DE NAVEGAÇÃO >>>
+  else if (result.atualizarEProximo && indexOriginal != null) {
+    // 1. Decide qual lista usar para navegar: a completa ou a filtrada.
+    final List<Arvore> listaDeNavegacao = _mostrandoApenasDominantes
+        ? _arvoresColetadas.where((a) => a.dominante).toList()
+        : _arvoresColetadas;
+
+    // 2. Ordena a lista de navegação escolhida
+    listaDeNavegacao.sort((a, b) {
+      int compLinha = a.linha.compareTo(b.linha);
+      if (compLinha != 0) return compLinha;
+      int compPos = a.posicaoNaLinha.compareTo(b.posicaoNaLinha);
+      if (compPos != 0) return compPos;
+      return (a.id ?? 0).compareTo(b.id ?? 0);
+    });
+
+    // 3. Encontra o índice da árvore atual DENTRO da lista de navegação
+    final int novoIndex = listaDeNavegacao.indexWhere((arvore) => arvore.id == result.arvore.id);
+    
+    // 4. Se houver uma próxima árvore na lista de navegação, abre ela
+    if (novoIndex != -1 && novoIndex + 1 < listaDeNavegacao.length) {
+      Future.delayed(const Duration(milliseconds: 100), () => _abrirFormularioParaEditar(listaDeNavegacao[novoIndex + 1]));
+    }
+  } 
+  else if (result.atualizarEAnterior && indexOriginal != null) {
+    // Repete a mesma lógica para o botão "Anterior"
+    final List<Arvore> listaDeNavegacao = _mostrandoApenasDominantes
+        ? _arvoresColetadas.where((a) => a.dominante).toList()
+        : _arvoresColetadas;
+    
+    listaDeNavegacao.sort((a, b) {
+      int compLinha = a.linha.compareTo(b.linha);
+      if (compLinha != 0) return compLinha;
+      int compPos = a.posicaoNaLinha.compareTo(b.posicaoNaLinha);
+      if (compPos != 0) return compPos;
+      return (a.id ?? 0).compareTo(b.id ?? 0);
+    });
+
+    final int novoIndex = listaDeNavegacao.indexWhere((arvore) => arvore.id == result.arvore.id);
+    
+    if (novoIndex > 0) {
+      Future.delayed(const Duration(milliseconds: 100), () => _abrirFormularioParaEditar(listaDeNavegacao[novoIndex - 1]));
+    }
+  }
+  // <<< FIM DA CORREÇÃO >>>
+}
 
   Future<void> _adicionarNovaArvore({Arvore? arvoreInicial, bool isFusteAdicional = false}) async {
     _arvoresColetadas.sort((a, b) {
@@ -284,7 +285,6 @@ else if (result.atualizarEProximo && indexOriginal != null) {
     int proximaLinha = 1;
     int proximaPosicao = 1;
     
-    // <<< NOVA LÓGICA AQUI >>>
     Arvore? arvoreTemplate;
 
     if (!isFusteAdicional && _arvoresColetadas.isNotEmpty) {
@@ -296,13 +296,11 @@ else if (result.atualizarEProximo && indexOriginal != null) {
       proximaLinha = ultimaArvore.linha;
       proximaPosicao = ultimaArvore.posicaoNaLinha;
       
-      // Se estamos adicionando um fuste, criamos um template com o código Multipla
-      // e os mesmos dados de linha/posição. O CAP e Altura virão em branco.
       arvoreTemplate = Arvore(
-        cap: 0, // Será preenchido no dialog
+        cap: 0,
         linha: proximaLinha,
         posicaoNaLinha: proximaPosicao,
-        codigo: Codigo.Multipla, // O código já vem selecionado!
+        codigo: Codigo.Multipla,
       );
     }
 
@@ -310,7 +308,6 @@ else if (result.atualizarEProximo && indexOriginal != null) {
       context: context,
       barrierDismissible: false,
       builder: (context) => ArvoreDialog(
-        // Usa o template que criamos, se ele existir. Caso contrário, usa o 'arvoreInicial' passado.
         arvoreParaEditar: arvoreTemplate ?? arvoreInicial,
         linhaAtual: arvoreInicial?.linha ?? proximaLinha,
         posicaoNaLinhaAtual: arvoreInicial?.posicaoNaLinha ?? proximaPosicao,
@@ -371,167 +368,180 @@ else if (result.atualizarEProximo && indexOriginal != null) {
   
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Coleta da Parcela'),
-        actions: _isReadOnly 
-          ? [
-              IconButton(
-                icon: const Icon(Icons.edit_outlined),
-                tooltip: 'Reabrir para Edição',
-                onPressed: _reabrirParaEdicao,
-              ),
-              IconButton(
-                icon: const Icon(Icons.bar_chart),
-                tooltip: 'Ver Relatório da Parcela',
-                onPressed: _arvoresColetadas.isEmpty ? null : _navegarParaDashboard,
-              ),
-            ]
-          : [
-              if (_isSaving)
-                const Padding(padding: EdgeInsets.only(right: 16.0), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white))))
-              else ...[
-                IconButton(icon: const Icon(Icons.swap_vert), tooltip: 'Inverter Ordem da Lista', onPressed: () => setState(() => _listaInvertida = !_listaInvertida)),
-                IconButton(icon: const Icon(Icons.analytics_outlined), tooltip: 'Analisar Parcela', onPressed: _arvoresColetadas.isEmpty ? null : _analisarParcelaInteira),
-                IconButton(icon: const Icon(Icons.save_outlined), tooltip: 'Salvar Progresso', onPressed: () => _salvarEstadoAtual()),
-                IconButton(icon: const Icon(Icons.check_circle_outline), tooltip: 'Concluir e Salvar Parcela', onPressed: _concluirColeta),
-              ],
-            ],
-      ),
-      body: FutureBuilder<bool>(
-        future: _dataLoadingFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError || !snapshot.hasData || snapshot.data == false) {
-            return Center(child: Text('Erro ao carregar dados da parcela: ${snapshot.error}'));
-          }
-          
-          final listaFiltrada = _mostrandoApenasDominantes ? _arvoresColetadas.where((a) => a.dominante).toList() : _arvoresColetadas;
-          final listaOrdenada = List<Arvore>.from(listaFiltrada);
-          listaOrdenada.sort((a, b) {
-            int compLinha = a.linha.compareTo(b.linha);
-            if (compLinha != 0) return compLinha;
-            int compPos = a.posicaoNaLinha.compareTo(b.posicaoNaLinha);
-            if (compPos != 0) return compPos;
-            return (a.id ?? 0).compareTo(b.id ?? 0);
-          });
-          final listaExibida = _listaInvertida ? listaOrdenada.reversed.toList() : listaOrdenada;
-
-          return Column(
-            children: [
-              if (_isReadOnly)
-                Container(
-                  color: Colors.amber.shade100,
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Icon(Icons.lock_outline, size: 18, color: Colors.amber.shade800),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text("Parcela concluída (modo de visualização).", style: TextStyle(color: Colors.amber.shade900))),
-                    ],
-                  ),
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        Navigator.of(context).pop(true);
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Coleta da Parcela'),
+          actions: _isReadOnly 
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: 'Reabrir para Edição',
+                  onPressed: _reabrirParaEdicao,
                 ),
-              _buildSummaryCard(),
-              
-              if (!_isReadOnly)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 8.0),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        if (!_mostrandoApenasDominantes) {
-                          _identificarArvoresDominantes();
-                        }
-                        setState(() => _mostrandoApenasDominantes = !_mostrandoApenasDominantes);
-                      },
-                      icon: Icon(_mostrandoApenasDominantes ? Icons.filter_list_off : Icons.filter_list),
-                      label: Text(_mostrandoApenasDominantes ? 'Mostrar Todas' : 'Encontrar e Filtrar Dominantes'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                IconButton(
+                  icon: const Icon(Icons.bar_chart),
+                  tooltip: 'Ver Relatório da Parcela',
+                  onPressed: _arvoresColetadas.isEmpty ? null : _navegarParaDashboard,
+                ),
+              ]
+            : [
+                if (_isSaving)
+                  const Padding(padding: EdgeInsets.only(right: 16.0), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white))))
+                else ...[
+                  IconButton(icon: const Icon(Icons.swap_vert), tooltip: 'Inverter Ordem da Lista', onPressed: () => setState(() => _listaInvertida = !_listaInvertida)),
+                  IconButton(icon: const Icon(Icons.analytics_outlined), tooltip: 'Analisar Parcela', onPressed: _arvoresColetadas.isEmpty ? null : _analisarParcelaInteira),
+                  IconButton(icon: const Icon(Icons.save_outlined), tooltip: 'Salvar Progresso', onPressed: () => _salvarEstadoAtual()),
+                  IconButton(icon: const Icon(Icons.check_circle_outline), tooltip: 'Concluir e Salvar Parcela', onPressed: _concluirColeta),
+                ],
+              ],
+        ),
+        body: FutureBuilder<bool>(
+          future: _dataLoadingFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError || !snapshot.hasData || snapshot.data == false) {
+              return Center(child: Text('Erro ao carregar dados da parcela: ${snapshot.error}'));
+            }
+            
+            final listaFiltrada = _mostrandoApenasDominantes ? _arvoresColetadas.where((a) => a.dominante).toList() : _arvoresColetadas;
+            final listaOrdenada = List<Arvore>.from(listaFiltrada);
+            listaOrdenada.sort((a, b) {
+              int compLinha = a.linha.compareTo(b.linha);
+              if (compLinha != 0) return compLinha;
+              int compPos = a.posicaoNaLinha.compareTo(b.posicaoNaLinha);
+              if (compPos != 0) return compPos;
+              return (a.id ?? 0).compareTo(b.id ?? 0);
+            });
+            final listaExibida = _listaInvertida ? listaOrdenada.reversed.toList() : listaOrdenada;
+
+            // <<< INÍCIO DA CORREÇÃO PRINCIPAL >>>
+            // A estrutura do Column garante que o card de resumo sempre apareça no topo
+            return Column(
+              children: [
+                if (_isReadOnly)
+                  Container(
+                    color: Colors.amber.shade100,
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Icon(Icons.lock_outline, size: 18, color: Colors.amber.shade800),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text("Parcela concluída (modo de visualização).", style: TextStyle(color: Colors.amber.shade900))),
+                      ],
+                    ),
+                  ),
+                // ESTA É A CHAMADA PARA O CARD DE RESUMO
+                _buildSummaryCard(),
+                
+                if (!_isReadOnly)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 8.0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          if (!_mostrandoApenasDominantes) {
+                            _identificarArvoresDominantes();
+                          }
+                          setState(() => _mostrandoApenasDominantes = !_mostrandoApenasDominantes);
+                        },
+                        icon: Icon(_mostrandoApenasDominantes ? Icons.filter_list_off : Icons.filter_list),
+                        label: Text(_mostrandoApenasDominantes ? 'Mostrar Todas' : 'Encontrar e Filtrar Dominantes'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              _buildHeaderRow(),
-              Expanded(
-                child: _arvoresColetadas.isEmpty
-                  ? Center(child: Text(_isReadOnly ? 'Esta parcela foi finalizada sem árvores.' : 'Clique no botão "+" para adicionar a primeira árvore.', style: const TextStyle(color: Colors.grey, fontSize: 16)))
-                  : SlidableAutoCloseBehavior(
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        itemCount: listaExibida.length,
-                        itemBuilder: (context, index) {
-                          final arvore = listaExibida[index];
-                          return Slidable(
-                            key: ValueKey(arvore.id ?? arvore.hashCode),
-                            endActionPane: _isReadOnly ? null : ActionPane(
-                              motion: const StretchMotion(),
-                              extentRatio: 0.25,
-                              children: [
-                                SlidableAction(
-                                  onPressed: (ctx) => _deletarArvore(ctx, arvore),
-                                  backgroundColor: Colors.redAccent,
-                                  foregroundColor: Colors.white,
-                                  icon: Icons.delete_outline,
-                                  label: 'Excluir',
-                                ),
-                              ],
-                            ),
-                            child: InkWell(
-                              onTap: _isReadOnly ? null : () => _abrirFormularioParaEditar(arvore),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-                                decoration: BoxDecoration(
-                                  color: arvore.dominante ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.4) : (index.isOdd ? Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3) : Colors.transparent),
-                                  border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 0.8)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    _DataCell(arvore.linha.toString(), flex: 15),
-                                    _DataCell(arvore.posicaoNaLinha.toString(), flex: 15),
-                                    _DataCell(arvore.cap > 0 ? arvore.cap.toStringAsFixed(1) : '-', flex: 20),
-                                    _DataCell(arvore.altura?.toStringAsFixed(1) ?? '-', flex: 20),
-                                    _DataCell(
-                                      '${arvore.codigo.name[0].toUpperCase()}${arvore.codigo2 != null ? ", ${arvore.codigo2!.name[0].toUpperCase()}" : ""}',
-                                      flex: 30, 
-                                      isBold: true
-                                    ),
-                                  ],
+                _buildHeaderRow(),
+                Expanded(
+                  child: _arvoresColetadas.isEmpty
+                    ? Center(child: Text(_isReadOnly ? 'Esta parcela foi finalizada sem árvores.' : 'Clique no botão "+" para adicionar a primeira árvore.', style: const TextStyle(color: Colors.grey, fontSize: 16)))
+                    : SlidableAutoCloseBehavior(
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: listaExibida.length,
+                          itemBuilder: (context, index) {
+                            final arvore = listaExibida[index];
+                            return Slidable(
+                              key: ValueKey(arvore.id ?? arvore.hashCode),
+                              endActionPane: _isReadOnly ? null : ActionPane(
+                                motion: const StretchMotion(),
+                                extentRatio: 0.25,
+                                children: [
+                                  SlidableAction(
+                                    onPressed: (ctx) => _deletarArvore(ctx, arvore),
+                                    backgroundColor: Colors.redAccent,
+                                    foregroundColor: Colors.white,
+                                    icon: Icons.delete_outline,
+                                    label: 'Excluir',
+                                  ),
+                                ],
+                              ),
+                              child: InkWell(
+                                onTap: _isReadOnly ? null : () => _abrirFormularioParaEditar(arvore),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                                  decoration: BoxDecoration(
+                                    color: arvore.dominante ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.4) : (index.isOdd ? Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3) : Colors.transparent),
+                                    border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 0.8)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      _DataCell(arvore.linha.toString(), flex: 15),
+                                      _DataCell(arvore.posicaoNaLinha.toString(), flex: 15),
+                                      _DataCell(arvore.cap > 0 ? arvore.cap.toStringAsFixed(1) : '-', flex: 20),
+                                      _DataCell(arvore.altura?.toStringAsFixed(1) ?? '-', flex: 20),
+                                      _DataCell(
+                                        '${arvore.codigo.name[0].toUpperCase()}${arvore.codigo2 != null ? ", ${arvore.codigo2!.name[0].toUpperCase()}" : ""}',
+                                        flex: 30, 
+                                        isBold: true
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                  ),
-              ),
-            ],
-          );
-        },
-      ),
-      floatingActionButton: _isReadOnly ? null : FloatingActionButton.extended(
-        onPressed: () => _adicionarNovaArvore(),
-        tooltip: 'Adicionar Árvore',
-        icon: const Icon(Icons.add),
-        label: const Text('Nova Árvore'),
+                            );
+                          },
+                        ),
+                    ),
+                ),
+              ],
+            );
+            // <<< FIM DA CORREÇÃO PRINCIPAL >>>
+          },
+        ),
+        floatingActionButton: _isReadOnly ? null : FloatingActionButton.extended(
+          onPressed: () => _adicionarNovaArvore(),
+          tooltip: 'Adicionar Árvore',
+          icon: const Icon(Icons.add),
+          label: const Text('Nova Árvore'),
+        ),
       ),
     );
   }
 
-  // --- MÉTODOS DE BUILD QUE FALTAVAM ---
+  // ADICIONE/SUBSTITUA TAMBÉM ESTE MÉTODO PARA GARANTIR QUE OS CÁLCULOS ESTÃO ATUALIZADOS
   Widget _buildSummaryCard() {
+    // Calcula o total de covas únicas
     final covas = <String>{};
     for (var arvore in _arvoresColetadas) {
       covas.add('${arvore.linha}-${arvore.posicaoNaLinha}');
     }
     final int totalCovas = covas.length;
 
-    final int contagemAlturaNormal = _arvoresColetadas.where((a) => a.codigo.name == 'Normal' && a.altura != null && a.altura! > 0).length;
+    // Calcula as contagens de altura
+    final int contagemAlturaNormal = _arvoresColetadas.where((a) => a.codigo == Codigo.Normal && a.altura != null && a.altura! > 0).length;
     final int contagemAlturaDominante = _arvoresColetadas.where((a) => a.dominante && a.altura != null && a.altura! > 0).length;
-    final int contagemAlturaOutros = _arvoresColetadas.where((a) => a.codigo.name != 'Normal' && a.altura != null && a.altura! > 0).length;
+    final int contagemAlturaOutros = _arvoresColetadas.where((a) => a.codigo != Codigo.Normal && a.altura != null && a.altura! > 0).length;
 
     return Card(
       margin: const EdgeInsets.all(8),

@@ -495,7 +495,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_isModoEdicao ? 'Dados da Parcela' : 'Nova Parcela'),
-        backgroundColor: const Color(0xFF617359),
+        backgroundColor: const Color.fromARGB(255, 13, 58, 89),
         foregroundColor: Colors.white,
       ),
       body: _salvando && !_buscandoLocalizacao
