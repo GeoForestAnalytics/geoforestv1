@@ -86,21 +86,23 @@ class _CubagemSecaoDialogState extends State<CubagemSecaoDialog> {
                 autofocus: true,
                 decoration: const InputDecoration(labelText: 'Circunferência (cm)'),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                validator: _validadorObrigatorio,
+                validator: _validadorObrigatorio, // Circunferência continua obrigatória
               ),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _casca1Controller,
                 decoration: const InputDecoration(labelText: 'Espessura Casca 1 (mm)'),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                validator: _validadorObrigatorio,
+                // <<< REMOVA O VALIDADOR DAQUI >>>
+                // validator: _validadorObrigatorio, 
               ),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _casca2Controller,
                 decoration: const InputDecoration(labelText: 'Espessura Casca 2 (mm)'),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                validator: _validadorObrigatorio,
+                // <<< E REMOVA O VALIDADOR DAQUI >>>
+                // validator: _validadorObrigatorio,
               ),
             ],
           ),

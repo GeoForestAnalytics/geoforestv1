@@ -13,6 +13,7 @@ import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/sortimento_model.dart';
 import 'package:ml_linalg/linalg.dart';
+
 // O import do 'stats' foi removido pois implementamos nossa própria função de moda.
 
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
@@ -263,6 +264,8 @@ class AnalysisService {
   // =========================================================================
   // SUBSTITUA A FUNÇÃO INTEIRA POR ESTA VERSÃO FINAL
 
+// No arquivo lib/services/analysis_service.dart
+
 Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
     List<CubagemArvore> arvoresCubadas) async {
   final List<Vector> xData = [];
@@ -279,11 +282,13 @@ Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
         arvoreCubada.alturaTotal <= 0) {
       continue;
     }
+    
     final dap = arvoreCubada.valorCAP / pi;
     final altura = arvoreCubada.alturaTotal;
     final lnVolume = log(volumeReal);
     final lnDAP = log(dap);
     final lnAltura = log(altura);
+
     xData.add(Vector.fromList([1.0, lnDAP, lnAltura]));
     yData.add(lnVolume);
   }
@@ -293,8 +298,7 @@ Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
 
   if (n < p) {
     final errorResult = {
-      'error':
-          'Dados insuficientes. Pelo menos $p árvores cubadas completas são necessárias.'
+      'error': 'Dados insuficientes. Pelo menos $p árvores cubadas completas são necessárias.'
     };
     return {'resultados': errorResult, 'diagnostico': {}};
   }
@@ -306,25 +310,22 @@ Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
     final coefficients = (features.transpose() * features).inverse() *
         features.transpose() *
         labels;
-
-    // ===== AJUSTE FINAL APLICADO AQUI =====
-    // Forçamos o Dart a entender que b0, b1 e b2 são números (double).
-    final  b0 = coefficients[0] as  double;
-    final  b1 = coefficients[1] as  double;
-    final  b2 = coefficients[2] as  double;
+        
+    final List<double> coeffsAsList = coefficients.expand((e) => e).toList();
+    final double b0 = coeffsAsList[0];
+    final double b1 = coeffsAsList[1];
+    final double b2 = coeffsAsList[2];
 
     final predictedValues = features * coefficients;
     final yMean = labels.mean();
     final totalSumOfSquares =
         labels.fold(0.0, (sum, val) => sum + pow(val - yMean, 2));
-    final residuals = labels - predictedValues;
+    final residuals = labels - predictedValues; // Estes são os erros do modelo
     final residualSumOfSquares =
         residuals.fold(0.0, (sum, val) => sum + pow(val, 2));
 
     if (totalSumOfSquares == 0) {
-      final errorResult = {
-        'error': 'Não foi possível calcular R², variação nula nos dados.'
-      };
+      final errorResult = {'error': 'Variação nula nos dados.'};
       return {'resultados': errorResult, 'diagnostico': {}};
     }
     final rSquared = 1 - (residualSumOfSquares / totalSumOfSquares);
@@ -332,27 +333,40 @@ Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
     final double mse = residualSumOfSquares / (n - p);
     final double syx = sqrt(mse);
     
+    // =========================================================================
+    // =============== NOVO CÁLCULO: TESTE DE SHAPIRO-WILK =====================
+    // =========================================================================
+    double? shapiroPValue;
+// O teste de Shapiro-Wilk precisa de pelo menos 3 amostras.
+final residualsList = residuals.toList();
+if (residualsList.length >= 3) {
+  try {
+    // A biblioteca 'stats' não tem Shapiro-Wilk diretamente,
+    // então deixaremos como N/A por enquanto, mas a estrutura está pronta.
+    // Se encontrarmos uma biblioteca que o faça, a lógica será inserida aqui.
+    // Por agora, vamos simular que ele não está disponível para não quebrar o app.
+    shapiroPValue = null; // Simulando N/A
+  } catch (e) {
+    // Se o cálculo estatístico falhar, registramos o erro e continuamos.
+    debugPrint("Erro ao calcular o teste de normalidade: $e");
+    shapiroPValue = null;
+  }
+}
+    // =========================================================================
+
     return {
       'resultados': {
-        'b0': b0,
-        'b1': b1,
-        'b2': b2,
-        'R2': rSquared,
-        // Agora que b0, b1 e b2 são 'double', esta linha funciona perfeitamente.
-        'equacao':
-            'ln(V) = ${b0.toStringAsFixed(5)} + ${b1.toStringAsFixed(5)}*ln(DAP) + ${b2.toStringAsFixed(5)}*ln(H)',
+        'b0': b0, 'b1': b1, 'b2': b2, 'R2': rSquared,
+        'equacao': 'ln(V) = ${b0.toStringAsFixed(5)} + ${b1.toStringAsFixed(5)}*ln(DAP) + ${b2.toStringAsFixed(5)}*ln(H)',
         'n_amostras': n,
       },
       'diagnostico': {
-        'syx': syx,
-        'syx_percent': yMean != 0 ? (syx / yMean) * 100 : 0.0,
+        'syx': syx, 'syx_percent': yMean != 0 ? (syx / yMean) * 100 : 0.0,
+        'shapiro_wilk_p_value': shapiroPValue, // <-- Adicionado ao resultado!
       }
     };
   } catch (e) {
-    final errorResult = {
-      'error':
-          'Erro matemático na regressão. Verifique a variação dos dados de DAP e Altura. Detalhe: $e'
-    };
+    final errorResult = {'error': 'Erro matemático na regressão. Detalhe: $e'};
     return {'resultados': errorResult, 'diagnostico': {}};
   }
 }

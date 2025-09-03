@@ -1,10 +1,11 @@
-// lib/pages/cubagem/cubagem_dados_page.dart (VERSÃO FINAL COM RF E MÉTODO)
+// lib/pages/cubagem/cubagem_dados_page.dart (VERSÃO COM VALIDAÇÃO FINAL CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../models/cubagem_arvore_model.dart';
 import '../../models/cubagem_secao_model.dart';
 import '../../widgets/cubagem_secao_dialog.dart';
+import 'package:geoforestv1/widgets/grafico_afilamento_widget.dart';
 
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 
@@ -19,7 +20,7 @@ class CubagemResult {
 }
 
 class CubagemDadosPage extends StatefulWidget {
-  final String metodo; // Mantido para cubagens manuais avulsas
+  final String metodo;
   final CubagemArvore? arvoreParaEditar;
 
   const CubagemDadosPage({
@@ -36,6 +37,7 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
   final _formKey = GlobalKey<FormState>();
   final _cubagemRepository = CubagemRepository();
 
+  // Todos os controladores e variáveis de estado permanecem os mesmos...
   late TextEditingController _idFazendaController;
   late TextEditingController _fazendaController;
   late TextEditingController _talhaoController;
@@ -45,7 +47,6 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
   late TextEditingController _alturaBaseController;
   late TextEditingController _classeController;
   late TextEditingController _observacaoController;
-  // <<< ADICIONADO NOVO CONTROLADOR PARA O RF >>>
   late TextEditingController _rfController;
 
   Position? _posicaoAtualExibicao;
@@ -71,8 +72,6 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     _classeController = TextEditingController(text: arvore?.classe ?? '');
     _tipoMedidaCAP = arvore?.tipoMedidaCAP ?? 'fita';
     _observacaoController = TextEditingController(text: arvore?.observacao ?? '');
-    
-    // <<< INICIALIZA O NOVO CONTROLADOR >>>
     _rfController = TextEditingController(text: arvore?.rf ?? '');
     
     if (arvore?.latitude != null && arvore?.longitude != null) {
@@ -99,14 +98,11 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     _alturaBaseController.dispose();
     _classeController.dispose();
     _observacaoController.dispose();
-
-    // <<< FAZ O DISPOSE DO NOVO CONTROLADOR >>>
     _rfController.dispose();
-
     super.dispose();
   }
-
-  // <<< FUNÇÃO _gerarSecoesAutomaticas ATUALIZADA >>>
+  
+  // As outras funções (initState, dispose, _gerarSecoesAutomaticas, etc.) continuam as mesmas...
   void _gerarSecoesAutomaticas() {
     final alturaTotalStr = _alturaTotalController.text.replaceAll(',', '.');
     final double? alturaTotal = double.tryParse(alturaTotalStr);
@@ -119,14 +115,13 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
       return;
     }
     
-    // Prioriza o método que veio do CSV. Se não houver, usa o que foi passado para a página.
     final metodoParaGerar = widget.arvoreParaEditar?.metodoCubagem ?? widget.metodo;
 
     List<double> alturasDeMedicao = [];
 
     if (metodoParaGerar.toUpperCase().contains('RELATIVA')) {
       alturasDeMedicao = [0.0,0.01, 0.02, 0.03, 0.04, 0.05, 0.10, 0.15, 0.20, 0.25, 0.35, 0.45, 0.50, 0.55, 0.65, 0.75, 0.85, 0.90, 0.95].map((p) => alturaTotal * p).toList();
-    } else { // Assume 'FIXA' como padrão
+    } else { 
       alturasDeMedicao = [0.0,0.1, 0.3, 0.7, 1.0, 2.0];
       for (double h = 4.0; h < alturaTotal; h += 2.0) {
         alturasDeMedicao.add(h);
@@ -141,24 +136,56 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     });
   }
 
-  // <<< FUNÇÃO _salvarCubagem ATUALIZADA >>>
-  void _salvarCubagem({required bool irParaProxima}) async {
-    if (!_formKey.currentState!.validate()) return;
+  String? _validarSecoes() {
     if (_secoes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gere e preencha as seções antes de salvar.'), backgroundColor: Colors.red));
-      return;
+      return 'Gere e preencha as seções antes de salvar.';
     }
-    if (_secoes.any((s) => s.circunferencia <= 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Preencha a circunferência de todas as seções.'), backgroundColor: Colors.red));
-      return;
-    }
-      
-    setState(() => _isLoading = true);
 
+    for (int i = 0; i < _secoes.length; i++) {
+      final secao = _secoes[i];
+      if (secao.circunferencia <= 0 || secao.casca1_mm <= 0 || secao.casca2_mm <= 0) {
+        return 'Erro na seção a ${secao.alturaMedicao.toStringAsFixed(2)}m: Todos os campos (circunferência e cascas) devem ser preenchidos e maiores que zero.';
+      }
+    }
+
+    for (int i = 1; i < _secoes.length; i++) {
+      final secaoAnterior = _secoes[i-1];
+      final secaoAtual = _secoes[i];
+
+      if (secaoAtual.diametroSemCasca > secaoAnterior.diametroSemCasca) {
+        return 'Erro de Afilamento: O diâmetro na altura ${secaoAtual.alturaMedicao.toStringAsFixed(2)}m é maior que o diâmetro na altura ${secaoAnterior.alturaMedicao.toStringAsFixed(2)}m.';
+      }
+    }
+    return null;
+  }
+
+  // ==========================================================
+  // =============== FUNÇÃO _salvarCubagem CORRIGIDA ============
+  // ==========================================================
+  void _salvarCubagem({required bool irParaProxima}) async {
+    // 1. Valida o formulário principal (Altura, CAP, etc.)
+    if (!_formKey.currentState!.validate()) return;
+  
+    // 2. Chama a nova função de validação robusta para as seções
+    final String? erroValidacao = _validarSecoes();
+  
+    // 3. Se houver uma mensagem de erro, exibe e para a execução
+    if (erroValidacao != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(erroValidacao),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 5), // Mais tempo para o usuário ler
+      ));
+      return; // Impede o salvamento
+    }
+    
+    // Se passou por todas as validações, continua com o processo de salvar
+    setState(() => _isLoading = true);
+  
     final alturaTotal = double.parse(_alturaTotalController.text.replaceAll(',', '.'));
     final valorCAP = double.parse(_valorCAPController.text.replaceAll(',', '.'));
     final alturaBase = double.parse(_alturaBaseController.text.replaceAll(',', '.'));
-
+  
     final arvoreToSave = CubagemArvore(
       id: widget.arvoreParaEditar?.id,
       talhaoId: widget.arvoreParaEditar?.talhaoId,
@@ -175,11 +202,9 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
       latitude: _posicaoAtualExibicao?.latitude,
       longitude: _posicaoAtualExibicao?.longitude,
       metodoCubagem: widget.arvoreParaEditar?.metodoCubagem,
-      
-      // <<< ADICIONA O VALOR DO CAMPO RF AO OBJETO A SER SALVO >>>
       rf: _rfController.text.trim().isNotEmpty ? _rfController.text.trim() : null,
     );
-      
+        
     try {
       await _cubagemRepository.salvarCubagemCompleta(arvoreToSave, _secoes);
       if (!mounted) return;
@@ -193,8 +218,8 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     }
   }
 
-  // O restante das funções (_obterLocalizacaoAtual, _carregarSecoes, etc.) permanece igual.
-  Future<void> _obterLocalizacaoAtual() async {
+  // As outras funções (_obterLocalizacaoAtual, etc.) continuam as mesmas...
+    Future<void> _obterLocalizacaoAtual() async {
     setState(() { _buscandoLocalizacao = true; _erroLocalizacao = null; });
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -288,11 +313,10 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
       ],
     );
   }
-
-  // <<< MÉTODO BUILD ATUALIZADO >>>
+  
+  // O método `build` continua o mesmo.
   @override
   Widget build(BuildContext context) {
-    // Prioriza o método do CSV, senão usa o que foi passado para a página
     final metodoFinal = widget.arvoreParaEditar?.metodoCubagem ?? widget.metodo;
 
     return Scaffold(
@@ -303,7 +327,7 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
             const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white)))
           else ...[
             IconButton(icon: const Icon(Icons.save), tooltip: 'Salvar Cubagem', onPressed: () => _salvarCubagem(irParaProxima: false)),
-            if (widget.arvoreParaEditar?.id == null) // Mostra "Salvar e Próxima" apenas para novas cubagens avulsas
+            if (widget.arvoreParaEditar?.id == null)
               IconButton(icon: const Icon(Icons.save_alt), tooltip: 'Salvar e Próxima', onPressed: () => _salvarCubagem(irParaProxima: true)),
           ]
         ],
@@ -322,14 +346,11 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
               TextFormField(controller: _fazendaController, enabled: false, decoration: const InputDecoration(labelText: 'Fazenda (Automático)', border: OutlineInputBorder()), validator: _validadorObrigatorio),
               const SizedBox(height: 16),
               TextFormField(controller: _talhaoController, enabled: false, decoration: const InputDecoration(labelText: 'Talhão (Automático)', border: OutlineInputBorder()), validator: _validadorObrigatorio),
-              
-              // <<< ADICIONADO O CAMPO DE RF NA INTERFACE >>>
               const SizedBox(height: 16),
               TextFormField(
                 controller: _rfController,
                 decoration: const InputDecoration(labelText: 'RF / UP', border: OutlineInputBorder()),
               ),
-              
               const Divider(height: 32, thickness: 1),
               TextFormField(controller: _identificadorController, enabled: false, decoration: const InputDecoration(labelText: 'Identificador da Árvore (Automático)', border: OutlineInputBorder()), validator: _validadorObrigatorio),
               const SizedBox(height: 16),
@@ -364,7 +385,6 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
                 ), 
                 maxLines: 3,
               ),
-
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -376,10 +396,29 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
-                    textStyle: const TextStyle(fontSize: 16)
+                    textStyle: const TextStyle(fontSize: 16)                
                   ),
                 ),
               ),
+              if (_secoes.length >= 2)
+                Card(
+                  elevation: 2,
+                  margin: const EdgeInsets.only(top: 24.0),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Perfil da Árvore',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 16),
+                        GraficoAfilamentoWidget(secoes: _secoes),
+                      ],
+                    ),
+                  ),
+                ),
               const Divider(height: 32, thickness: 2),
               Text('Preencher Medidas das Seções', style: Theme.of(context).textTheme.headlineSmall),
               _secoes.isEmpty
