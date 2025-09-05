@@ -69,6 +69,7 @@ class PlanejamentoImportStrategy extends BaseImportStrategy {
         tipoParcela: BaseImportStrategy.getValue(row, ['tipo']),
         lado1: double.tryParse(BaseImportStrategy.getValue(row, ['lado 1'])?.replaceAll(',', '.') ?? ''),
         lado2: double.tryParse(BaseImportStrategy.getValue(row, ['lado 2'])?.replaceAll(',', '.') ?? ''),
+        declividade: double.tryParse(BaseImportStrategy.getValue(row, ['declividade', 'declividade_%'])?.replaceAll(',', '.') ?? ''),
         latitude: latitudeFinal,
         longitude: longitudeFinal,
         projetoId: projeto.id,

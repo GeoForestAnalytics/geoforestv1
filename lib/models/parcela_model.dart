@@ -1,4 +1,4 @@
-// lib/models/parcela_model.dart (VERSÃO CORRIGIDA SEM idUnicoAmostra)
+// lib/models/parcela_model.dart (VERSÃO FINAL COM DECLIVIDADE)
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -52,13 +52,15 @@ class Parcela {
   final double? lado1;
   /// Medida do Lado 2 (comprimento em retângulos, nulo em círculos).
   final double? lado2;
+  /// Declividade do terreno em porcentagem (%).
+  final double? declividade;
 
   final String idParcela;
   final double areaMetrosQuadrados;
   final String? observacao;
   final double? latitude;
   final double? longitude;
-  final double? altitude; // <<< NOVO CAMPO ADICIONADO >>>
+  final double? altitude;
   StatusParcela status;
   bool exportada;
   bool isSynced;
@@ -79,7 +81,7 @@ class Parcela {
     this.observacao,
     this.latitude,
     this.longitude,
-    this.altitude, // <<< NOVO CAMPO ADICIONADO >>>
+    this.altitude,
     this.dataColeta,
     this.status = StatusParcela.pendente,
     this.exportada = false,
@@ -97,6 +99,7 @@ class Parcela {
     this.formaParcela,
     this.lado1,
     this.lado2,
+    this.declividade,
     this.photoPaths = const [],
     this.arvores = const [],
     this.lastModified,
@@ -109,7 +112,7 @@ class Parcela {
     bool? exportada, bool? isSynced, String? nomeLider, int? projetoId,
     String? municipio, String? estado, String? atividadeTipo, String? up,
     String? referenciaRf, String? ciclo, int? rotacao, String? tipoParcela,
-    String? formaParcela, double? lado1, double? lado2, List<String>? photoPaths,
+    String? formaParcela, double? lado1, double? lado2, double? declividade, List<String>? photoPaths, // <<< CORREÇÃO APLICADA AQUI
     List<Arvore>? arvores, DateTime? lastModified,
   }) {
     return Parcela(
@@ -118,7 +121,7 @@ class Parcela {
       nomeTalhao: nomeTalhao ?? this.nomeTalhao, idParcela: idParcela ?? this.idParcela,
       areaMetrosQuadrados: areaMetrosQuadrados ?? this.areaMetrosQuadrados, observacao: observacao ?? this.observacao,
       latitude: latitude ?? this.latitude, longitude: longitude ?? this.longitude,
-      altitude: altitude ?? this.altitude, // <<< NOVO CAMPO ADICIONADO >>>
+      altitude: altitude ?? this.altitude,
       dataColeta: dataColeta ?? this.dataColeta, status: status ?? this.status,
       exportada: exportada ?? this.exportada, isSynced: isSynced ?? this.isSynced,
       nomeLider: nomeLider ?? this.nomeLider, projetoId: projetoId ?? this.projetoId,
@@ -127,7 +130,9 @@ class Parcela {
       referenciaRf: referenciaRf ?? this.referenciaRf, ciclo: ciclo ?? this.ciclo,
       rotacao: rotacao ?? this.rotacao, tipoParcela: tipoParcela ?? this.tipoParcela,
       formaParcela: formaParcela ?? this.formaParcela, lado1: lado1 ?? this.lado1,
-      lado2: lado2 ?? this.lado2, photoPaths: photoPaths ?? this.photoPaths,
+      lado2: lado2 ?? this.lado2, 
+      declividade: declividade ?? this.declividade,
+      photoPaths: photoPaths ?? this.photoPaths,
       arvores: arvores ?? this.arvores, 
       lastModified: lastModified ?? this.lastModified,
     );
@@ -143,7 +148,9 @@ class Parcela {
       'nomeLider': nomeLider, 'projetoId': projetoId, 'municipio': municipio, 'estado': estado,
       'up': up, 'referencia_rf': referenciaRf, 'ciclo': ciclo, 'rotacao': rotacao,
       'tipo_parcela': tipoParcela, 'forma_parcela': formaParcela,
-      'lado1': lado1, 'lado2': lado2, 'photoPaths': jsonEncode(photoPaths),
+      'lado1': lado1, 'lado2': lado2,
+      'declividade': declividade, 
+      'photoPaths': jsonEncode(photoPaths),
       'lastModified': lastModified?.toIso8601String()
     };
   }
@@ -164,7 +171,6 @@ class Parcela {
       }
     }
 
-    // Lógica de retrocompatibilidade para os campos de dimensão antigos
     double? lado1 = (map['lado1'] as num?)?.toDouble();
     double? lado2 = (map['lado2'] as num?)?.toDouble();
 
@@ -188,7 +194,7 @@ class Parcela {
       observacao: map['observacao'],
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
-      altitude: (map['altitude'] as num?)?.toDouble(), // <<< NOVO CAMPO ADICIONADO >>>
+      altitude: (map['altitude'] as num?)?.toDouble(),
       dataColeta: parseDate(map['dataColeta']),
       status: StatusParcela.values.firstWhere((e) => e.name == map['status'], orElse: () => StatusParcela.pendente),
       exportada: map['exportada'] == 1,
@@ -198,12 +204,13 @@ class Parcela {
       atividadeTipo: map['atividadeTipo'],
       up: map['up'],
       referenciaRf: map['referencia_rf'],
-      ciclo: map['ciclo']?.toString(), // Garante que será string
-      rotacao: int.tryParse(map['rotacao']?.toString() ?? ''), // Garante que será int ou nulo
+      ciclo: map['ciclo']?.toString(),
+      rotacao: int.tryParse(map['rotacao']?.toString() ?? ''),
       tipoParcela: map['tipo_parcela'],
       formaParcela: map['forma_parcela'],
       lado1: lado1,
       lado2: lado2,
+      declividade: (map['declividade'] as num?)?.toDouble(),
       photoPaths: paths,
       lastModified: parseDate(map['lastModified']),
     );

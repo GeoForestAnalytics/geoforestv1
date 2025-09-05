@@ -12,76 +12,81 @@ import 'package:sqflite/sqflite.dart';
 class ParcelaRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
+  // <<< INÍCIO DA CORREÇÃO: SUBSTITUA A FUNÇÃO INTEIRA POR ESTA >>>
   Future<Parcela> saveFullColeta(Parcela p, List<Arvore> arvores) async {
-  final db = await _dbHelper.database;
-  final now = DateTime.now().toIso8601String();
+    final db = await _dbHelper.database;
+    final now = DateTime.now().toIso8601String();
 
-  // 1. Criamos uma variável que VAI SER o valor de retorno.
-  late Parcela parcelaDeRetorno;
+    // A função de transação agora retorna a Parcela salva, garantindo consistência.
+    return await db.transaction<Parcela>((txn) async {
+      int pId;
+      
+      // Cria uma cópia da parcela para evitar modificar o objeto original.
+      Parcela parcelaModificavel = p.copyWith(isSynced: false);
+      
+      final pMap = parcelaModificavel.toMap();
+      final d = parcelaModificavel.dataColeta ?? DateTime.now();
+      pMap['dataColeta'] = d.toIso8601String();
+      pMap['lastModified'] = now;
 
-  await db.transaction((txn) async {
-    int pId;
-    
-    // A lógica de criar e modificar a parcela permanece a mesma.
-    Parcela parcelaModificavel = p.copyWith(isSynced: false);
-    
-    final pMap = parcelaModificavel.toMap();
-    final d = parcelaModificavel.dataColeta ?? DateTime.now();
-    pMap['dataColeta'] = d.toIso8601String();
-    pMap['lastModified'] = now;
+      // Lógica para garantir que o projetoId está presente.
+      if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
+        final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
+          SELECT A.projetoId FROM talhoes T
+          INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
+          INNER JOIN atividades A ON F.atividadeId = A.id
+          WHERE T.id = ? LIMIT 1
+        ''', [pMap['talhaoId']]);
 
-    if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
-      final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
-        SELECT A.projetoId FROM talhoes T
-        INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
-        INNER JOIN atividades A ON F.atividadeId = A.id
-        WHERE T.id = ? LIMIT 1
-      ''', [pMap['talhaoId']]);
-
-      if (talhaoInfo.isNotEmpty) {
-        pMap['projetoId'] = talhaoInfo.first['projetoId'];
-        parcelaModificavel = parcelaModificavel.copyWith(projetoId: talhaoInfo.first['projetoId'] as int?);
+        if (talhaoInfo.isNotEmpty) {
+          pMap['projetoId'] = talhaoInfo.first['projetoId'];
+          parcelaModificavel = parcelaModificavel.copyWith(projetoId: talhaoInfo.first['projetoId'] as int?);
+        }
       }
-    }
 
-    final prefs = await SharedPreferences.getInstance();
-    String? nomeDoResponsavel = prefs.getString('nome_lider');
-    if (nomeDoResponsavel == null || nomeDoResponsavel.isEmpty) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        nomeDoResponsavel = user.displayName ?? user.email;
+      // Lógica para adicionar o nome do líder.
+      final prefs = await SharedPreferences.getInstance();
+      String? nomeDoResponsavel = prefs.getString('nome_lider');
+      if (nomeDoResponsavel == null || nomeDoResponsavel.isEmpty) {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          nomeDoResponsavel = user.displayName ?? user.email;
+        }
       }
-    }
-    if (nomeDoResponsavel != null) {
-      pMap['nomeLider'] = nomeDoResponsavel;
-    }
+      if (nomeDoResponsavel != null) {
+        pMap['nomeLider'] = nomeDoResponsavel;
+        // Atualiza o nome do líder no objeto também.
+        parcelaModificavel = parcelaModificavel.copyWith(nomeLider: nomeDoResponsavel);
+      }
 
-    if (parcelaModificavel.dbId == null) {
-      pMap.remove('id');
-      pId = await txn.insert('parcelas', pMap);
-      parcelaModificavel = parcelaModificavel.copyWith(dbId: pId, dataColeta: d);
-    } else {
-      pId = parcelaModificavel.dbId!;
-      await txn.update('parcelas', pMap, where: 'id = ?', whereArgs: [pId]);
-    }
-    await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [pId]);
-    for (final a in arvores) {
-      final aMap = a.toMap();
-      aMap['parcelaId'] = pId;
-      aMap['lastModified'] = now;
-      await txn.insert('arvores', aMap);
-    }
+      // Salva ou atualiza a parcela.
+      if (parcelaModificavel.dbId == null) {
+        pMap.remove('id');
+        pId = await txn.insert('parcelas', pMap);
+        // Atualiza o objeto com o ID do banco e a data de coleta correta.
+        parcelaModificavel = parcelaModificavel.copyWith(dbId: pId, dataColeta: d);
+      } else {
+        pId = parcelaModificavel.dbId!;
+        await txn.update('parcelas', pMap, where: 'id = ?', whereArgs: [pId]);
+      }
+      
+      // Salva as árvores associadas.
+      await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [pId]);
+      for (final a in arvores) {
+        final aMap = a.toMap();
+        aMap['parcelaId'] = pId;
+        aMap['lastModified'] = now;
+        await txn.insert('arvores', aMap);
+      }
 
-    // 2. A CORREÇÃO CRÍTICA:
-    //    Anexamos a lista de árvores ao objeto que foi modificado
-    //    e o atribuímos à nossa variável de retorno.
-    parcelaModificavel.arvores = arvores;
-    parcelaDeRetorno = parcelaModificavel; 
-  });
-
-  // 3. Retornamos a variável que foi corretamente populada DENTRO da transação.
-  return parcelaDeRetorno;
-}
+      // Anexa a lista de árvores salvas ao objeto final.
+      parcelaModificavel.arvores = arvores;
+      
+      // Retorna o objeto Parcela completo e consistente.
+      return parcelaModificavel; 
+    });
+  }
+  // <<< FIM DA CORREÇÃO >>>
 
 
   Future<void> saveBatchParcelas(List<Parcela> parcelas) async {

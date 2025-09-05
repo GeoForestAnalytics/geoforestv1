@@ -1,4 +1,4 @@
-// lib/pages/amostra/inventario_page.dart (VERSÃO CORRIGIDA FINAL)
+// lib/pages/amostra/inventario_page.dart (VERSÃO FINAL COM CÁLCULO DE PORCENTAGEM)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -40,10 +40,7 @@ class _InventarioPageState extends State<InventarioPage> {
     _dataLoadingFuture = _configurarStatusDaTela();
   }
 
-  // <<< FUNÇÃO CORRIGIDA >>>
   Future<bool> _configurarStatusDaTela() async {
-    // Se a parcela estiver concluída E não tiver árvores (caso de nova parcela),
-    // força o modo de edição. Isso corrige o bug do botão sumindo.
     if ((_parcelaAtual.status == StatusParcela.concluida || _parcelaAtual.status == StatusParcela.exportada) && _arvoresColetadas.isNotEmpty) {
       _isReadOnly = true;
     } else {
@@ -175,105 +172,97 @@ class _InventarioPageState extends State<InventarioPage> {
   }
 
   Future<void> _processarResultadoDialogo(DialogResult result, {int? indexOriginal}) async {
-  // ... (a parte de validação e salvamento inicial não muda)
-  final validationResult = _validationService.validateSingleTree(result.arvore);
-  if (!validationResult.isValid) {
-    final querSalvarMesmoAssim = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Dados Incomuns Detectados"),
-        content: Text(validationResult.warnings.join('\n\n')),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text("Corrigir")),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text("Salvar Mesmo Assim", style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ),
-        ],
-      ),
-    );
-    if (querSalvarMesmoAssim != true) {
-      if (indexOriginal != null) {
-          _abrirFormularioParaEditar(result.arvore);
-      } else {
-        _adicionarNovaArvore(arvoreInicial: result.arvore);
+    final validationResult = _validationService.validateSingleTree(result.arvore);
+    if (!validationResult.isValid) {
+      final querSalvarMesmoAssim = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text("Dados Incomuns Detectados"),
+          content: Text(validationResult.warnings.join('\n\n')),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text("Corrigir")),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text("Salvar Mesmo Assim", style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ),
+          ],
+        ),
+      );
+      if (querSalvarMesmoAssim != true) {
+        if (indexOriginal != null) {
+            _abrirFormularioParaEditar(result.arvore);
+        } else {
+          _adicionarNovaArvore(arvoreInicial: result.arvore);
+        }
+        return;
       }
-      return;
     }
-  }
 
-  setState(() {
-    if (indexOriginal != null) {
-      _arvoresColetadas[indexOriginal] = result.arvore;
-    } else {
-      _arvoresColetadas.add(result.arvore);
-    }
-  });
-
-  await _salvarEstadoAtual(showSnackbar: !(result.irParaProxima || result.continuarNaMesmaPosicao || result.atualizarEProximo || result.atualizarEAnterior));
-
-  if (result.irParaProxima) {
-    Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore());
-  } 
-  else if (result.continuarNaMesmaPosicao) {
-    final ultimoFusteSalvo = result.arvore;
-    final proximoFusteTemplate = Arvore(
-      cap: 0,
-      linha: ultimoFusteSalvo.linha,
-      posicaoNaLinha: ultimoFusteSalvo.posicaoNaLinha,
-      codigo: Codigo.Multipla,
-    );
-    Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore(
-      arvoreInicial: proximoFusteTemplate, 
-      isFusteAdicional: true
-    ));
-  } 
-  // <<< INÍCIO DA CORREÇÃO DA LÓGICA DE NAVEGAÇÃO >>>
-  else if (result.atualizarEProximo && indexOriginal != null) {
-    // 1. Decide qual lista usar para navegar: a completa ou a filtrada.
-    final List<Arvore> listaDeNavegacao = _mostrandoApenasDominantes
-        ? _arvoresColetadas.where((a) => a.dominante).toList()
-        : _arvoresColetadas;
-
-    // 2. Ordena a lista de navegação escolhida
-    listaDeNavegacao.sort((a, b) {
-      int compLinha = a.linha.compareTo(b.linha);
-      if (compLinha != 0) return compLinha;
-      int compPos = a.posicaoNaLinha.compareTo(b.posicaoNaLinha);
-      if (compPos != 0) return compPos;
-      return (a.id ?? 0).compareTo(b.id ?? 0);
+    setState(() {
+      if (indexOriginal != null) {
+        _arvoresColetadas[indexOriginal] = result.arvore;
+      } else {
+        _arvoresColetadas.add(result.arvore);
+      }
     });
 
-    // 3. Encontra o índice da árvore atual DENTRO da lista de navegação
-    final int novoIndex = listaDeNavegacao.indexWhere((arvore) => arvore.id == result.arvore.id);
-    
-    // 4. Se houver uma próxima árvore na lista de navegação, abre ela
-    if (novoIndex != -1 && novoIndex + 1 < listaDeNavegacao.length) {
-      Future.delayed(const Duration(milliseconds: 100), () => _abrirFormularioParaEditar(listaDeNavegacao[novoIndex + 1]));
-    }
-  } 
-  else if (result.atualizarEAnterior && indexOriginal != null) {
-    // Repete a mesma lógica para o botão "Anterior"
-    final List<Arvore> listaDeNavegacao = _mostrandoApenasDominantes
-        ? _arvoresColetadas.where((a) => a.dominante).toList()
-        : _arvoresColetadas;
-    
-    listaDeNavegacao.sort((a, b) {
-      int compLinha = a.linha.compareTo(b.linha);
-      if (compLinha != 0) return compLinha;
-      int compPos = a.posicaoNaLinha.compareTo(b.posicaoNaLinha);
-      if (compPos != 0) return compPos;
-      return (a.id ?? 0).compareTo(b.id ?? 0);
-    });
+    await _salvarEstadoAtual(showSnackbar: !(result.irParaProxima || result.continuarNaMesmaPosicao || result.atualizarEProximo || result.atualizarEAnterior));
 
-    final int novoIndex = listaDeNavegacao.indexWhere((arvore) => arvore.id == result.arvore.id);
-    
-    if (novoIndex > 0) {
-      Future.delayed(const Duration(milliseconds: 100), () => _abrirFormularioParaEditar(listaDeNavegacao[novoIndex - 1]));
+    if (result.irParaProxima) {
+      Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore());
+    } 
+    else if (result.continuarNaMesmaPosicao) {
+      final ultimoFusteSalvo = result.arvore;
+      final proximoFusteTemplate = Arvore(
+        cap: 0,
+        linha: ultimoFusteSalvo.linha,
+        posicaoNaLinha: ultimoFusteSalvo.posicaoNaLinha,
+        codigo: Codigo.Multipla,
+      );
+      Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore(
+        arvoreInicial: proximoFusteTemplate, 
+        isFusteAdicional: true
+      ));
+    } 
+    else if (result.atualizarEProximo && indexOriginal != null) {
+      final List<Arvore> listaDeNavegacao = _mostrandoApenasDominantes
+          ? _arvoresColetadas.where((a) => a.dominante).toList()
+          : _arvoresColetadas;
+
+      listaDeNavegacao.sort((a, b) {
+        int compLinha = a.linha.compareTo(b.linha);
+        if (compLinha != 0) return compLinha;
+        int compPos = a.posicaoNaLinha.compareTo(b.posicaoNaLinha);
+        if (compPos != 0) return compPos;
+        return (a.id ?? 0).compareTo(b.id ?? 0);
+      });
+
+      final int novoIndex = listaDeNavegacao.indexWhere((arvore) => arvore.id == result.arvore.id);
+      
+      if (novoIndex != -1 && novoIndex + 1 < listaDeNavegacao.length) {
+        Future.delayed(const Duration(milliseconds: 100), () => _abrirFormularioParaEditar(listaDeNavegacao[novoIndex + 1]));
+      }
+    } 
+    else if (result.atualizarEAnterior && indexOriginal != null) {
+      final List<Arvore> listaDeNavegacao = _mostrandoApenasDominantes
+          ? _arvoresColetadas.where((a) => a.dominante).toList()
+          : _arvoresColetadas;
+      
+      listaDeNavegacao.sort((a, b) {
+        int compLinha = a.linha.compareTo(b.linha);
+        if (compLinha != 0) return compLinha;
+        int compPos = a.posicaoNaLinha.compareTo(b.posicaoNaLinha);
+        if (compPos != 0) return compPos;
+        return (a.id ?? 0).compareTo(b.id ?? 0);
+      });
+
+      final int novoIndex = listaDeNavegacao.indexWhere((arvore) => arvore.id == result.arvore.id);
+      
+      if (novoIndex > 0) {
+        Future.delayed(const Duration(milliseconds: 100), () => _abrirFormularioParaEditar(listaDeNavegacao[novoIndex - 1]));
+      }
     }
   }
-  // <<< FIM DA CORREÇÃO >>>
-}
 
   Future<void> _adicionarNovaArvore({Arvore? arvoreInicial, bool isFusteAdicional = false}) async {
     _arvoresColetadas.sort((a, b) {
@@ -422,8 +411,6 @@ class _InventarioPageState extends State<InventarioPage> {
             });
             final listaExibida = _listaInvertida ? listaOrdenada.reversed.toList() : listaOrdenada;
 
-            // <<< INÍCIO DA CORREÇÃO PRINCIPAL >>>
-            // A estrutura do Column garante que o card de resumo sempre apareça no topo
             return Column(
               children: [
                 if (_isReadOnly)
@@ -438,7 +425,6 @@ class _InventarioPageState extends State<InventarioPage> {
                       ],
                     ),
                   ),
-                // ESTA É A CHAMADA PARA O CARD DE RESUMO
                 _buildSummaryCard(),
                 
                 if (!_isReadOnly)
@@ -516,7 +502,6 @@ class _InventarioPageState extends State<InventarioPage> {
                 ),
               ],
             );
-            // <<< FIM DA CORREÇÃO PRINCIPAL >>>
           },
         ),
         floatingActionButton: _isReadOnly ? null : FloatingActionButton.extended(
@@ -529,17 +514,20 @@ class _InventarioPageState extends State<InventarioPage> {
     );
   }
 
-  // ADICIONE/SUBSTITUA TAMBÉM ESTE MÉTODO PARA GARANTIR QUE OS CÁLCULOS ESTÃO ATUALIZADOS
+  // MÉTODO MODIFICADO PARA INCLUIR A PORCENTAGEM
   Widget _buildSummaryCard() {
-    // Calcula o total de covas únicas
     final covas = <String>{};
     for (var arvore in _arvoresColetadas) {
       covas.add('${arvore.linha}-${arvore.posicaoNaLinha}');
     }
     final int totalCovas = covas.length;
 
-    // Calcula as contagens de altura
+    // --- LÓGICA ADICIONADA ---
+    final int totalNormal = _arvoresColetadas.where((a) => a.codigo == Codigo.Normal).length;
     final int contagemAlturaNormal = _arvoresColetadas.where((a) => a.codigo == Codigo.Normal && a.altura != null && a.altura! > 0).length;
+    final double porcentagem = (totalNormal > 0) ? (contagemAlturaNormal / totalNormal) * 100 : 0.0;
+    // --- FIM DA LÓGICA ADICIONADA ---
+    
     final int contagemAlturaDominante = _arvoresColetadas.where((a) => a.dominante && a.altura != null && a.altura! > 0).length;
     final int contagemAlturaOutros = _arvoresColetadas.where((a) => a.codigo != Codigo.Normal && a.altura != null && a.altura! > 0).length;
 
@@ -555,7 +543,8 @@ class _InventarioPageState extends State<InventarioPage> {
             Text('Talhão: ${_parcelaAtual.nomeTalhao} / Parcela: ${_parcelaAtual.idParcela}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const Divider(height: 20),
             _buildStatRow('Total de Covas:', '$totalCovas'),
-            _buildStatRow('Alturas (Normais):', '$contagemAlturaNormal'),
+            // --- LINHA MODIFICADA ---
+            _buildStatRow('Alturas (Normais):', '$contagemAlturaNormal (${porcentagem.toStringAsFixed(0)}%)'),
             _buildStatRow('Alturas (Dominantes):', '$contagemAlturaDominante'),
             _buildStatRow('Alturas (Outros Códigos):', '$contagemAlturaOutros'),
           ],

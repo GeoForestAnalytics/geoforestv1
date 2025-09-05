@@ -447,62 +447,65 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   }
 
   Widget _buildResultCard(
-      Map<String, dynamic> resultados, Map<String, dynamic> diagnostico) {
-    final pValue = diagnostico['shapiro_wilk_p_value'] as double?;
-    String resultadoShapiro;
-    Color corShapiro;
+    Map<String, dynamic> resultados, Map<String, dynamic> diagnostico) {
+  
+  final skew = diagnostico['skewness'] as double?;
+  final kurt = diagnostico['kurtosis'] as double?;
 
-    if (pValue == null) {
-      resultadoShapiro = "N/A";
-      corShapiro = Colors.grey;
-    } else if (pValue > 0.05) {
-      resultadoShapiro = "Aprovado (p > 0.05)";
-      corShapiro = Colors.green;
-    } else {
-      resultadoShapiro = "Rejeitado (p <= 0.05)";
-      corShapiro = Colors.red;
-    }
+  String resultadoNormalidade;
+  Color corNormalidade;
 
-    return Card(
-      elevation: 2,
-      color: Colors.blueGrey.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Resultados da Regressão',
-                style: Theme.of(context).textTheme.titleLarge),
-            const Divider(),
-            Text('Equação Gerada:',
-                style: Theme.of(context).textTheme.titleMedium),
-            SelectableText(
-              resultados['equacao'],
-              style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                  backgroundColor: Colors.black12),
-            ),
-            const SizedBox(height: 12),
-            _buildStatRow('Coeficiente (R²):',
-                (resultados['R2'] as double).toStringAsFixed(4)),
-            _buildStatRow(
-                'Nº de Amostras Usadas:', '${resultados['n_amostras']}'),
-            const Divider(height: 20),
-            Text('Diagnóstico do Modelo',
-                style: Theme.of(context).textTheme.titleMedium),
-            _buildStatRow('Erro Padrão Residual (Syx):',
-                (diagnostico['syx'] as double).toStringAsFixed(4)),
-            _buildStatRow('Syx (%):',
-                '${(diagnostico['syx_percent'] as double).toStringAsFixed(2)}%'),
-            _buildStatRow('Normalidade dos Resíduos (Shapiro-Wilk):',
-                resultadoShapiro,
-                valueColor: corShapiro),
-          ],
-        ),
-      ),
-    );
+  if (skew == null || kurt == null) {
+    resultadoNormalidade = "N/A";
+    corNormalidade = Colors.grey;
+  } else if (skew.abs() < 2 && kurt.abs() < 2) {
+    resultadoNormalidade = "Aprovado (Skew: ${skew.toStringAsFixed(2)}, Kurt: ${kurt.toStringAsFixed(2)})";
+    corNormalidade = Colors.green;
+  } else {
+    resultadoNormalidade = "Rejeitado (Skew: ${skew.toStringAsFixed(2)}, Kurt: ${kurt.toStringAsFixed(2)})";
+    corNormalidade = Colors.red;
   }
+
+  return Card(
+    elevation: 2,
+    color: Colors.blueGrey.shade50,
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Resultados da Regressão',
+              style: Theme.of(context).textTheme.titleLarge),
+          const Divider(),
+          Text('Equação Gerada:',
+              style: Theme.of(context).textTheme.titleMedium),
+          SelectableText(
+            resultados['equacao'],
+            style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                backgroundColor: Colors.black12),
+          ),
+          const SizedBox(height: 12),
+          _buildStatRow('Coeficiente (R²):',
+              (resultados['R2'] as double).toStringAsFixed(4)),
+          _buildStatRow(
+              'Nº de Amostras Usadas:', '${resultados['n_amostras']}'),
+          const Divider(height: 20),
+          Text('Diagnóstico do Modelo',
+              style: Theme.of(context).textTheme.titleMedium),
+          _buildStatRow('Erro Padrão Residual (Syx):',
+              (diagnostico['syx'] as double).toStringAsFixed(4)),
+          _buildStatRow('Syx (%):',
+              '${(diagnostico['syx_percent'] as double).toStringAsFixed(2)}%'),
+          _buildStatRow('Normalidade dos Resíduos:',
+              resultadoNormalidade,
+              valueColor: corNormalidade),
+        ],
+      ),
+    ),
+  );
+}
 
   Widget _buildProductionTable(AnaliseVolumetricaCompletaResult result) {
     final totais = result.totaisInventario;

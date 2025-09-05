@@ -1,4 +1,4 @@
-// lib/data/datasources/local/database_helper.dart (VERSÃO COM OUTROS GASTOS NO DIÁRIO)
+// lib/data/datasources/local/database_helper.dart (VERSÃO COM AS SUAS MELHORIAS)
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
@@ -29,8 +29,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      // <<< VERSÃO DO BANCO INCREMENTADA PARA 47 >>>
-      version: 47,
+      // Versão do banco permanece 48
+      version: 48,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -40,7 +40,7 @@ class DatabaseHelper {
   Future<void> _onConfigure(Database db) async => await db.execute('PRAGMA foreign_keys = ON');
 
   Future<void> _onCreate(Database db, int version) async {
-    // ... (CREATEs de projetos, atividades, fazendas, talhoes, parcelas, arvores, cubagens_arvores, cubagens_secoes, sortimentos permanecem os mesmos)
+    // ... (CREATEs de projetos, atividades, fazendas, talhoes)
     await db.execute('''
       CREATE TABLE projetos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,6 +98,8 @@ class DatabaseHelper {
         FOREIGN KEY (fazendaId, fazendaAtividadeId) REFERENCES fazendas (id, atividadeId) ON DELETE CASCADE
       )
     ''');
+    
+    // <<< MELHORIA 1 APLICADA: Coluna 'declividade' adicionada ao CREATE TABLE >>>
     await db.execute('''
       CREATE TABLE parcelas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,10 +131,13 @@ class DatabaseHelper {
         forma_parcela TEXT,
         lado1 REAL,
         lado2 REAL,
+        declividade REAL, -- <<< COLUNA ADICIONADA AQUI
         lastModified TEXT NOT NULL,
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
     ''');
+    
+    // ... (CREATEs de arvores, cubagens_arvores, etc. permanecem os mesmos)
     await db.execute('''
       CREATE TABLE arvores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -202,8 +207,6 @@ class DatabaseHelper {
         diametroMaximo REAL NOT NULL
       )
     ''');
-    
-    // <<< ADICIONADAS AS 2 NOVAS COLUNAS PARA "OUTROS GASTOS" >>>
     await db.execute('''
       CREATE TABLE diario_de_campo (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -418,10 +421,20 @@ class DatabaseHelper {
           await db.execute('UPDATE cubagens_arvores SET dataColeta = lastModified WHERE dataColeta IS NULL');
           break;
 
-        // <<< NOVA MIGRAÇÃO PARA "OUTROS GASTOS" >>>
         case 47:
-          await db.execute('ALTER TABLE diario_de_campo ADD COLUMN outras_despesas_valor REAL');
-          await db.execute('ALTER TABLE diario_de_campo ADD COLUMN outras_despesas_descricao TEXT');
+          if (!await _columnExists(db, 'diario_de_campo', 'outras_despesas_valor')) {
+            await db.execute('ALTER TABLE diario_de_campo ADD COLUMN outras_despesas_valor REAL');
+          }
+          if (!await _columnExists(db, 'diario_de_campo', 'outras_despesas_descricao')) {
+            await db.execute('ALTER TABLE diario_de_campo ADD COLUMN outras_despesas_descricao TEXT');
+          }
+          break;
+
+        // <<< MELHORIA 2 APLICADA: Verificação de existência da coluna antes de adicioná-la >>>
+        case 48:
+          if (!await _columnExists(db, 'parcelas', 'declividade')) {
+            await db.execute('ALTER TABLE parcelas ADD COLUMN declividade REAL');
+          }
           break;
       }
     }

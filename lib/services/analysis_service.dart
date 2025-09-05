@@ -14,6 +14,7 @@ import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/sortimento_model.dart';
 import 'package:ml_linalg/linalg.dart';
 
+
 // O import do 'stats' foi removido pois implementamos nossa própria função de moda.
 
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
@@ -266,20 +267,21 @@ class AnalysisService {
 
 // No arquivo lib/services/analysis_service.dart
 
+// No arquivo lib/services/analysis_service.dart
+
 Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
     List<CubagemArvore> arvoresCubadas) async {
   final List<Vector> xData = [];
   final List<double> yData = [];
+  final List<double> lnDapList = [];
+  final List<double> lnAlturaList = [];
 
   for (final arvoreCubada in arvoresCubadas) {
     if (arvoreCubada.id == null) continue;
-    final secoes =
-        await _cubagemRepository.getSecoesPorArvoreId(arvoreCubada.id!);
+    final secoes = await _cubagemRepository.getSecoesPorArvoreId(arvoreCubada.id!);
     final volumeReal = calcularVolumeComercialSmalian(secoes);
 
-    if (volumeReal <= 0 ||
-        arvoreCubada.valorCAP <= 0 ||
-        arvoreCubada.alturaTotal <= 0) {
+    if (volumeReal <= 0 || arvoreCubada.valorCAP <= 0 || arvoreCubada.alturaTotal <= 0) {
       continue;
     }
     
@@ -291,15 +293,31 @@ Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
 
     xData.add(Vector.fromList([1.0, lnDAP, lnAltura]));
     yData.add(lnVolume);
+    lnDapList.add(lnDAP);
+    lnAlturaList.add(lnAltura);
   }
 
   final int n = xData.length;
   const int p = 3;
 
   if (n < p) {
-    final errorResult = {
-      'error': 'Dados insuficientes. Pelo menos $p árvores cubadas completas são necessárias.'
-    };
+    final errorResult = {'error': 'Dados insuficientes. Pelo menos $p árvores cubadas completas são necessárias.'};
+    return {'resultados': errorResult, 'diagnostico': {}};
+  }
+
+  // A função auxiliar _calculateStdDev pode ser removida se não for usada em outro lugar
+  double _calculateStdDev(List<double> numbers) {
+    if (numbers.length < 2) return 0.0;
+    final mean = numbers.reduce((a, b) => a + b) / numbers.length;
+    final variance = numbers.map((x) => pow(x - mean, 2)).reduce((a, b) => a + b) / (numbers.length - 1);
+    return sqrt(variance);
+  }
+
+  final double stdDevDap = _calculateStdDev(lnDapList);
+  final double stdDevAltura = _calculateStdDev(lnAlturaList);
+
+  if (stdDevDap < 0.0001 || stdDevAltura < 0.0001) {
+    final errorResult = {'error': 'Variação de dados insuficiente. Selecione árvores de cubagem com DAPs e Alturas mais diferentes.'};
     return {'resultados': errorResult, 'diagnostico': {}};
   }
 
@@ -307,10 +325,7 @@ Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
   final labels = Vector.fromList(yData);
 
   try {
-    final coefficients = (features.transpose() * features).inverse() *
-        features.transpose() *
-        labels;
-        
+    final coefficients = (features.transpose() * features).inverse() * features.transpose() * labels;
     final List<double> coeffsAsList = coefficients.expand((e) => e).toList();
     final double b0 = coeffsAsList[0];
     final double b1 = coeffsAsList[1];
@@ -318,11 +333,9 @@ Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
 
     final predictedValues = features * coefficients;
     final yMean = labels.mean();
-    final totalSumOfSquares =
-        labels.fold(0.0, (sum, val) => sum + pow(val - yMean, 2));
-    final residuals = labels - predictedValues; // Estes são os erros do modelo
-    final residualSumOfSquares =
-        residuals.fold(0.0, (sum, val) => sum + pow(val, 2));
+    final totalSumOfSquares = labels.fold(0.0, (sum, val) => sum + pow(val - yMean, 2));
+    final residuals = labels - predictedValues;
+    final residualSumOfSquares = residuals.fold(0.0, (sum, val) => sum + pow(val, 2));
 
     if (totalSumOfSquares == 0) {
       final errorResult = {'error': 'Variação nula nos dados.'};
@@ -333,27 +346,7 @@ Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(
     final double mse = residualSumOfSquares / (n - p);
     final double syx = sqrt(mse);
     
-    // =========================================================================
-    // =============== NOVO CÁLCULO: TESTE DE SHAPIRO-WILK =====================
-    // =========================================================================
-    double? shapiroPValue;
-// O teste de Shapiro-Wilk precisa de pelo menos 3 amostras.
-final residualsList = residuals.toList();
-if (residualsList.length >= 3) {
-  try {
-    // A biblioteca 'stats' não tem Shapiro-Wilk diretamente,
-    // então deixaremos como N/A por enquanto, mas a estrutura está pronta.
-    // Se encontrarmos uma biblioteca que o faça, a lógica será inserida aqui.
-    // Por agora, vamos simular que ele não está disponível para não quebrar o app.
-    shapiroPValue = null; // Simulando N/A
-  } catch (e) {
-    // Se o cálculo estatístico falhar, registramos o erro e continuamos.
-    debugPrint("Erro ao calcular o teste de normalidade: $e");
-    shapiroPValue = null;
-  }
-}
-    // =========================================================================
-
+    // Deixamos o valor de Shapiro-Wilk como nulo, pois não temos como calculá-lo
     return {
       'resultados': {
         'b0': b0, 'b1': b1, 'b2': b2, 'R2': rSquared,
@@ -361,8 +354,9 @@ if (residualsList.length >= 3) {
         'n_amostras': n,
       },
       'diagnostico': {
-        'syx': syx, 'syx_percent': yMean != 0 ? (syx / yMean) * 100 : 0.0,
-        'shapiro_wilk_p_value': shapiroPValue, // <-- Adicionado ao resultado!
+        'syx': syx, 
+        'syx_percent': yMean != 0 ? (syx / yMean) * 100 : 0.0,
+        'shapiro_wilk_p_value': null, // <-- Retorna null
       }
     };
   } catch (e) {

@@ -1,6 +1,7 @@
-// lib/services/export_service.dart (VERSÃO COM NOVO FORMATO CONSOLIDADO)
+// lib/services/export_service.dart (VERSÃO CORRIGIDA E FINAL)
 
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:convert';
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
@@ -36,7 +37,6 @@ import 'package:geoforestv1/models/atividade_model.dart';
 
 // PAYLOADS ...
 class _CsvParcelaPayload {
-  // ... (sem alterações)
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
   final Map<int, Map<String, dynamic>> talhoesMap;
@@ -57,7 +57,6 @@ class _CsvParcelaPayload {
 }
 
 class _CsvCubagemPayload {
-  // ... (sem alterações)
   final List<Map<String, dynamic>> cubagensMap;
   final Map<int, List<Map<String, dynamic>>> secoesPorCubagemMap;
   final Map<int, Map<String, dynamic>> talhoesMap;
@@ -78,7 +77,6 @@ class _CsvCubagemPayload {
 }
 
 class _DevEquipePayload {
-  // ... (sem alterações)
   final List<Map<String, dynamic>> coletasData;
   final String nomeZona;
   final Map<int, String> proj4Defs;
@@ -91,12 +89,10 @@ class _DevEquipePayload {
 }
 
 class _CsvOperacoesPayload {
-    // ... (sem alterações)
   final List<Map<String, dynamic>> diariosMap;
   _CsvOperacoesPayload({ required this.diariosMap });
 }
 
-// <<< PAYLOAD ATUALIZADO PARA O NOVO FORMATO >>>
 class _CsvConsolidadoPayload {
   final Map<String, dynamic> diarioMap;
   final List<Map<String, dynamic>> parcelasMap;
@@ -136,7 +132,7 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
   }
 
   List<List<dynamic>> rows = [];
-  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'UP', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_m2', 'Lado1_m', 'Lado2_m', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Altura_Dano_m', 'Dominante']);
+  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'UP', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_m2', 'Area_Corrigida_m2', 'Lado1_m', 'Lado2_m', 'Declividade_%', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Altura_Dano_m', 'Dominante']);
   
   for (var pMap in payload.parcelasMap) {
     final p = Parcela.fromMap(pMap);
@@ -148,19 +144,29 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
       easting = pUtm.x.toStringAsFixed(2);
       northing = pUtm.y.toStringAsFixed(2);
     }
+
+    // <<< INÍCIO DA CORREÇÃO >>>
+    // A área salva no banco (p.areaMetrosQuadrados) já é a área corrigida.
+    // Aqui, calculamos a área horizontal original apenas para fins de relatório.
+    double areaHorizontal = p.areaMetrosQuadrados;
+    if (p.declividade != null && p.declividade! > 0) {
+        areaHorizontal = p.areaMetrosQuadrados / math.sqrt(1 + math.pow(p.declividade! / 100, 2));
+    }
+    // A variável 'areaCorrigida' foi removida pois era redundante. O valor corrigido já está em 'p.areaMetrosQuadrados'.
+    // <<< FIM DA CORREÇÃO >>>
     
     final arvoresMap = payload.arvoresPorParcelaMap[p.dbId] ?? [];
     final arvores = arvoresMap.map((aMap) => Arvore.fromMap(aMap)).toList();
 
     final liderDaColeta = p.nomeLider ?? payload.nomeLider;
     if (arvores.isEmpty) {
-      rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.lado1, p.lado2, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null, null]);
+       rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, areaHorizontal.toStringAsFixed(2), p.areaMetrosQuadrados.toStringAsFixed(2), p.lado1, p.lado2, p.declividade, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null, null, null, null]);
     } else {
       Map<String, int> fusteCounter = {};
       for (final a in arvores) {
         String key = '${a.linha}-${a.posicaoNaLinha}';
         fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
-        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, p.areaMetrosQuadrados, p.lado1, p.lado2, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.alturaDano, a.dominante ? 'Sim' : 'Não']);
+        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, areaHorizontal.toStringAsFixed(2), p.areaMetrosQuadrados.toStringAsFixed(2), p.lado1, p.lado2, p.declividade, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.alturaDano, a.dominante ? 'Sim' : 'Não']);
       }
     }
   }
@@ -168,7 +174,6 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 }
 
 Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) async {
-  // ... (código existente sem alterações)
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
     proj4.Projection.add('EPSG:$epsg', def);
@@ -238,7 +243,6 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
 }
 
 Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
-  // ... (código existente sem alterações)
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
     proj4.Projection.add('EPSG:$epsg', def);
@@ -301,12 +305,10 @@ Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
 }
 
 Future<String> _generateCsvOperacoesInIsolate(_CsvOperacoesPayload payload) async {
-  // ... (código existente sem alterações)
     final List<List<dynamic>> rows = [];
   final nf = NumberFormat("#,##0.00", "pt_BR");
   final nfKm = NumberFormat("#,##0.0", "pt_BR");
 
-  // Cabeçalho idêntico ao da imagem
   rows.add([
     'Data', 'Líder', 'Equipe', 'Veículo (Placa)', 'KM Rodados',
     'Custo Abastecimento (R\$)', 'Custo Alimentação (R\$)', 'Custo Pedágio (R\$)',
@@ -314,7 +316,6 @@ Future<String> _generateCsvOperacoesInIsolate(_CsvOperacoesPayload payload) asyn
     'Custo Total (R\$)', 'Destino'
   ]);
   
-  // Função interna para formatar valores nulos para o CSV
   String formatValue(dynamic value) {
     if (value == null) return '';
     if (value is double) return nf.format(value).replaceAll('.', ',');
@@ -326,7 +327,6 @@ Future<String> _generateCsvOperacoesInIsolate(_CsvOperacoesPayload payload) asyn
     return nfKm.format(value).replaceAll('.', ',');
   }
 
-  // Itera sobre cada diário para criar uma linha
   for (final diarioMap in payload.diariosMap) {
     final d = DiarioDeCampo.fromMap(diarioMap);
     final distancia = (d.kmFinal ?? 0) - (d.kmInicial ?? 0);
@@ -351,13 +351,11 @@ Future<String> _generateCsvOperacoesInIsolate(_CsvOperacoesPayload payload) asyn
   return const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
 }
 
-// <<< FUNÇÃO _generateCsvConsolidadoInIsolate COMPLETAMENTE SUBSTITUÍDA >>>
 Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) async {
   List<List<dynamic>> rows = [];
   final nf = NumberFormat("#,##0.00", "pt_BR");
   final nfKm = NumberFormat("#,##0.0", "pt_BR");
 
-  // Cabeçalho do CSV
   rows.add([
     'Data_Relatorio', 'Lider_Equipe', 'Ajudantes', 'Projeto', 'Atividade', 'Fazenda', 'Talhao',
     'Tipo_Coleta', 'ID_Amostra', 'Indicador_Amostra', 'Total_Amostras', 'Indicador_Cubagem', 'Total_Cubagens',
@@ -379,13 +377,12 @@ Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) 
   
   String formatKm(dynamic value) {
     if (value == null || value <= 0) return '0.0';
-    return nfKm.format(value).replaceAll('.', '.'); // CSV usa ponto como decimal
+    return nfKm.format(value).replaceAll('.', '.');
   }
   
   final distancia = (diario.kmFinal ?? 0) - (diario.kmInicial ?? 0);
   final totalGastos = (diario.abastecimentoValor ?? 0) + (diario.pedagioValor ?? 0) + (diario.alimentacaoRefeicaoValor ?? 0);
   
-  // Adiciona as linhas de PARCELAS (Inventário)
   for (var pMap in payload.parcelasMap) {
     final p = Parcela.fromMap(pMap);
     final talhao = talhoes[p.talhaoId];
@@ -404,10 +401,10 @@ Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) 
       p.nomeTalhao,
       'Inventario',
       p.idParcela,
-      1, // Indicador_Amostra
-      totaisAmostras, // Total_Amostras
-      0, // Indicador_Cubagem
-      totaisCubagens, // Total_Cubagens
+      1,
+      totaisAmostras,
+      0,
+      totaisCubagens,
       p.status.name,
       p.up,
       diario.kmInicial,
@@ -425,7 +422,6 @@ Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) 
     ]);
   }
 
-  // Adiciona as linhas de CUBAGENS
   for (var cMap in payload.cubagensMap) {
     final c = CubagemArvore.fromMap(cMap);
     final talhao = talhoes[c.talhaoId];
@@ -444,10 +440,10 @@ Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) 
       c.nomeTalhao,
       'Cubagem',
       c.identificador,
-      0, // Indicador_Amostra
-      totaisAmostras, // Total_Amostras
-      1, // Indicador_Cubagem
-      totaisCubagens, // Total_Cubagens
+      0,
+      totaisAmostras,
+      1,
+      totaisCubagens,
       c.alturaTotal > 0 ? 'concluida' : 'pendente',
       c.rf,
       diario.kmInicial,
@@ -470,14 +466,12 @@ Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) 
 
 
 class ExportService {
-  // ... (repositórios)
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
   final _projetoRepository = ProjetoRepository();
   final _atividadeRepository = AtividadeRepository();
   final _talhaoRepository = TalhaoRepository();
 
-  // <<< FUNÇÃO PRINCIPAL ATUALIZADA >>>
   Future<void> exportarRelatorioDiarioConsolidadoCsv({
     required BuildContext context,
     required DiarioDeCampo diario,
@@ -501,7 +495,6 @@ class ExportService {
       final projetos = (await _projetoRepository.getTodosOsProjetosParaGerente()).where((p) => projetoIds.contains(p.id)).toList();
       final projetosMap = {for (var p in projetos) p.id!: p.toMap()};
       
-      // <<< LÓGICA DE CONTAGEM ATUALIZADA >>>
       final Map<int, int> totaisAmostrasPorTalhao = {};
       final Map<int, int> totaisCubagensPorTalhao = {};
       
@@ -544,8 +537,7 @@ class ExportService {
     }
   }
 
-  // ... (O restante do arquivo continua o mesmo)
-    Future<void> exportarOperacoesCsv({
+  Future<void> exportarOperacoesCsv({
     required BuildContext context,
     required List<DiarioDeCampo> diarios,
     required String tipoRelatorio,
