@@ -1,4 +1,4 @@
-// lib/pages/amostra/inventario_page.dart (VERSÃO FINAL COM CÁLCULO DE PORCENTAGEM)
+// lib/pages/amostra/inventario_page.dart (VERSÃO COM NAVEGAÇÃO CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -52,6 +52,7 @@ class _InventarioPageState extends State<InventarioPage> {
     }
     return true;
   }
+
   
   Future<void> _reabrirParaEdicao() async {
     setState(() => _isSaving = true);
@@ -112,6 +113,7 @@ class _InventarioPageState extends State<InventarioPage> {
       } else {
         _identificarArvoresDominantes(); 
       }
+      
       _arvoresColetadas.sort((a, b) {
         int compLinha = a.linha.compareTo(b.linha);
         if (compLinha != 0) return compLinha;
@@ -119,10 +121,22 @@ class _InventarioPageState extends State<InventarioPage> {
         if (compPos != 0) return compPos;
         return (a.id ?? 0).compareTo(b.id ?? 0);
       });
-      await _parcelaRepository.saveFullColeta(_parcelaAtual, _arvoresColetadas);
-      if (mounted && showSnackbar) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Progresso salvo!'), duration: Duration(seconds: 2), backgroundColor: Colors.green));
+
+      // 1. Salva e recebe de volta a parcela com as árvores contendo os IDs corretos.
+      final parcelaSalva = await _parcelaRepository.saveFullColeta(_parcelaAtual, _arvoresColetadas);
+      
+      // 2. Atualiza o estado da tela com os dados completos.
+      if (mounted) {
+        setState(() {
+          _parcelaAtual = parcelaSalva;
+          _arvoresColetadas = parcelaSalva.arvores;
+        });
+
+        if (showSnackbar) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Progresso salvo!'), duration: Duration(seconds: 2), backgroundColor: Colors.green));
+        }
       }
+
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar: $e'), backgroundColor: Colors.red));
     } finally {
@@ -309,8 +323,10 @@ class _InventarioPageState extends State<InventarioPage> {
     }
   }
 
+   // <<< FUNÇÃO '_abrirFormularioParaEditar' SUBSTITUÍDA >>>
   Future<void> _abrirFormularioParaEditar(Arvore arvore) async {
-    final int indexOriginal = _arvoresColetadas.indexOf(arvore);
+    // A busca pelo índice agora é feita pelo ID, que é único e confiável.
+    final int indexOriginal = _arvoresColetadas.indexWhere((a) => a.id == arvore.id);
     if (indexOriginal == -1) return;
 
     final result = await showDialog<DialogResult>(

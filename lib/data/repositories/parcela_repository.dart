@@ -1,4 +1,4 @@
-// lib/data/repositories/parcela_repository.dart (VERSÃO ATUALIZADA E CORRIGIDA)
+// lib/data/repositories/parcela_repository.dart (VERSÃO CORRIGIDA PARA O BUG DE NAVEGAÇÃO)
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -12,16 +12,14 @@ import 'package:sqflite/sqflite.dart';
 class ParcelaRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  // <<< INÍCIO DA CORREÇÃO: SUBSTITUA A FUNÇÃO INTEIRA POR ESTA >>>
+  // <<< ESTA É A FUNÇÃO CORRETA E COMPLETA >>>
   Future<Parcela> saveFullColeta(Parcela p, List<Arvore> arvores) async {
     final db = await _dbHelper.database;
     final now = DateTime.now().toIso8601String();
 
-    // A função de transação agora retorna a Parcela salva, garantindo consistência.
     return await db.transaction<Parcela>((txn) async {
       int pId;
       
-      // Cria uma cópia da parcela para evitar modificar o objeto original.
       Parcela parcelaModificavel = p.copyWith(isSynced: false);
       
       final pMap = parcelaModificavel.toMap();
@@ -29,7 +27,6 @@ class ParcelaRepository {
       pMap['dataColeta'] = d.toIso8601String();
       pMap['lastModified'] = now;
 
-      // Lógica para garantir que o projetoId está presente.
       if (pMap['projetoId'] == null && pMap['talhaoId'] != null) {
         final List<Map<String, dynamic>> talhaoInfo = await txn.rawQuery('''
           SELECT A.projetoId FROM talhoes T
@@ -44,7 +41,6 @@ class ParcelaRepository {
         }
       }
 
-      // Lógica para adicionar o nome do líder.
       final prefs = await SharedPreferences.getInstance();
       String? nomeDoResponsavel = prefs.getString('nome_lider');
       if (nomeDoResponsavel == null || nomeDoResponsavel.isEmpty) {
@@ -55,40 +51,46 @@ class ParcelaRepository {
       }
       if (nomeDoResponsavel != null) {
         pMap['nomeLider'] = nomeDoResponsavel;
-        // Atualiza o nome do líder no objeto também.
         parcelaModificavel = parcelaModificavel.copyWith(nomeLider: nomeDoResponsavel);
       }
 
-      // Salva ou atualiza a parcela.
       if (parcelaModificavel.dbId == null) {
         pMap.remove('id');
         pId = await txn.insert('parcelas', pMap);
-        // Atualiza o objeto com o ID do banco e a data de coleta correta.
         parcelaModificavel = parcelaModificavel.copyWith(dbId: pId, dataColeta: d);
       } else {
         pId = parcelaModificavel.dbId!;
         await txn.update('parcelas', pMap, where: 'id = ?', whereArgs: [pId]);
       }
       
-      // Salva as árvores associadas.
       await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [pId]);
+      
+      // --- INÍCIO DA MUDANÇA IMPORTANTE ---
+      // Cria uma nova lista para guardar as árvores salvas com seus IDs corretos.
+      final List<Arvore> arvoresSalvasComId = [];
+
       for (final a in arvores) {
         final aMap = a.toMap();
         aMap['parcelaId'] = pId;
         aMap['lastModified'] = now;
-        await txn.insert('arvores', aMap);
+        
+        // Captura o novo ID retornado pela operação de inserção.
+        final newId = await txn.insert('arvores', aMap);
+        
+        // Adiciona uma cópia da árvore com seu novo ID à nossa lista.
+        arvoresSalvasComId.add(a.copyWith(id: newId));
       }
-
-      // Anexa a lista de árvores salvas ao objeto final.
-      parcelaModificavel.arvores = arvores;
       
-      // Retorna o objeto Parcela completo e consistente.
+      // Anexa a lista de árvores CORRETA (com IDs) ao objeto final.
+      parcelaModificavel.arvores = arvoresSalvasComId;
+      // --- FIM DA MUDANÇA IMPORTANTE ---
+      
       return parcelaModificavel; 
     });
   }
-  // <<< FIM DA CORREÇÃO >>>
 
 
+  // O resto do arquivo permanece o mesmo
   Future<void> saveBatchParcelas(List<Parcela> parcelas) async {
     final db = await _dbHelper.database;
     final batch = db.batch();
@@ -118,8 +120,6 @@ class ParcelaRepository {
     },
         where: 'id = ?', whereArgs: [parcelaId]);
   }
-
-  // --- MÉTODOS DE CONSULTA (GET) ---
 
   Future<List<Parcela>> getTodasAsParcelas() async {
     final db = await _dbHelper.database;
@@ -166,8 +166,6 @@ class ParcelaRepository {
     return List.generate(maps.length, (i) => Arvore.fromMap(maps[i]));
   }
 
-  // --- MÉTODOS PARA SINCRONIZAÇÃO ---
-
   Future<List<Parcela>> getUnsyncedParcelas() async {
     final db = await _dbHelper.database;
     final maps = await db.query('parcelas', where: 'isSynced = ?', whereArgs: [0]);
@@ -178,8 +176,6 @@ class ParcelaRepository {
     final db = await _dbHelper.database;
     await db.update('parcelas', {'isSynced': 1}, where: 'id = ?', whereArgs: [id]);
   }
-
-  // --- MÉTODOS PARA EXPORTAÇÃO ---
 
   Future<List<Parcela>> getUnexportedConcludedParcelasByLider(
       String nomeLider) async {
@@ -273,8 +269,6 @@ class ParcelaRepository {
     }
     return lideres;
   }
-
-  // --- MÉTODOS DE LIMPEZA ---
 
   Future<void> deletarMultiplasParcelas(List<int> ids) async {
     if (ids.isEmpty) return;
