@@ -1,4 +1,4 @@
-// lib/pages/amostra/coleta_dados_page.dart (VERSÃO FINAL COM CÁLCULO DE LADO CORRIGIDO)
+// lib/pages/amostra/coleta_dados_page.dart (VERSÃO COMPLETA E AJUSTADA)
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -52,6 +52,9 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   final _lado2Controller = TextEditingController();
   final _referenciaRfController = TextEditingController();
   final _declividadeController = TextEditingController();
+  
+  // <<< VARIÁVEL ADICIONADA PARA GUARDAR A ÁREA IMPORTADA >>>
+  double _areaAlvoDaParcela = 0.0; 
 
   DeclividadeUnidade _declividadeUnidade = DeclividadeUnidade.graus;
   String _tipoParcelaSelecionado = 'Instalação';
@@ -69,18 +72,17 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   @override
   void initState() {
     super.initState();
-    // <<< Listener unificado para recalcular tudo que for necessário >>>
     _lado1Controller.addListener(_atualizarCalculosAutomaticos);
     _declividadeController.addListener(_atualizarCalculosAutomaticos);
-    _lado2Controller.addListener(() => setState(() {})); // Apenas para redesenhar a área
+    _lado2Controller.addListener(() => setState(() {}));
     _setupInitialData();
   }
 
-  // <<< FUNÇÃO PRINCIPAL DE CÁLCULO ATUALIZADA >>>
   void _atualizarCalculosAutomaticos() {
-    // Só executa se for retangular, tiver uma área alvo e não estiver em modo de leitura
+    // A função original já recalcula o lado 2 para retângulos se a área alvo existir,
+    // então a mantemos como está, mas agora a área alvo é mais confiável.
     if (_formaDaParcela != FormaParcela.retangular || 
-        _parcelaAtual.areaMetrosQuadrados <= 0 || 
+        _areaAlvoDaParcela <= 0 || 
         _isReadOnly) {
       return;
     }
@@ -88,18 +90,16 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     final lado1 = double.tryParse(_lado1Controller.text.replaceAll(',', '.')) ?? 0;
     final declividadeValor = double.tryParse(_declividadeController.text.replaceAll(',', '.')) ?? 0;
     
-    // Se não houver Lado 1, não há como calcular
     if (lado1 <= 0) return;
 
-    final areaHorizontalDesejada = _parcelaAtual.areaMetrosQuadrados;
+    final areaHorizontalDesejada = _areaAlvoDaParcela;
     double fatorCorrecao = 1.0;
 
     if(declividadeValor > 0) {
       if (_declividadeUnidade == DeclividadeUnidade.graus) {
-          // A correção é o inverso do cosseno do ângulo
           final radianos = declividadeValor * (math.pi / 180.0);
           fatorCorrecao = 1 / math.cos(radianos);
-      } else { // Porcentagem
+      } else {
           final declividadeDecimal = declividadeValor / 100;
           fatorCorrecao = math.sqrt(1 + math.pow(declividadeDecimal, 2));
       }
@@ -108,12 +108,10 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     final areaInclinadaNecessaria = areaHorizontalDesejada * fatorCorrecao;
     final lado2Calculado = areaInclinadaNecessaria / lado1;
 
-    // Atualiza o campo Lado 2 com o valor formatado, sem disparar outro listener
     if (_lado2Controller.text != lado2Calculado.toStringAsFixed(2).replaceAll('.', ',')) {
         _lado2Controller.text = lado2Calculado.toStringAsFixed(2).replaceAll('.', ',');
     }
     
-    // Força a atualização da UI para o novo valor e os cálculos de área aparecerem
     setState(() {});
   }
 
@@ -161,6 +159,8 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
   void _preencherControllersComDadosAtuais() {
     final p = _parcelaAtual;
+    _areaAlvoDaParcela = p.areaMetrosQuadrados; // GUARDA A ÁREA IMPORTADA
+
     _nomeFazendaController.text = p.nomeFazenda ?? '';
     _talhaoParcelaController.text = p.nomeTalhao ?? '';
     _idFazendaController.text = p.idFazenda ?? '';
@@ -182,17 +182,26 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       _tipoParcelaSelecionado = 'Instalação';
     }
     
-    // Limpa os campos antes de preencher para evitar acúmulo de listeners
     _lado1Controller.clear();
     _lado2Controller.clear();
     
+    // Define a forma da parcela com base no que foi salvo
     _formaDaParcela = (p.formaParcela?.toLowerCase() == 'circular') 
         ? FormaParcela.circular 
         : FormaParcela.retangular;
 
+    // Lógica inteligente para preencher as dimensões
     if (_formaDaParcela == FormaParcela.circular) {
-      if (p.lado1 != null) _lado1Controller.text = p.lado1.toString().replaceAll('.', ',');
-    } else {
+      // Se o raio (lado1) não veio preenchido, mas a área sim...
+      if ((p.lado1 == null || p.lado1! <= 0) && p.areaMetrosQuadrados > 0) {
+          // ...calculamos o raio a partir da área.
+          final raioCalculado = math.sqrt(p.areaMetrosQuadrados / math.pi);
+          _lado1Controller.text = raioCalculado.toStringAsFixed(2).replaceAll('.', ',');
+      } else if (p.lado1 != null) {
+          // Se o raio já veio preenchido, apenas o exibimos.
+          _lado1Controller.text = p.lado1.toString().replaceAll('.', ',');
+      }
+    } else { // Caso seja retangular
       if (p.lado1 != null) _lado1Controller.text = p.lado1.toString().replaceAll('.', ',');
       if (p.lado2 != null) _lado2Controller.text = p.lado2.toString().replaceAll('.', ',');
     }
@@ -200,6 +209,15 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     if (p.latitude != null && p.longitude != null) {
       _posicaoAtualExibicao = Position(latitude: p.latitude!, longitude: p.longitude!, timestamp: DateTime.now(), accuracy: 0.0, altitude: 0.0, altitudeAccuracy: 0.0, heading: 0.0, headingAccuracy: 0.0, speed: 0.0, speedAccuracy: 0.0);
     }
+
+    // Garante que a área seja exibida corretamente após o preenchimento automático
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if(mounted) {
+        setState(() {
+          _atualizarCalculosAutomaticos();
+        });
+      }
+    });
   }
 
   @override
@@ -256,7 +274,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       idFazenda: _idFazendaController.text.trim().isNotEmpty ? _idFazendaController.text.trim() : null,
       nomeTalhao: _talhaoParcelaController.text.trim(),
       observacao: _observacaoController.text.trim(),
-      areaMetrosQuadrados: areaFinalParaSalvar,
+      areaMetrosQuadrados: areaFinalParaSalvar > 0 ? areaFinalParaSalvar : _areaAlvoDaParcela,
       referenciaRf: _referenciaRfController.text.trim(),
       tipoParcela: _tipoParcelaSelecionado,
       formaParcela: _formaDaParcela.name,
@@ -458,6 +476,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       if (mounted) {
         setState(() {
           _parcelaAtual = parcelaSalva;
+          _areaAlvoDaParcela = parcelaSalva.areaMetrosQuadrados; // Atualiza a área alvo
         });
         if(showSnackbar) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alterações salvas com sucesso!'), backgroundColor: Colors.green));
@@ -488,6 +507,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     final parcelaSalva = await _parcelaRepository.saveFullColeta(parcelaParaNavegar, _parcelaAtual.arvores);
     setState(() {
       _parcelaAtual = parcelaSalva;
+      _areaAlvoDaParcela = parcelaSalva.areaMetrosQuadrados; // Atualiza a área alvo
       _salvando = false;
     });
     
@@ -695,11 +715,15 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
   Widget _buildCalculadoraArea(double areaInclinada, double areaHorizontal) {
     String? helperTextLado2;
-    if (_parcelaAtual.areaMetrosQuadrados > 0 && 
+    if (_areaAlvoDaParcela > 0 && 
         _lado1Controller.text.isNotEmpty) {
-      helperTextLado2 = 'Calc. p/ atingir ${_parcelaAtual.areaMetrosQuadrados.toStringAsFixed(0)}m² horiz.';
+      helperTextLado2 = 'Calc. p/ atingir ${_areaAlvoDaParcela.toStringAsFixed(0)}m² horiz.';
     }
-
+    
+    final double areaParaExibir = (areaInclinada <= 0 && _areaAlvoDaParcela > 0)
+        ? _areaAlvoDaParcela
+        : areaInclinada;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -716,7 +740,11 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
               _formaDaParcela = newSelection.first; 
               _lado1Controller.clear();
               _lado2Controller.clear();
-              _declividadeController.clear();
+              // Se mudou para circular e temos uma área alvo, calcula o raio na hora!
+              if (_formaDaParcela == FormaParcela.circular && _areaAlvoDaParcela > 0) {
+                final raioCalculado = math.sqrt(_areaAlvoDaParcela / math.pi);
+                _lado1Controller.text = raioCalculado.toStringAsFixed(2).replaceAll('.', ',');
+              }
             });
           },
         ),
@@ -770,11 +798,11 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
         Container(
           width: double.infinity, padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: areaInclinada > 0 ? Colors.green[50] : Colors.grey[200], borderRadius: BorderRadius.circular(4), border: Border.all(color: areaInclinada > 0 ? Colors.green : Colors.grey)),
+          decoration: BoxDecoration(color: areaParaExibir > 0 ? Colors.green[50] : Colors.grey[200], borderRadius: BorderRadius.circular(4), border: Border.all(color: areaParaExibir > 0 ? Colors.green : Colors.grey)),
           child: Column(children: [ 
             const Text('Área Inclinada (Medida):'), 
-            Text('${areaInclinada.toStringAsFixed(2)} m²', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: areaInclinada > 0 ? Colors.green[800] : Colors.black)),
-            if (areaHorizontal != areaInclinada) ...[
+            Text('${areaParaExibir.toStringAsFixed(2)} m²', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: areaParaExibir > 0 ? Colors.green[800] : Colors.black)),
+            if (areaHorizontal != areaInclinada && areaInclinada > 0) ...[
               const SizedBox(height: 8),
               const Text('Área Horizontal (Corrigida):'),
               Text('${areaHorizontal.toStringAsFixed(2)} m²', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue[800])),

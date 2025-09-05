@@ -1,9 +1,10 @@
 // lib/services/import/planejamento_import_strategy.dart
 
 import 'package:geoforestv1/models/parcela_model.dart';
-import 'csv_import_strategy.dart'; // Importa a base
+import 'csv_import_strategy.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
-import 'package:geoforestv1/data/datasources/local/database_helper.dart'; // Para proj4
+import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+
 
 class PlanejamentoImportStrategy extends BaseImportStrategy {
   PlanejamentoImportStrategy({required super.txn, required super.projeto, super.nomeDoResponsavel});
@@ -53,12 +54,28 @@ class PlanejamentoImportStrategy extends BaseImportStrategy {
           }
       }
 
+      // --- LÓGICA INTELIGENTE DE ÁREA E FORMA ---
+      final lado1 = double.tryParse(BaseImportStrategy.getValue(row, ['lado 1', 'lado1'])?.replaceAll(',', '.') ?? '');
+      final lado2 = double.tryParse(BaseImportStrategy.getValue(row, ['lado 2', 'lado2'])?.replaceAll(',', '.') ?? '');
+      final areaDoCsv = double.tryParse(BaseImportStrategy.getValue(row, ['áreaparcela', 'areaparcela'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0;
+      
+      String formaFinal = 'Retangular';
+      double areaFinal = areaDoCsv;
+
+      if (areaDoCsv > 0 && (lado1 == null || lado1 <= 0) && (lado2 == null || lado2 <= 0)) {
+        formaFinal = 'Circular';
+      } else if (lado1 != null && lado2 != null && lado1 > 0 && lado2 > 0) {
+        areaFinal = lado1 * lado2; // Calcula a área se os lados forem fornecidos
+      }
+      // --- FIM DA LÓGICA ---
+
       final novaParcela = Parcela(
         talhaoId: talhao.id!, 
         idParcela: idParcelaColeta,
         status: StatusParcela.pendente,
         dataColeta: DateTime.now(),
-        areaMetrosQuadrados: double.tryParse(BaseImportStrategy.getValue(row, ['áreaparcela', 'areaparcela'])?.replaceAll(',', '.') ?? '0.0') ?? 0.0,
+        areaMetrosQuadrados: areaFinal, // <-- Usa a área final
+        formaParcela: formaFinal,       // <-- Usa a forma final
         idFazenda: talhao.fazendaId,
         nomeFazenda: talhao.fazendaNome, 
         nomeTalhao: talhao.nome,
@@ -67,8 +84,8 @@ class PlanejamentoImportStrategy extends BaseImportStrategy {
         ciclo: BaseImportStrategy.getValue(row, ['ciclo']),
         rotacao: int.tryParse(BaseImportStrategy.getValue(row, ['rotação', 'rotacao']) ?? ''),
         tipoParcela: BaseImportStrategy.getValue(row, ['tipo']),
-        lado1: double.tryParse(BaseImportStrategy.getValue(row, ['lado 1'])?.replaceAll(',', '.') ?? ''),
-        lado2: double.tryParse(BaseImportStrategy.getValue(row, ['lado 2'])?.replaceAll(',', '.') ?? ''),
+        lado1: lado1,
+        lado2: lado2,
         declividade: double.tryParse(BaseImportStrategy.getValue(row, ['declividade', 'declividade_%'])?.replaceAll(',', '.') ?? ''),
         latitude: latitudeFinal,
         longitude: longitudeFinal,
