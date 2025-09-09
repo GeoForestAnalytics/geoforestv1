@@ -40,6 +40,7 @@ class SyncService {
 
   final List<SyncConflict> conflicts = [];
 
+  // <<< FUNÇÃO PRINCIPAL CORRIGIDA PARA PASSAR OS DADOS CORRETAMENTE >>>
   Future<void> sincronizarDados() async {
     conflicts.clear();
     final user = _auth.currentUser;
@@ -58,7 +59,7 @@ class SyncService {
       
       _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, mensagem: "Preparando sincronização..."));
 
-      // 1. UPLOAD
+      // 1. UPLOAD (sem alterações)
       if (licenseIdDoUsuarioLogado != null) {
         final cargo = (licenseDoc!.data()!['usuariosPermitidos'] as Map<String, dynamic>?)?[user.uid]?['cargo'] ?? 'equipe';
         if (cargo == 'gerente') {
@@ -70,11 +71,13 @@ class SyncService {
 
       _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, processados: totalGeral, mensagem: "Baixando dados da nuvem..."));
       
-      // 2. DOWNLOAD
+      // 2. DOWNLOAD (com as alterações)
       if (licenseIdDoUsuarioLogado != null) {
         debugPrint("--- SyncService: Baixando dados da licença PRÓPRIA: $licenseIdDoUsuarioLogado");
-        await _downloadHierarquiaCompleta(licenseIdDoUsuarioLogado);
-        await _downloadColetas(licenseIdDoUsuarioLogado);
+        // Captura os IDs retornados
+        final idsHierarquiaLocal = await _downloadHierarquiaCompleta(licenseIdDoUsuarioLogado);
+        // Passa a lista de IDs diretamente
+        await _downloadColetas(licenseIdDoUsuarioLogado, talhaoIdsParaBaixar: idsHierarquiaLocal);
       }
       
       final projetosDelegados = await _buscarProjetosDelegadosParaUsuario(user.uid);
@@ -82,8 +85,11 @@ class SyncService {
         final licenseIdDoCliente = entry.key;
         final projetosParaBaixar = entry.value;
         debugPrint("--- SyncService: Baixando dados delegados da licença do CLIENTE: $licenseIdDoCliente para os projetos $projetosParaBaixar");
-        await _downloadHierarquiaCompleta(licenseIdDoCliente, projetosParaBaixar: projetosParaBaixar);
-        await _downloadColetas(licenseIdDoCliente, projetosParaBaixar: projetosParaBaixar);
+        
+        // Captura os IDs retornados
+        final idsHierarquiaDelegada = await _downloadHierarquiaCompleta(licenseIdDoCliente, projetosParaBaixar: projetosParaBaixar);
+        // Passa a lista de IDs diretamente
+        await _downloadColetas(licenseIdDoCliente, talhaoIdsParaBaixar: idsHierarquiaDelegada);
       }
 
       String finalMessage = "Sincronização Concluída!";
@@ -303,26 +309,33 @@ class SyncService {
       }
   }
 
-  Future<void> _downloadHierarquiaCompleta(String licenseId, {List<int>? projetosParaBaixar}) async {
+  // <<< FUNÇÃO CORRIGIDA para retornar os IDs dos talhões que foram baixados >>>
+  Future<List<int>> _downloadHierarquiaCompleta(String licenseId, {List<int>? projetosParaBaixar}) async {
     final db = await _dbHelper.database;
+    final List<int> downloadedTalhaoIds = [];
+
     firestore.Query projetosQuery = _firestore.collection('clientes').doc(licenseId).collection('projetos');
     
     if (projetosParaBaixar != null && projetosParaBaixar.isNotEmpty) {
       for (var chunk in projetosParaBaixar.slices(10)) {
         final snap = await projetosQuery.where(firestore.FieldPath.documentId, whereIn: chunk.map((id) => id.toString()).toList()).get();
         for (var projDoc in snap.docs) {
-          await _processarProjetoDaNuvem(projDoc, licenseId, db);
+          final talhaoIds = await _processarProjetoDaNuvem(projDoc, licenseId, db);
+          downloadedTalhaoIds.addAll(talhaoIds);
         }
       }
     } else {
        final snap = await projetosQuery.get();
         for (var projDoc in snap.docs) {
-          await _processarProjetoDaNuvem(projDoc, licenseId, db);
+          final talhaoIds = await _processarProjetoDaNuvem(projDoc, licenseId, db);
+          downloadedTalhaoIds.addAll(talhaoIds);
         }
     }
+    return downloadedTalhaoIds;
   }
 
-  Future<void> _processarProjetoDaNuvem(firestore.QueryDocumentSnapshot projDoc, String licenseId, Database db) async {
+  // <<< FUNÇÃO CORRIGIDA para retornar os IDs dos talhões do projeto processado >>>
+  Future<List<int>> _processarProjetoDaNuvem(firestore.QueryDocumentSnapshot projDoc, String licenseId, Database db) async {
     final projetoData = projDoc.data() as Map<String, dynamic>; 
     final user = _auth.currentUser!;
     final licenseInfo = await _licensingService.findLicenseDocumentForUser(user);
@@ -333,33 +346,24 @@ class SyncService {
     await db.transaction((txn) async {
         await _upsert(txn, 'projetos', projeto.toMap(), 'id');
     });
-    await _downloadFilhosDeProjeto(licenseId, projeto.id!);
+    return await _downloadFilhosDeProjeto(licenseId, projeto.id!);
   }
   
-  Future<void> _downloadColetas(String licenseId, {List<int>? projetosParaBaixar}) async {
-    final db = await _dbHelper.database;
-    
-    // CORREÇÃO: Determina os IDs dos talhões relevantes com base nos projetos a serem baixados
-    List<int> talhaoIdsParaBaixar = [];
-    if (projetosParaBaixar != null && projetosParaBaixar.isNotEmpty) {
-        final talhoesFiltrados = await db.query('talhoes', where: 'projetoId IN (${projetosParaBaixar.join(',')})');
-        talhaoIdsParaBaixar = talhoesFiltrados.map((t) => t['id'] as int).toList();
-    } else {
-        // Se não há filtro, busca todos os talhões
-        final todosTalhoes = await db.query('talhoes');
-        talhaoIdsParaBaixar = todosTalhoes.map((t) => t['id'] as int).toList();
-    }
-
-    if (talhaoIdsParaBaixar.isEmpty) return; // Se nenhum talhão corresponde, não há o que baixar.
+  // <<< FUNÇÃO CORRIGIDA para receber a lista de talhões e não fazer uma nova busca >>>
+  Future<void> _downloadColetas(String licenseId, {required List<int> talhaoIdsParaBaixar}) async {
+    if (talhaoIdsParaBaixar.isEmpty) return;
 
     await _downloadParcelasDaNuvem(licenseId, talhaoIdsParaBaixar);
     await _downloadCubagensDaNuvem(licenseId, talhaoIdsParaBaixar);
   }
   
-  Future<void> _downloadFilhosDeProjeto(String licenseId, int projetoId) async {
+  // <<< FUNÇÃO CORRIGIDA para retornar os IDs dos talhões que ela salvou >>>
+  Future<List<int>> _downloadFilhosDeProjeto(String licenseId, int projetoId) async {
     final db = await _dbHelper.database;
+    final List<int> downloadedTalhaoIds = [];
+
     final atividadesSnap = await _firestore.collection('clientes').doc(licenseId).collection('atividades').where('projetoId', isEqualTo: projetoId).get();
-    if (atividadesSnap.docs.isEmpty) return;
+    if (atividadesSnap.docs.isEmpty) return [];
     for (var ativDoc in atividadesSnap.docs) {
       final atividade = Atividade.fromMap(ativDoc.data());
       await db.transaction((txn) async { await _upsert(txn, 'atividades', atividade.toMap(), 'id'); });
@@ -373,9 +377,13 @@ class SyncService {
           data['projetoId'] = atividade.projetoId; 
           final talhao = Talhao.fromMap(data);
           await db.transaction((txn) async { await _upsert(txn, 'talhoes', talhao.toMap(), 'id'); });
+          if (talhao.id != null) {
+            downloadedTalhaoIds.add(talhao.id!);
+          }
         }
       }
     }
+    return downloadedTalhaoIds;
   }
   
   Future<void> _downloadParcelasDaNuvem(String licenseId, List<int> talhaoIds) async {

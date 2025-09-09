@@ -13,6 +13,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/pages/projetos/detalhes_projeto_page.dart';
+import 'package:geoforestv1/providers/gerente_provider.dart'; // <<< IMPORT ADICIONADO AQUI
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/data/repositories/import_repository.dart';
 import 'package:geoforestv1/services/sync_service.dart';
@@ -235,7 +236,16 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
         // FORÇA A SINCRONIZAÇÃO COMPLETA PARA BAIXAR O NOVO PROJETO E SUA ESTRUTURA
         await _syncService.sincronizarDados(); 
         
-        // RECARREGA A LISTA DE PROJETOS DA TELA
+        // =========================================================================
+        // ======================= >>> INÍCIO DA CORREÇÃO <<< ======================
+        // APÓS SINCRONIZAR, FORÇAMOS O GERENTEPROVIDER A RECARREGAR SEUS DADOS
+        if (mounted) {
+          await context.read<GerenteProvider>().iniciarMonitoramento();
+        }
+        // ======================== >>> FIM DA CORREÇÃO <<< ========================
+        // =========================================================================
+        
+        // RECARREGA A LISTA DE PROJETOS DESTA TELA
         await _checkUserRoleAndLoadProjects();
 
       } else {
