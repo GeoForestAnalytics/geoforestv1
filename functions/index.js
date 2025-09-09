@@ -1,8 +1,8 @@
-// functions/index.js (VERSÃO FINAL, COMPLETA E REFINADA)
+// functions/index.js (VERSÃO FINAL, UNIFICADA E EM JAVASCRIPT)
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const { v4: uuidv4 } = require("uuid");
+const { v4: uuidv4 } = require("uuid"); // Para gerar chaves seguras
 
 admin.initializeApp();
 const auth = admin.auth();
@@ -10,7 +10,6 @@ const db = admin.firestore();
 
 // =========================================================================
 // FUNÇÃO 1: Atualiza os Custom Claims quando um documento de cliente muda
-// Disparada automaticamente pelo Firestore. Garante que as permissões estejam sempre sincronizadas.
 // =========================================================================
 exports.updateUserLicenseClaim = functions
     .region("southamerica-east1")
@@ -47,7 +46,6 @@ exports.updateUserLicenseClaim = functions
           });
           promises.push(promise);
           console.log(`Aplicando claims { licenseId: ${licenseId}, cargo: ${cargo} } para ${uid}`);
-
         } else if (userWasMemberBefore && !userIsMemberAfter) {
           const promise = auth.setCustomUserClaims(uid, { 
               licenseId: null, 
@@ -63,12 +61,11 @@ exports.updateUserLicenseClaim = functions
     });
 
 // =========================================================================
-// FUNÇÃO 2: Adiciona um novo membro à equipe (Chamada pelo app)
+// FUNÇÃO 2: Adiciona um novo membro à equipe
 // =========================================================================
 exports.adicionarMembroEquipe = functions
     .region("southamerica-east1")
     .https.onCall(async (data, context) => {
-      // Verificação de permissão robusta usando Custom Claims do token.
       if (!context.auth || !context.auth.token.licenseId || context.auth.token.cargo !== 'gerente') {
         throw new functions.https.HttpsError("permission-denied", "Apenas gerentes autenticados podem adicionar membros.");
       }
@@ -94,14 +91,12 @@ exports.adicionarMembroEquipe = functions
           adicionadoEm: admin.firestore.FieldValue.serverTimestamp()
         };
         
-        // Atualiza o mapa de usuários e o array de UIDs para otimizar buscas.
         await db.collection("clientes").doc(managerLicenseId).update({
             [`usuariosPermitidos.${userRecord.uid}`]: novoMembroData,
             "uidsPermitidos": admin.firestore.FieldValue.arrayUnion(userRecord.uid),
         });
 
         return { success: true, message: `Usuário '${name}' adicionado com sucesso!` };
-
       } catch (error) {
         console.error("Erro ao criar membro da equipe:", error);
         if (error.code === 'auth/email-already-exists') {
@@ -112,12 +107,11 @@ exports.adicionarMembroEquipe = functions
     });
 
 // =========================================================================
-// FUNÇÃO 3: Deleta um projeto e todos os seus dados (Chamada pelo app)
+// FUNÇÃO 3: Deleta um projeto (Soft Delete)
 // =========================================================================
 exports.deletarProjeto = functions
     .region("southamerica-east1")
     .https.onCall(async (data, context) => {
-      // Verificação de permissão robusta.
       if (!context.auth || !context.auth.token.licenseId || context.auth.token.cargo !== 'gerente') {
         throw new functions.https.HttpsError("permission-denied", "Apenas gerentes autenticados podem excluir projetos.");
       }
@@ -131,14 +125,9 @@ exports.deletarProjeto = functions
       const projetoRef = db.collection("clientes").doc(licenseId).collection('projetos').doc(projetoId.toString());
 
       try {
-        // <<< AQUI ESTÁ A MUDANÇA PRINCIPAL >>>
-        // Em vez de apagar, atualizamos o status para 'deletado'.
         await projetoRef.update({ status: 'deletado' });
-        
-        console.log(`Projeto ${projetoId} da licença ${licenseId} marcado como 'deletado' (soft delete).`);
-        
+        console.log(`Projeto ${projetoId} da licença ${licenseId} marcado como 'deletado'.`);
         return { success: true, message: "Projeto movido para a lixeira com sucesso." };
-
       } catch (error) {
         console.error(`Falha ao marcar projeto ${projetoId} como deletado:`, error);
         throw new functions.https.HttpsError("internal", "Ocorreu um erro interno ao tentar arquivar o projeto.");
@@ -146,12 +135,11 @@ exports.deletarProjeto = functions
     });
 
 // =========================================================================
-// FUNÇÃO 4: Gerar a chave de delegação (Ação do Gerente)
+// FUNÇÃO 4: Gerar a chave de delegação
 // =========================================================================
 exports.delegarProjeto = functions
     .region("southamerica-east1")
     .https.onCall(async (data, context) => {
-      // Verificação de permissão robusta.
       if (!context.auth || !context.auth.token.licenseId || context.auth.token.cargo !== 'gerente') {
         throw new functions.https.HttpsError("permission-denied", "Apenas gerentes podem delegar projetos.");
       }
@@ -162,16 +150,17 @@ exports.delegarProjeto = functions
       }
       
       const managerLicenseId = context.auth.token.licenseId;
-      const chaveId = uuidv4(); // Gera uma chave única e segura.
+      const chaveId = uuidv4();
       const chaveRef = db.collection("clientes").doc(managerLicenseId).collection("chavesDeDelegacao").doc(chaveId);
 
       await chaveRef.set({
+        chave: chaveId, // Armazena a chave no documento para facilitar buscas
         status: "pendente",
         licenseIdConvidada: null,
         empresaConvidada: "Aguardando Vínculo",
         dataCriacao: admin.firestore.FieldValue.serverTimestamp(),
         projetosPermitidos: [projetoId],
-        nomesProjetos: [nomeProjeto], // Guardar o nome facilita a exibição na UI do terceiro.
+        nomesProjetos: [nomeProjeto],
       });
 
       console.log(`Chave ${chaveId} gerada para o projeto ${projetoId} pela licença ${managerLicenseId}`);
@@ -179,25 +168,22 @@ exports.delegarProjeto = functions
     });
 
 // =========================================================================
-// FUNÇÃO 5: Vincular o projeto usando a chave (Ação do Terceiro)
+// FUNÇÃO 5: Vincular o projeto usando a chave
 // =========================================================================
 exports.vincularProjetoDelegado = functions
     .region("southamerica-east1")
     .https.onCall(async (data, context) => {
-      if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "Você precisa estar autenticado para vincular um projeto.");
+      if (!context.auth || !context.auth.token.licenseId) {
+        throw new functions.https.HttpsError("unauthenticated", "Você precisa estar autenticado e possuir uma licença para vincular um projeto.");
       }
 
-      // O UID do usuário que está vinculando se torna o ID da licença convidada.
-      const contractorLicenseId = context.auth.uid; 
+      const contractorLicenseId = context.auth.token.licenseId; 
       const { chave } = data;
-
       if (!chave) {
         throw new functions.https.HttpsError("invalid-argument", "Uma chave de delegação válida é necessária.");
       }
 
-      // Procura em todas as subcoleções 'chavesDeDelegacao' por um documento com o ID da chave.
-      const query = db.collectionGroup("chavesDeDelegacao").where(admin.firestore.FieldPath.documentId(), "==", chave);
+      const query = db.collectionGroup("chavesDeDelegacao").where("chave", "==", chave).limit(1);
       const snapshot = await query.get();
 
       if (snapshot.empty) {
@@ -206,6 +192,11 @@ exports.vincularProjetoDelegado = functions
 
       const doc = snapshot.docs[0];
       const docData = doc.data();
+      const managerLicenseId = doc.ref.parent.parent.id;
+
+      if (managerLicenseId === contractorLicenseId) {
+        throw new functions.https.HttpsError("invalid-argument", "Você não pode vincular um projeto de sua própria empresa.");
+      }
 
       if (docData.status !== "pendente") {
         throw new functions.https.HttpsError("already-exists", "Esta chave já foi utilizada ou foi revogada pelo administrador.");
@@ -214,7 +205,7 @@ exports.vincularProjetoDelegado = functions
       await doc.ref.update({
         status: "ativa",
         licenseIdConvidada: contractorLicenseId,
-        empresaConvidada: context.auth.token.name || context.auth.token.email, // Usa o nome ou email do usuário como identificação.
+        empresaConvidada: context.auth.token.name || context.auth.token.email,
         dataVinculo: admin.firestore.FieldValue.serverTimestamp(),
       });
 

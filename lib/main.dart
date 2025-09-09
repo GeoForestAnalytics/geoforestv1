@@ -1,4 +1,4 @@
-// lib/main.dart (VERSÃO CORRIGIDA)
+// lib/main.dart (VERSÃO FINAL OTIMIZADA E CORRIGIDA)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -50,6 +50,7 @@ void initializeProj4Definitions() {
   debugPrint("Definições Proj4 inicializadas/verificadas.");
 }
 
+// ✅ FUNÇÃO MAIN CORRIGIDA E OTIMIZADA
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   initializeProj4Definitions();
@@ -59,11 +60,20 @@ Future<void> main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
+  // 1. Inicializa o Firebase
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
   }
+
+  // 2. ATIVA O APP CHECK IMEDIATAMENTE APÓS A INICIALIZAÇÃO DO FIREBASE
+  // Esta é a forma correta, garantindo que todas as chamadas subsequentes sejam protegidas.
+  const androidProvider = kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity;
+  await FirebaseAppCheck.instance.activate(androidProvider: androidProvider);
+  print("Firebase App Check ativado com sucesso no main().");
+
+  // 3. Inicia o aplicativo
   runApp(const AppServicesLoader());
 }
 
@@ -82,12 +92,11 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
     _initializationFuture = _initializeAllServices();
   }
 
+  // ✅ MÉTODO DE INICIALIZAÇÃO SIMPLIFICADO E MAIS RÁPIDO
   Future<ThemeMode> _initializeAllServices() async {
     try {
-      await Future.delayed(const Duration(seconds: 2));
-      const androidProvider = kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity;
-      await FirebaseAppCheck.instance.activate(androidProvider: androidProvider);
-      print("Firebase App Check ativado com sucesso.");
+      // O App Check já foi ativado no main(), não precisa estar aqui.
+      // O delay artificial foi removido, pois não é mais necessário.
       await SystemChrome.setPreferredOrientations(
         [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown],
       );
@@ -144,7 +153,6 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TeamProvider()),
         ChangeNotifierProvider(create: (_) => LicenseProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider(initialThemeMode)),
-        
         ChangeNotifierProvider(create: (_) => GerenteProvider()),
 
         ChangeNotifierProxyProvider<GerenteProvider, DashboardFilterProvider>(
@@ -166,22 +174,17 @@ class MyApp extends StatelessWidget {
                   .where((p) => filter.selectedProjetoIds.contains(p.projetoId)).toList();
             }
             
-            // <<< INÍCIO DA CORREÇÃO >>>
-            // A lógica agora usa a nova propriedade 'selectedAtividadeTipos'
             if (filter.selectedAtividadeTipos.isNotEmpty) {
-              // Primeiro, encontramos os IDs de todas as atividades que correspondem aos tipos selecionados
               final idsDeAtividadesFiltradas = gerenteProvider.atividades
                   .where((a) => filter.selectedAtividadeTipos.contains(a.tipo))
                   .map((a) => a.id)
                   .toSet();
                   
-              // Depois, filtramos as parcelas, verificando se o ID da atividade da parcela está no conjunto de IDs que encontramos
               parcelasParaFiltroDeFazenda = parcelasParaFiltroDeFazenda.where((p) {
                 final atividadeId = gerenteProvider.talhaoToAtividadeMap[p.talhaoId];
                 return atividadeId != null && idsDeAtividadesFiltradas.contains(atividadeId);
               }).toList();
             }
-            // <<< FIM DA CORREÇÃO >>>
             
             filter.updateFazendasDisponiveis(parcelasParaFiltroDeFazenda);
             

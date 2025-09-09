@@ -1,4 +1,4 @@
-// lib/providers/license_provider.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/providers/license_provider.dart
 
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -11,7 +11,7 @@ class LicenseData {
   final DateTime? trialEndDate;
   final Map<String, dynamic> features;
   final Map<String, dynamic> limites;
-  final String cargo; // gerente ou equipe
+  final String cargo;
 
   LicenseData({
     required this.id,
@@ -74,16 +74,9 @@ class LicenseProvider with ChangeNotifier {
         final data = doc.data()!;
         final trialData = data['trial'] as Map<String, dynamic>?;
         
-        // --- CORREÇÃO PRINCIPAL AQUI ---
-        // 1. Pega o mapa completo de usuários
         final usuariosPermitidos = data['usuariosPermitidos'] as Map<String, dynamic>? ?? {};
-        
-        // 2. Pega o objeto (que também é um Map) específico do nosso usuário logado
         final dadosDoUsuario = usuariosPermitidos[user.uid] as Map<String, dynamic>?;
-
-        // 3. Lê a propriedade 'cargo' de dentro desse objeto
-        final cargoDoUsuario = dadosDoUsuario?['cargo'] as String? ?? 'equipe'; // Padrão 'equipe' por segurança
-        // ---------------------------------
+        final cargoDoUsuario = dadosDoUsuario?['cargo'] as String? ?? 'equipe';
 
         _licenseData = LicenseData(
           id: doc.id,
@@ -91,7 +84,7 @@ class LicenseProvider with ChangeNotifier {
           trialEndDate: (trialData?['dataFim'] as Timestamp?)?.toDate(),
           features: data['features'] ?? {},
           limites: data['limites'] ?? {},
-          cargo: cargoDoUsuario, // Salva o cargo lido corretamente
+          cargo: cargoDoUsuario,
         );
         _error = null;
       } else {

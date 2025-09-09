@@ -1,4 +1,4 @@
-// lib/services/licensing_service.dart (VERSÃO ATUALIZADA PARA O NOVO MODELO)
+// lib/services/licensing_service.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -16,41 +16,29 @@ class LicenseException implements Exception {
 class LicensingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // =======================================================================
-  // <<< 1. NOVA FUNÇÃO PARA ENCONTRAR A LICENÇA CORRETA >>>
-  // =======================================================================
-  /// Busca na coleção 'clientes' por um documento que contenha o UID do usuário no mapa 'usuariosPermitidos'.
-  // --- SUBSTITUA ESTA FUNÇÃO PELA VERSÃO CORRIGIDA ABAIXO ---
-Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User user) async {
-  print('--- DEBUG: Buscando licença para o UID: ${user.uid}');
-  
-  // <<< MUDANÇA PRINCIPAL: A CONSULTA AGORA É MUITO MAIS ROBUSTA E EFICIENTE >>>
-  // Usamos 'array-contains' para buscar o UID do usuário no novo campo de array.
-  final query = _firestore
-      .collection('clientes')
-      .where('uidsPermitidos', arrayContains: user.uid)
-      .limit(1);
+  Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User user) async {
+    print('--- DEBUG: Buscando licença para o UID: ${user.uid}');
+    
+    final query = _firestore
+        .collection('clientes')
+        .where('uidsPermitidos', arrayContains: user.uid)
+        .limit(1);
 
-  final snapshot = await query.get();
+    final snapshot = await query.get();
 
-  if (snapshot.docs.isNotEmpty) {
-    print('--- DEBUG: Licença encontrada! Documento ID: ${snapshot.docs.first.id}');
-    return snapshot.docs.first;
+    if (snapshot.docs.isNotEmpty) {
+      print('--- DEBUG: Licença encontrada! Documento ID: ${snapshot.docs.first.id}');
+      return snapshot.docs.first;
+    }
+    
+    print('--- DEBUG: NENHUMA licença encontrada para este UID.');
+    return null;
   }
-  
-  print('--- DEBUG: NENHUMA licença encontrada para este UID.');
-  return null;
-}
 
-  // =======================================================================
-  // <<< 2. MÉTODO PRINCIPAL ATUALIZADO >>>
-  // =======================================================================
   Future<void> checkAndRegisterDevice(User user) async {
-    // Usa a nova função de busca em vez de acessar o documento diretamente pelo UID.
     final clienteDoc = await findLicenseDocumentForUser(user);
 
     if (clienteDoc == null || !clienteDoc.exists) {
-      // A mensagem de erro agora é mais clara para o novo contexto.
       throw LicenseException('Sua conta não está associada a nenhuma licença ativa. Contate o administrador da sua empresa.');
     }
 
@@ -58,7 +46,6 @@ Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User 
     final statusAssinatura = clienteData['statusAssinatura'];
     final limites = clienteData['limites'] as Map<String, dynamic>?;
 
-    // A lógica de verificação de status (ativa/trial) permanece a mesma e está correta.
     bool acessoPermitido = false;
     if (statusAssinatura == 'ativa') {
       acessoPermitido = true;
@@ -82,7 +69,6 @@ Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User 
       throw LicenseException('Os limites do seu plano não estão configurados corretamente.');
     }
 
-    // A lógica de registro do dispositivo já está correta e pode ser mantida.
     final tipoDispositivo = kIsWeb ? 'desktop' : 'smartphone';
     final deviceId = await _getDeviceId();
 
@@ -94,7 +80,7 @@ Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User 
     final dispositivoExistente = await dispositivosAtivosRef.doc(deviceId).get();
 
     if (dispositivoExistente.exists) {
-      return; // Dispositivo já conhecido.
+      return;
     }
 
     final contagemAtualSnapshot = await dispositivosAtivosRef.where('tipo', isEqualTo: tipoDispositivo).count().get();
@@ -113,16 +99,11 @@ Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User 
       'nomeDispositivo': await _getDeviceName(),
     });
   }
-
-  // =======================================================================
-  // <<< 3. MÉTODO AUXILIAR ATUALIZADO PARA CONSISTÊNCIA >>>
-  // =======================================================================
-  // Removemos o parâmetro 'userEmail' que não era mais necessário.
+  
   Future<Map<String, int>> getDeviceUsage() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return {'smartphone': 0, 'desktop': 0};
 
-    // Reutiliza a mesma lógica de busca.
     final clienteDoc = await findLicenseDocumentForUser(user);
     if (clienteDoc == null || !clienteDoc.exists) {
       return {'smartphone': 0, 'desktop': 0};
@@ -131,7 +112,6 @@ Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User 
     return _getDeviceCountFromDoc(clienteDoc.reference);
   }
   
-  // As funções abaixo não precisam de alterações.
   Future<Map<String, int>> _getDeviceCountFromDoc(DocumentReference docRef) async {
     final dispositivosAtivosRef = docRef.collection('dispositivosAtivos');
     final smartphoneCount = (await dispositivosAtivosRef.where('tipo', isEqualTo: 'smartphone').count().get()).count ?? 0;
@@ -153,18 +133,7 @@ Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User 
     }
     return null;
   }
-  Future<List<DocumentSnapshot<Map<String, dynamic>>>> findAllLicenseDocumentsForUser(User user) async {
-  print('--- DEBUG: Buscando TODAS as licenças para o UID: ${user.uid}');
-  final query = _firestore
-      .collection('clientes')
-      .where('usuariosPermitidos.${user.uid}', isNotEqualTo: null);
-
-  final snapshot = await query.get();
-
-  print('--- DEBUG: ${snapshot.docs.length} licenças encontradas para este UID.');
-  return snapshot.docs; // Retorna a lista completa
-}
-
+  
   Future<String> _getDeviceName() async {
      final deviceInfo = DeviceInfoPlugin();
       if (kIsWeb) return 'Navegador Web';

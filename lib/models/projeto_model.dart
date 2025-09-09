@@ -1,4 +1,4 @@
-// lib/models/projeto_model.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/models/projeto_model.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -10,7 +10,7 @@ class Projeto {
   final String responsavel;
   final DateTime dataCriacao;
   final String status;
-  final String? delegadoPorLicenseId;
+  final String? delegadoPorLicenseId; // <-- NOVO CAMPO
   final DateTime? lastModified;
 
   Projeto({
@@ -21,7 +21,7 @@ class Projeto {
     required this.responsavel,
     required this.dataCriacao,
     this.status = 'ativo',
-    this.delegadoPorLicenseId,
+    this.delegadoPorLicenseId, // <-- NOVO CAMPO
     this.lastModified,
   });
 
@@ -33,7 +33,7 @@ class Projeto {
     String? responsavel,
     DateTime? dataCriacao,
     String? status,
-    String? delegadoPorLicenseId,
+    String? delegadoPorLicenseId, // <-- NOVO CAMPO
     DateTime? lastModified,
   }) {
     return Projeto(
@@ -44,7 +44,7 @@ class Projeto {
       responsavel: responsavel ?? this.responsavel,
       dataCriacao: dataCriacao ?? this.dataCriacao,
       status: status ?? this.status,
-      delegadoPorLicenseId: delegadoPorLicenseId ?? this.delegadoPorLicenseId,
+      delegadoPorLicenseId: delegadoPorLicenseId ?? this.delegadoPorLicenseId, // <-- NOVO CAMPO
       lastModified: lastModified ?? this.lastModified,
     );
   }
@@ -58,13 +58,12 @@ class Projeto {
       'responsavel': responsavel,
       'dataCriacao': dataCriacao.toIso8601String(),
       'status': status,
-      'delegado_por_license_id': delegadoPorLicenseId,
+      'delegado_por_license_id': delegadoPorLicenseId, // <-- NOVO CAMPO
       'lastModified': lastModified?.toIso8601String(),
     };
   }
 
   factory Projeto.fromMap(Map<String, dynamic> map) {
-    // <<< INÍCIO DA CORREÇÃO >>>
     DateTime? parseDate(dynamic value) {
       if (value is Timestamp) {
         return value.toDate();
@@ -73,7 +72,6 @@ class Projeto {
       }
       return null;
     }
-    // <<< FIM DA CORREÇÃO >>>
 
     final dataCriacao = parseDate(map['dataCriacao']);
     if (dataCriacao == null) {
@@ -88,7 +86,7 @@ class Projeto {
       responsavel: map['responsavel'],
       dataCriacao: dataCriacao,
       status: map['status'] ?? 'ativo',
-      delegadoPorLicenseId: map['delegado_por_license_id'],
+      delegadoPorLicenseId: map['delegado_por_license_id'], // <-- NOVO CAMPO
       lastModified: parseDate(map['lastModified']),
     );
   }

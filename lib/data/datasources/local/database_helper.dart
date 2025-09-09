@@ -1,10 +1,11 @@
-// lib/data/datasources/local/database_helper.dart (VERSÃO COM AS SUAS MELHORIAS)
+// lib/data/datasources/local/database_helper.dart
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+// ... (o mapa proj4Definitions continua o mesmo)
 final Map<int, String> proj4Definitions = {
   31978: '+proj=utm +zone=18 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
   31979: '+proj=utm +zone=19 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
@@ -29,7 +30,6 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      // Versão do banco permanece 48
       version: 48,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
@@ -40,7 +40,7 @@ class DatabaseHelper {
   Future<void> _onConfigure(Database db) async => await db.execute('PRAGMA foreign_keys = ON');
 
   Future<void> _onCreate(Database db, int version) async {
-    // ... (CREATEs de projetos, atividades, fazendas, talhoes)
+    // A tabela projetos agora inclui as novas colunas
     await db.execute('''
       CREATE TABLE projetos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,6 +55,7 @@ class DatabaseHelper {
         lastModified TEXT NOT NULL 
       )
     ''');
+    // ... O restante do _onCreate continua exatamente o mesmo da sua versão estável ...
     await db.execute('''
       CREATE TABLE atividades (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,8 +99,6 @@ class DatabaseHelper {
         FOREIGN KEY (fazendaId, fazendaAtividadeId) REFERENCES fazendas (id, atividadeId) ON DELETE CASCADE
       )
     ''');
-    
-    // <<< MELHORIA 1 APLICADA: Coluna 'declividade' adicionada ao CREATE TABLE >>>
     await db.execute('''
       CREATE TABLE parcelas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,13 +130,11 @@ class DatabaseHelper {
         forma_parcela TEXT,
         lado1 REAL,
         lado2 REAL,
-        declividade REAL, -- <<< COLUNA ADICIONADA AQUI
+        declividade REAL,
         lastModified TEXT NOT NULL,
         FOREIGN KEY (talhaoId) REFERENCES talhoes (id) ON DELETE CASCADE
       )
     ''');
-    
-    // ... (CREATEs de arvores, cubagens_arvores, etc. permanecem os mesmos)
     await db.execute('''
       CREATE TABLE arvores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -235,8 +232,6 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_arvores_parcelaId ON arvores(parcelaId)');
     await db.execute('CREATE INDEX idx_cubagens_secoes_cubagemArvoreId ON cubagens_secoes(cubagemArvoreId)');
   }
-
-
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     for (var v = oldVersion + 1; v <= newVersion; v++) {
       debugPrint("Executando migração de banco de dados para a versão $v...");

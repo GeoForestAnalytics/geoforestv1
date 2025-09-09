@@ -1,4 +1,4 @@
-// lib/pages/projetos/lista_projetos_page.dart (VERSÃO COM SOFT DELETE E CORREÇÃO DE IMPORTAÇÃO)
+// lib/pages/projetos/lista_projetos_page.dart (VERSÃO FINAL COM DELEGAÇÃO E SYNC CORRIGIDOS)
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -16,6 +16,7 @@ import 'package:geoforestv1/pages/projetos/detalhes_projeto_page.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/data/repositories/import_repository.dart';
 import 'package:geoforestv1/services/sync_service.dart';
+import 'package:geoforestv1/widgets/progress_dialog.dart';
 import 'form_projeto_page.dart';
 
 class ListaProjetosPage extends StatefulWidget {
@@ -63,14 +64,11 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       _isLoading = true;
     });
 
-    List<Projeto> data;
-    final licenseId = licenseProvider.licenseData!.id; 
-
-    if (_isGerente) {
-      data = await _projetoRepository.getTodosOsProjetosParaGerente();
-    } else {
-      data = await _projetoRepository.getTodosProjetos(licenseId);
-    }
+    // A lógica de busca local já contempla os projetos delegados,
+    // pois eles são baixados pela sincronização.
+    // Usamos getTodosOsProjetosParaGerente para garantir que vejamos todos os projetos,
+    // incluindo os delegados que podem ter um licenseId diferente.
+    final data = await _projetoRepository.getTodosOsProjetosParaGerente();
     
     final projetosVisiveis = data.where((p) => p.status != 'deletado').toList();
 
@@ -160,7 +158,8 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     );
 
     if (confirmar != true || !mounted) return;
-    setState(() => _isLoading = true);
+    
+    ProgressDialog.show(context, 'Gerando chave...');
 
     try {
       final functions = FirebaseFunctions.instanceFor(region: 'southamerica-east1');
@@ -172,7 +171,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
 
       final chave = result.data['chave'];
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      ProgressDialog.hide(context);
 
       await showDialog(
         context: context,
@@ -202,12 +201,12 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       );
     } on FirebaseFunctionsException catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        ProgressDialog.hide(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro [${e.code}]: ${e.message}"), backgroundColor: Colors.red));
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        ProgressDialog.hide(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro inesperado: $e"), backgroundColor: Colors.red));
       }
     }
@@ -215,33 +214,47 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
 
   Future<void> _vincularProjetoComChave(String chave) async {
     if (chave.trim().isEmpty) return;
-    Navigator.of(context).pop();
-    setState(() => _isLoading = true);
+    Navigator.of(context).pop(); // Fecha o diálogo de inserir chave
+    
+    ProgressDialog.show(context, 'Vinculando projeto...');
 
     try {
       final functions = FirebaseFunctions.instanceFor(region: 'southamerica-east1');
       final callable = functions.httpsCallable('vincularProjetoDelegado' );
-      await callable.call({'chave': chave.trim()});
+      final result = await callable.call({'chave': chave.trim()});
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Projeto vinculado! Sincronizando para baixar os dados..."),
-        backgroundColor: Colors.green,
-      ));
       
-      await _syncService.sincronizarDados();
-      await _checkUserRoleAndLoadProjects();
+      if (result.data['success'] == true) {
+        ProgressDialog.hide(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Projeto vinculado! Sincronizando para baixar os dados..."),
+          backgroundColor: Colors.green,
+        ));
+        
+        // FORÇA A SINCRONIZAÇÃO COMPLETA PARA BAIXAR O NOVO PROJETO E SUA ESTRUTURA
+        await _syncService.sincronizarDados(); 
+        
+        // RECARREGA A LISTA DE PROJETOS DA TELA
+        await _checkUserRoleAndLoadProjects();
 
+      } else {
+        ProgressDialog.hide(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(result.data['message'] ?? 'Ocorreu um erro desconhecido ao vincular.'),
+          backgroundColor: Colors.red,
+        ));
+      }
     } on FirebaseFunctionsException catch (e) {
-       if (mounted) {
+      if (mounted) {
+        ProgressDialog.hide(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro [${e.code}]: ${e.message}"), backgroundColor: Colors.red));
       }
     } catch (e) {
        if (mounted) {
+        ProgressDialog.hide(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro inesperado: $e"), backgroundColor: Colors.red));
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -289,32 +302,19 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
 
     if (!mounted) return;
     
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Text("Processando arquivo..."),
-          ],
-        ),
-      ),
-    );
+    ProgressDialog.show(context, "Processando arquivo...");
 
     try {
       final file = File(result.files.single.path!);
       final csvContent = await file.readAsString();
       
-      // <<< CORREÇÃO APLICADA AQUI >>>
       final message = await _importRepository.importarCsvUniversal(
         csvContent: csvContent, 
         projetoIdAlvo: projeto.id!
       );
       
       if (mounted) {
-        Navigator.of(context).pop();
+        ProgressDialog.hide(context);
         await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -323,11 +323,11 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
             actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
           ),
         );
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(); // Fecha a lista de projetos e volta ao menu
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop();
+        ProgressDialog.hide(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erro ao importar: $e'), backgroundColor: Colors.red),
         );
@@ -376,7 +376,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       .then((_) => _checkUserRoleAndLoadProjects());
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -406,13 +405,14 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
             motion: const DrawerMotion(),
             extentRatio: _isGerente ? (isDelegado ? 0.25 : 0.75) : 0.25,
             children: [
-              SlidableAction(
-                onPressed: (_) => _navegarParaEdicao(projeto),
-                backgroundColor: Colors.blue.shade700,
-                foregroundColor: Colors.white,
-                icon: Icons.edit_outlined,
-                label: 'Editar',
-              ),
+              if(!isDelegado)
+                SlidableAction(
+                  onPressed: (_) => _navegarParaEdicao(projeto),
+                  backgroundColor: Colors.blue.shade700,
+                  foregroundColor: Colors.white,
+                  icon: Icons.edit_outlined,
+                  label: 'Editar',
+                ),
               if (_isGerente)
                 SlidableAction(
                   onPressed: (_) => _toggleArchiveStatus(projeto),
@@ -444,7 +444,9 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
                   _navegarParaDetalhes(projeto);
                 }
               },
-              onLongPress: () => _toggleSelection(projeto.id!),
+              onLongPress: () {
+                if(_isGerente) _toggleSelection(projeto.id!);
+              },
               leading: Icon(
                 isSelected ? Icons.check_circle : 
                 isArchived ? Icons.archive_rounded :
