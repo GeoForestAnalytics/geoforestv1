@@ -1,4 +1,4 @@
-// lib/pages/menu/home_page.dart (VERSÃO COM EXPORTAÇÃO SIMPLIFICADA)
+// lib/pages/menu/home_page.dart (VERSÃO CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +9,6 @@ import 'package:geoforestv1/pages/menu/configuracoes_page.dart';
 import 'package:geoforestv1/pages/projetos/lista_projetos_page.dart';
 import 'package:geoforestv1/pages/planejamento/selecao_atividade_mapa_page.dart';
 import 'package:geoforestv1/pages/menu/paywall_page.dart';
-import 'package:geoforestv1/providers/map_provider.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/services/export_service.dart';
 import 'package:geoforestv1/widgets/menu_card.dart';
@@ -70,13 +69,11 @@ class _HomePageState extends State<HomePage> {
       MaterialPageRoute(builder: (context) => const AnaliseSelecaoPage()),
     );
   }
-
-  // <<< FUNÇÃO DE EXPORTAÇÃO REFINADA E SIMPLIFICADA >>>
+  
+  // <<< INÍCIO DA ALTERAÇÃO >>>
   void _mostrarDialogoExportacao(BuildContext context) {
-    // Instancia o serviço
     final exportService = ExportService();
 
-    // Função auxiliar para evitar repetição de código ao perguntar o tipo de exportação
     void _mostrarDialogoTipo(BuildContext mainDialogContext, {required Function() onNovas, required Function() onTodas}) {
         showDialog(
             context: mainDialogContext,
@@ -87,15 +84,15 @@ class _HomePageState extends State<HomePage> {
                     TextButton(
                         child: const Text('Apenas Novas'),
                         onPressed: () {
-                            Navigator.of(dialogCtx).pop(); // Fecha o diálogo de alerta
-                            onNovas(); // Executa a função para exportar novos dados
+                            Navigator.of(dialogCtx).pop(); 
+                            onNovas(); 
                         },
                     ),
                     ElevatedButton(
                         child: const Text('Todas (Backup)'),
                         onPressed: () {
-                            Navigator.of(dialogCtx).pop(); // Fecha o diálogo de alerta
-                            onTodas(); // Executa a função para exportar todos os dados
+                            Navigator.of(dialogCtx).pop();
+                            onTodas();
                         },
                     ),
                 ],
@@ -116,8 +113,7 @@ class _HomePageState extends State<HomePage> {
             leading: const Icon(Icons.table_rows_outlined, color: Colors.green),
             title: const Text('Coletas de Parcela (CSV)'),
             onTap: () {
-              Navigator.of(ctx).pop(); // Fecha o BottomSheet
-              // Chama a função auxiliar passando os métodos corretos do serviço
+              Navigator.of(ctx).pop(); 
               _mostrarDialogoTipo(
                   context,
                   onNovas: () => exportService.exportarDados(context),
@@ -129,7 +125,7 @@ class _HomePageState extends State<HomePage> {
             leading: const Icon(Icons.table_chart_outlined, color: Colors.brown),
             title: const Text('Cubagens Rigorosas (CSV)'),
             onTap: () {
-              Navigator.of(ctx).pop(); // Fecha o BottomSheet
+              Navigator.of(ctx).pop();
               _mostrarDialogoTipo(
                   context,
                   onNovas: () => exportService.exportarNovasCubagens(context),
@@ -137,19 +133,12 @@ class _HomePageState extends State<HomePage> {
               );
             },
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.map_outlined, color: Colors.purple),
-            title: const Text('Plano de Amostragem (GeoJSON)'),
-            onTap: () {
-              Navigator.of(ctx).pop();
-              context.read<MapProvider>().exportarPlanoDeAmostragem(context);
-            },
-          ),
+          // A opção de exportar GeoJSON foi removida desta lista.
         ],
       ),
     );
   }
+  // <<< FIM DA ALTERAÇÃO >>>
 
   void _mostrarAvisoDeUpgrade(BuildContext context, String featureName) {
     showDialog(
@@ -177,8 +166,8 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final licenseProvider = context.watch<LicenseProvider>();
-    final bool podeExportar = licenseProvider.licenseData?.features['exportacao'] ?? true; // Default true para teste
-    final bool podeAnalisar = licenseProvider.licenseData?.features['analise'] ?? true; // Default true para teste
+    final bool podeExportar = licenseProvider.licenseData?.features['exportacao'] ?? true;
+    final bool podeAnalisar = licenseProvider.licenseData?.features['analise'] ?? true;
 
     return Scaffold(
       appBar: widget.showAppBar ? AppBar(title: Text(widget.title)) : null,
@@ -291,14 +280,7 @@ class _HomePageState extends State<HomePage> {
                 }
 
                 if (mounted) {
-                  // <<< INÍCIO DA CORREÇÃO >>>
-                  // Após a sincronização, independentemente de quem seja o usuário,
-                  // forçamos o GerenteProvider a recarregar todos os dados do banco local.
-                  // Isso garante que tanto o cliente (Empresa A) quanto o contratado (Empresa B)
-                  // tenham seus dashboards atualizados com a nova hierarquia e as novas coletas.
                   context.read<GerenteProvider>().iniciarMonitoramento();
-                  // <<< FIM DA CORREÇÃO >>>
-
                   setState(() => _isSyncing = false);
                 }
               });

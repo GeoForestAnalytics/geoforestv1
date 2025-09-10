@@ -182,6 +182,7 @@ class MyApp extends StatelessWidget {
           final appRouter = AppRouter(
             loginController: context.read<LoginController>(),
             licenseProvider: context.read<LicenseProvider>(),
+            teamProvider: context.read<TeamProvider>(), // ✅ 2. ADICIONE ESTA LINHA
           ).router;
 
           // ✅ 3. MUDANÇA PARA `MaterialApp.router`

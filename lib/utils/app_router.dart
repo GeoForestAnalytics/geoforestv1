@@ -21,19 +21,22 @@ import 'package:geoforestv1/pages/atividades/atividades_page.dart';
 import 'package:geoforestv1/pages/atividades/detalhes_atividade_page.dart';
 import 'package:geoforestv1/pages/fazenda/detalhes_fazenda_page.dart';
 import 'package:geoforestv1/pages/talhoes/detalhes_talhao_page.dart';
+import 'package:geoforestv1/providers/team_provider.dart';
 
 
 class AppRouter {
   final LoginController loginController;
   final LicenseProvider licenseProvider;
+  final TeamProvider teamProvider; // ✅ 2. ADICIONE A PROPRIEDADE
 
   AppRouter({
     required this.loginController,
     required this.licenseProvider,
+    required this.teamProvider, // ✅ 3. ADICIONE AO CONSTRUTOR
   });
 
   late final GoRouter router = GoRouter(
-    refreshListenable: Listenable.merge([loginController, licenseProvider]),
+    refreshListenable: Listenable.merge([loginController, licenseProvider, teamProvider]), // ✅ 4. ADICIONE AO REFRESH
     initialLocation: '/splash',
     
     routes: [
@@ -148,14 +151,26 @@ class AppRouter {
         return currentRoute == '/paywall' ? null : '/paywall';
       }
       
-      if (currentRoute == '/login' || currentRoute == '/splash') {
-        if (license.cargo == 'gerente') {
-          return '/gerente_home';
-        } else {
-          return '/equipe';
-        }
+      // ✅ 6. NOVA LÓGICA COMPLETA DE REDIRECIONAMENTO
+      final bool isGerente = license.cargo == 'gerente';
+      final bool precisaIdentificarEquipe = !isGerente && (teamProvider.lider == null || teamProvider.lider!.isEmpty);
+      
+      // Se precisa ir para a tela de equipe, mas já está lá, não faz nada.
+      if (precisaIdentificarEquipe && currentRoute == '/equipe') {
+        return null;
+      }
+      // Se precisa ir para a tela de equipe, força o redirecionamento.
+      if (precisaIdentificarEquipe) {
+        return '/equipe';
+      }
+
+      // Se o usuário está logado e já passou das telas iniciais, mas tenta voltar para elas...
+      if (currentRoute == '/login' || currentRoute == '/splash' || currentRoute == '/equipe') {
+        // ...manda ele para a home correta.
+        return isGerente ? '/gerente_home' : '/home';
       }
       
+      // Se nenhuma das condições acima for atendida, permite a navegação.
       return null;
     },
     

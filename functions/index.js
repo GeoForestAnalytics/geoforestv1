@@ -167,6 +167,7 @@ exports.delegarProjeto = functions
 // =========================================================================
 exports.vincularProjetoDelegado = functions
     .region("southamerica-east1")
+    .runWith({ enforceAppCheck: true })
     .https.onCall(async (data, context) => {
       // Verifica se o usuário está autenticado
       if (!context.auth) {

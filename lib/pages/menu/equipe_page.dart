@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'package:geoforestv1/providers/team_provider.dart';
 
 class EquipePage extends StatefulWidget {
@@ -40,7 +41,7 @@ class _EquipePageState extends State<EquipePage> {
       );
 
       if (mounted) {
-        Navigator.pushReplacementNamed(context, '/home');
+        context.go('/home');
       }
     }
   }
