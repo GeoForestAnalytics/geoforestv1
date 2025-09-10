@@ -39,6 +39,19 @@ class AtividadeRepository {
     return List.generate(maps.length, (i) => Atividade.fromMap(maps[i]));
   }
 
+  Future<Atividade?> getAtividadeById(int id) async {
+    final db = await _dbHelper.database;
+    final maps = await db.query(
+      'atividades',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (maps.isNotEmpty) {
+      return Atividade.fromMap(maps.first);
+    }
+    return null;
+  }
+
   Future<void> deleteAtividade(int id) async {
     final db = await _dbHelper.database;
     await db.delete('atividades', where: 'id = ?', whereArgs: [id]);

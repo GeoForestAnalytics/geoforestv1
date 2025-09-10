@@ -1,10 +1,10 @@
-// lib/utils/app_router.dart (VERSÃO CORRIGIDA)
+// lib/utils/app_router.dart (VERSÃO COM ROTA DE DETALHES DA ATIVIDADE)
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 
-// Imports dos Providers necessários para a lógica de redirecionamento
+// Imports dos Providers
 import 'package:geoforestv1/controller/login_controller.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 
@@ -17,13 +17,12 @@ import 'package:geoforestv1/pages/projetos/lista_projetos_page.dart';
 import 'package:geoforestv1/pages/menu/paywall_page.dart';
 import 'package:geoforestv1/pages/gerente/gerente_main_page.dart';
 import 'package:geoforestv1/pages/gerente/gerente_map_page.dart';
+import 'package:geoforestv1/pages/projetos/detalhes_projeto_page.dart';
+import 'package:geoforestv1/pages/atividades/atividades_page.dart';
+import 'package:geoforestv1/pages/atividades/detalhes_atividade_page.dart'; // ✅ IMPORT ADICIONADO
 
 
-/// Configuração centralizada de navegação para o aplicativo.
 class AppRouter {
-  
-  // ✅ 1. TORNAR OS PROVIDERS ACESSÍVEIS NA CLASSE
-  // Em vez de passar o context, passamos as instâncias dos providers diretamente.
   final LoginController loginController;
   final LicenseProvider licenseProvider;
 
@@ -33,16 +32,11 @@ class AppRouter {
   });
 
   late final GoRouter router = GoRouter(
-    // ✅ 2. FAZER O ROUTER "OUVIR" AS MUDANÇAS NOS PROVIDERS
-    // O `refreshListenable` é o gatilho que faltava. Ele diz ao go_router:
-    // "Sempre que o LoginController ou o LicenseProvider notificarem uma mudança,
-    // reavalie a lógica de `redirect`".
-    // Usamos um `Listenable.merge` para combinar os dois em um único "ouvinte".
     refreshListenable: Listenable.merge([loginController, licenseProvider]),
-
     initialLocation: '/splash',
     
     routes: [
+      // ... (outras rotas permanecem iguais)
       GoRoute(
         path: '/splash',
         builder: (context, state) => const SplashPage(),
@@ -60,10 +54,6 @@ class AppRouter {
         builder: (context, state) => const HomePage(title: 'Geo Forest Analytics'),
       ),
       GoRoute(
-        path: '/lista_projetos',
-        builder: (context, state) => const ListaProjetosPage(title: 'Meus Projetos'),
-      ),
-      GoRoute(
         path: '/paywall',
         builder: (context, state) => const PaywallPage(),
       ),
@@ -75,17 +65,44 @@ class AppRouter {
         path: '/gerente_map',
         builder: (context, state) => const GerenteMapPage(),
       ),
+
+      GoRoute(
+        path: '/projetos',
+        builder: (context, state) => const ListaProjetosPage(title: 'Meus Projetos'),
+        routes: [
+          GoRoute(
+            path: ':projetoId',
+            builder: (context, state) {
+              final projetoId = int.tryParse(state.pathParameters['projetoId'] ?? '') ?? 0;
+              return DetalhesProjetoPage(projetoId: projetoId);
+            },
+            routes: [
+              GoRoute(
+                path: 'atividades',
+                builder: (context, state) {
+                   final projetoId = int.tryParse(state.pathParameters['projetoId'] ?? '') ?? 0;
+                   return AtividadesPage(projetoId: projetoId);
+                },
+                // ✅ NOVA SUB-ROTA ANINHADA PARA OS DETALHES DA ATIVIDADE
+                routes: [
+                  // Ex: /projetos/123/atividades/456
+                  GoRoute(
+                    path: ':atividadeId',
+                    builder: (context, state) {
+                      final atividadeId = int.tryParse(state.pathParameters['atividadeId'] ?? '') ?? 0;
+                      // Passa o ID para a página de detalhes da atividade
+                      return DetalhesAtividadePage(atividadeId: atividadeId);
+                    },
+                  ),
+                ]
+              ),
+            ]
+          ),
+        ],
+      ),
     ],
 
-    // A mágica do redirecionamento acontece aqui
     redirect: (BuildContext context, GoRouterState state) {
-      
-      // ✅ 3. LÓGICA DE REDIRECIONAMENTO AJUSTADA
-      // A lógica interna continua a mesma, mas agora ela será executada
-      // nos momentos certos: na inicialização e sempre que o login ou a licença mudarem.
-
-      // Se o LoginController ainda não terminou sua verificação inicial,
-      // ficamos na tela de splash.
       if (!loginController.isInitialized) {
         return '/splash';
       }
@@ -93,26 +110,17 @@ class AppRouter {
       final bool isLoggedIn = loginController.isLoggedIn;
       final String currentRoute = state.matchedLocation;
 
-      // 1. Lógica de Autenticação
       if (!isLoggedIn) {
         return currentRoute == '/login' ? null : '/login';
       }
 
-      // 2. Lógica de Licença (só executa se o usuário já estiver logado)
       if (licenseProvider.isLoading) {
         return '/splash';
       }
       
-      if (licenseProvider.error != null) {
-        // Se houver um erro na licença, o AuthCheck no main.dart (que removemos)
-        // exibia uma tela de erro. Podemos simular isso ou criar uma rota de erro.
-        // Por enquanto, ficamos na tela atual.
-        return null;
-      }
-
       final license = licenseProvider.licenseData;
       if (license == null) {
-        return '/login'; // Algo deu errado, força o logout.
+        return '/login';
       }
       
       final bool isLicenseOk = (license.status == 'ativa' || license.status == 'trial');
@@ -121,7 +129,6 @@ class AppRouter {
         return currentRoute == '/paywall' ? null : '/paywall';
       }
       
-      // 3. Lógica de Redirecionamento Pós-Login e Pós-Licença OK
       if (currentRoute == '/login' || currentRoute == '/splash') {
         if (license.cargo == 'gerente') {
           return '/gerente_home';

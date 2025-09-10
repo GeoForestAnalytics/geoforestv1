@@ -1,4 +1,4 @@
-// lib/pages/talhoes/detalhes_talhao_page.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/pages/talhoes/detalhes_talhao_page.dart (VERSÃO FINAL COM GO_ROUTER)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
@@ -11,33 +11,45 @@ import 'package:geoforestv1/pages/amostra/coleta_dados_page.dart';
 import 'package:geoforestv1/pages/cubagem/cubagem_dados_page.dart';
 import 'package:geoforestv1/utils/navigation_helper.dart';
 
+// Repositórios
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
+import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 
 class DetalhesTalhaoPage extends StatefulWidget {
-  final Talhao talhao;
-  final Atividade atividade;
+  // ✅ CONSTRUTOR MODIFICADO
+  final int atividadeId;
+  final int talhaoId;
 
-  const DetalhesTalhaoPage(
-      {super.key, required this.talhao, required this.atividade});
+  const DetalhesTalhaoPage({
+    super.key,
+    required this.atividadeId,
+    required this.talhaoId,
+  });
 
   @override
   State<DetalhesTalhaoPage> createState() => _DetalhesTalhaoPageState();
 }
 
 class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
-  late Future<List<dynamic>> _dataFuture;
-  
+  // ✅ INSTÂNCIAS DOS REPOSITÓRIOS
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
   final _talhaoRepository = TalhaoRepository();
+  final _atividadeRepository = AtividadeRepository();
+
+  // ✅ ESTADO COM FUTURES
+  late Future<List<dynamic>> _pageDataFuture;
+  late Future<List<dynamic>> _coletasFuture;
 
   bool _isSelectionMode = false;
   final Set<int> _selectedItens = {};
 
-  bool get _isAtividadeDeInventario {
-    final tipo = widget.atividade.tipo.toLowerCase();
+  // Função auxiliar para verificar tipo de atividade
+  bool _isAtividadeDeInventario(Atividade? atividade) {
+    if (atividade == null) return false;
+    final tipo = atividade.tipo.toLowerCase();
     return tipo.contains("ipc") ||
         tipo.contains("ifc") ||
         tipo.contains("inventário");
@@ -54,35 +66,39 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
       setState(() {
         _isSelectionMode = false;
         _selectedItens.clear();
-        if (_isAtividadeDeInventario) {
-          _dataFuture = _parcelaRepository.getParcelasDoTalhao(widget.talhao.id!);
-        } else {
-          _dataFuture = _cubagemRepository.getTodasCubagensDoTalhao(widget.talhao.id!);
-        }
+        _pageDataFuture = Future.wait([
+          _talhaoRepository.getTalhaoById(widget.talhaoId),
+          _atividadeRepository.getAtividadeById(widget.atividadeId),
+        ]);
+
+        _pageDataFuture.then((data) {
+          final Atividade? atividade = data.length > 1 ? data[1] as Atividade? : null;
+          if (mounted) {
+            setState(() {
+              if (_isAtividadeDeInventario(atividade)) {
+                _coletasFuture = _parcelaRepository.getParcelasDoTalhao(widget.talhaoId);
+              } else {
+                _coletasFuture = _cubagemRepository.getTodasCubagensDoTalhao(widget.talhaoId);
+              }
+            });
+          }
+        });
       });
     }
   }
 
-  Future<void> _navegarParaNovaParcela() async {
-    final talhaoCompleto = await _talhaoRepository.getTalhaoById(widget.talhao.id!);
-
-    if (!mounted || talhaoCompleto == null) return;
-
+  Future<void> _navegarParaNovaParcela(Talhao talhao) async {
     final bool? recarregar = await Navigator.push(
       context,
-      MaterialPageRoute(
-          builder: (context) => ColetaDadosPage(talhao: talhaoCompleto)),
+      MaterialPageRoute(builder: (context) => ColetaDadosPage(talhao: talhao)),
     );
-
-    if (recarregar == true && mounted) {
-      _carregarDados();
-    }
+    if (recarregar == true && mounted) _carregarDados();
   }
 
-  Future<void> _deleteSelectedItems() async {
+  Future<void> _deleteSelectedItems(bool isInventario) async {
     if (_selectedItens.isEmpty || !mounted) return;
 
-    final itemType = _isAtividadeDeInventario ? 'parcelas' : 'cubagens';
+    final itemType = isInventario ? 'parcelas' : 'cubagens';
     final bool? confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -96,7 +112,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     );
 
     if (confirmar == true) {
-      if (_isAtividadeDeInventario) {
+      if (isInventario) {
         await _parcelaRepository.deletarMultiplasParcelas(_selectedItens.toList());
       } else {
         await _cubagemRepository.deletarMultiplasCubagens(_selectedItens.toList());
@@ -106,7 +122,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     }
   }
   
-  Future<void> _navegarParaNovaCubagem() async {
+  Future<void> _navegarParaNovaCubagem(Talhao talhao) async {
     final String? metodoEscolhido = await showDialog<String>(
       context: context,
       builder: (BuildContext context) {
@@ -140,9 +156,9 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     if (metodoEscolhido == null || !mounted) return;
 
     final arvoreCubagem = CubagemArvore(
-      talhaoId: widget.talhao.id,
-      nomeFazenda: widget.talhao.fazendaNome ?? 'N/A',
-      nomeTalhao: widget.talhao.nome,
+      talhaoId: talhao.id,
+      nomeFazenda: talhao.fazendaNome ?? 'N/A',
+      nomeTalhao: talhao.nome,
       identificador: 'Cubagem Avulsa',
     );
 
@@ -162,21 +178,18 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
   }
   
   Future<void> _navegarParaDetalhesParcela(Parcela parcela) async {
-    final recarregar = await Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ColetaDadosPage(parcelaParaEditar: parcela),
       ),
     );
-    if (recarregar == true && mounted) {
-      _carregarDados();
-    }
+    _carregarDados();
   }
   
-  Future<void> _navegarParaDetalhesCubagem(CubagemArvore arvore) async {
-    final metodoCorreto = arvore.metodoCubagem ?? widget.atividade.metodoCubagem ?? 'Fixas';
-
-    final resultado = await Navigator.push(
+  Future<void> _navegarParaDetalhesCubagem(CubagemArvore arvore, Atividade atividade) async {
+    final metodoCorreto = arvore.metodoCubagem ?? atividade.metodoCubagem ?? 'Fixas';
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => CubagemDadosPage(
@@ -185,10 +198,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
         ),
       ),
     );
-
-    if (resultado != null && mounted) {
-      _carregarDados();
-    }
+    _carregarDados();
   }
   
   void _toggleSelectionMode(int? itemId) {
@@ -212,15 +222,15 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     });
   }
 
-  AppBar _buildAppBar() {
+  AppBar _buildAppBar(Talhao? talhao, Atividade? atividade) {
     return AppBar(
-      title: Text('Talhão: ${widget.talhao.nome}'),
+      title: Text('Talhão: ${talhao?.nome ?? 'Carregando...'}'),
       actions: [
-        if (_isAtividadeDeInventario)
+        if (_isAtividadeDeInventario(atividade))
           IconButton(
             icon: const Icon(Icons.analytics_outlined),
             tooltip: 'Ver Análise do Talhão',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => TalhaoDashboardPage(talhao: widget.talhao))),
+            onPressed: talhao == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (context) => TalhaoDashboardPage(talhao: talhao))),
           ),
         IconButton(
           icon: const Icon(Icons.home_outlined),
@@ -246,83 +256,105 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
   
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: _isSelectionMode
-          ? AppBar(
-              leading: IconButton(icon: const Icon(Icons.close), onPressed: () => _toggleSelectionMode(null)),
-              title: Text('${_selectedItens.length} selecionados'),
-              actions: [IconButton(icon: const Icon(Icons.delete_outline), onPressed: _deleteSelectedItems, tooltip: 'Apagar Selecionados')],
-            )
-          : _buildAppBar(),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Card(
-            margin: const EdgeInsets.all(12.0),
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Detalhes do Talhão', style: Theme.of(context).textTheme.titleLarge),
-                  const Divider(height: 20),
-                  Text("Atividade: ${widget.atividade.tipo}", style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text("Fazenda: ${widget.talhao.fazendaNome ?? 'Não informada'}", style: Theme.of(context).textTheme.bodyLarge),
-                  const SizedBox(height: 8),
-                  Text("Espécie: ${widget.talhao.especie ?? 'Não informada'}", style: Theme.of(context).textTheme.bodyLarge),
-                ],
+    return FutureBuilder<List<dynamic>>(
+      future: _pageDataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
+          return Scaffold(appBar: AppBar(title: const Text('Erro')), body: Center(child: Text('Erro ao carregar dados: ${snapshot.error}')));
+        }
+
+        final Talhao? talhao = snapshot.data![0] as Talhao?;
+        final Atividade? atividade = snapshot.data![1] as Atividade?;
+
+        if (talhao == null || atividade == null) {
+          return Scaffold(appBar: AppBar(title: const Text('Erro')), body: const Center(child: Text('Não foi possível encontrar os dados do talhão ou atividade.')));
+        }
+
+        return Scaffold(
+          appBar: _isSelectionMode
+              ? AppBar(
+                  leading: IconButton(icon: const Icon(Icons.close), onPressed: () => _toggleSelectionMode(null)),
+                  title: Text('${_selectedItens.length} selecionados'),
+                  actions: [IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _deleteSelectedItems(_isAtividadeDeInventario(atividade)), tooltip: 'Apagar Selecionados')],
+                )
+              : _buildAppBar(talhao, atividade),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Card(
+                margin: const EdgeInsets.all(12.0),
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Detalhes do Talhão', style: Theme.of(context).textTheme.titleLarge),
+                      const Divider(height: 20),
+                      Text("Atividade: ${atividade.tipo}", style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Text("Fazenda: ${talhao.fazendaNome ?? 'Não informada'}", style: Theme.of(context).textTheme.bodyLarge),
+                      const SizedBox(height: 8),
+                      Text("Espécie: ${talhao.especie ?? 'Não informada'}", style: Theme.of(context).textTheme.bodyLarge),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
-          
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-            child: Text(
-              _isAtividadeDeInventario ? "Coletas de Parcela" : "Árvores para Cubagem",
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Theme.of(context).colorScheme.primary),
-            ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<dynamic>>(
-              future: _dataFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                if (snapshot.hasError) return Center(child: Text('Erro: ${snapshot.error}'));
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
+                child: Text(
+                  _isAtividadeDeInventario(atividade) ? "Coletas de Parcela" : "Árvores para Cubagem",
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Theme.of(context).colorScheme.primary),
+                ),
+              ),
+              Expanded(
+                child: FutureBuilder<List<dynamic>>(
+                  future: _coletasFuture,
+                  builder: (context, coletasSnapshot) {
+                    if (coletasSnapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (coletasSnapshot.hasError) {
+                      return Center(child: Text('Erro: ${coletasSnapshot.error}'));
+                    }
 
-                final itens = snapshot.data ?? [];
-                if (itens.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Text(
-                        _isAtividadeDeInventario
-                            ? 'Nenhuma parcela coletada.\nClique no botão "+" para iniciar.'
-                            : 'Nenhuma árvore para cubar.\nClique no botão "+" para adicionar uma cubagem manual.',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
-                    ),
-                  );
-                }
+                    final itens = coletasSnapshot.data ?? [];
+                    if (itens.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Text(
+                            _isAtividadeDeInventario(atividade)
+                                ? 'Nenhuma parcela coletada.\nClique no botão "+" para iniciar.'
+                                : 'Nenhuma árvore para cubar.\nClique no botão "+" para adicionar uma cubagem manual.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 16, color: Colors.grey),
+                          ),
+                        ),
+                      );
+                    }
 
-                return _isAtividadeDeInventario
-                    ? _buildListaDeParcelas(itens.cast<Parcela>())
-                    : _buildListaDeCubagens(itens.cast<CubagemArvore>());
-              },
-            ),
+                    return _isAtividadeDeInventario(atividade)
+                        ? _buildListaDeParcelas(itens.cast<Parcela>())
+                        : _buildListaDeCubagens(itens.cast<CubagemArvore>(), atividade);
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-      floatingActionButton: _isSelectionMode
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _isAtividadeDeInventario ? _navegarParaNovaParcela : _navegarParaNovaCubagem,
-              tooltip: _isAtividadeDeInventario ? 'Nova Parcela' : 'Nova Cubagem Manual',
-              icon: Icon(_isAtividadeDeInventario ? Icons.add_location_alt_outlined : Icons.add),
-              label: Text(_isAtividadeDeInventario ? 'Nova Parcela' : 'Nova Cubagem'),
-            ),
+          floatingActionButton: _isSelectionMode
+              ? null
+              : FloatingActionButton.extended(
+                  onPressed: () => _isAtividadeDeInventario(atividade) ? _navegarParaNovaParcela(talhao) : _navegarParaNovaCubagem(talhao),
+                  tooltip: _isAtividadeDeInventario(atividade) ? 'Nova Parcela' : 'Nova Cubagem Manual',
+                  icon: Icon(_isAtividadeDeInventario(atividade) ? Icons.add_location_alt_outlined : Icons.add),
+                  label: Text(_isAtividadeDeInventario(atividade) ? 'Nova Parcela' : 'Nova Cubagem'),
+                ),
+        );
+      },
     );
   }
 
@@ -340,7 +372,6 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
         final Color corFinal = foiExportada ? StatusParcela.exportada.cor : parcela.status.cor;
         final IconData iconeFinal = foiExportada ? StatusParcela.exportada.icone : parcela.status.icone;
 
-        // <<< LÓGICA DO TÍTULO ATUALIZADA >>>
         String titulo = 'Parcela ID: ${parcela.idParcela}';
         if (parcela.up != null && parcela.up!.isNotEmpty) {
           titulo = 'UP: ${parcela.up} / Parcela: ${parcela.idParcela}';
@@ -352,14 +383,12 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
           child: ListTile(
             onTap: () => _isSelectionMode ? _onItemSelected(parcela.dbId!) : _navegarParaDetalhesParcela(parcela),
             onLongPress: () => _toggleSelectionMode(parcela.dbId!),
-
             leading: CircleAvatar(
               backgroundColor: isSelected ? Theme.of(context).colorScheme.primary : corFinal,
               child: Icon(isSelected ? Icons.check : iconeFinal, color: Colors.white),
             ),
             title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text('Status: ${_traduzirStatus(statusFinal)}\nColetado em: $dataFormatada'),
-            
             trailing: _isSelectionMode
                 ? null
                 : IconButton(
@@ -367,7 +396,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
                     onPressed: () {
                       _selectedItens.clear();
                       _selectedItens.add(parcela.dbId!);
-                      _deleteSelectedItems();
+                      _deleteSelectedItems(true);
                     },
                   ),
             selected: isSelected,
@@ -377,7 +406,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     );
   }
 
-  Widget _buildListaDeCubagens(List<CubagemArvore> cubagens) {
+  Widget _buildListaDeCubagens(List<CubagemArvore> cubagens, Atividade atividade) {
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 80),
       itemCount: cubagens.length,
@@ -389,7 +418,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           color: isSelected ? Theme.of(context).colorScheme.primaryContainer.withAlpha(128) : null,
           child: ListTile(
-            onTap: () => _isSelectionMode ? _onItemSelected(arvore.id!) : _navegarParaDetalhesCubagem(arvore),
+            onTap: () => _isSelectionMode ? _onItemSelected(arvore.id!) : _navegarParaDetalhesCubagem(arvore, atividade),
             onLongPress: () => _toggleSelectionMode(arvore.id!),
             leading: CircleAvatar(
               backgroundColor: isConcluida ? Colors.green : (isSelected ? Theme.of(context).colorScheme.primary : Colors.grey),
@@ -404,7 +433,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
                     onPressed: () {
                       _selectedItens.clear();
                       _selectedItens.add(arvore.id!);
-                      _deleteSelectedItems();
+                      _deleteSelectedItems(false);
                     },
                   ),
             selected: isSelected,

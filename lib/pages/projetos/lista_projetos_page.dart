@@ -1,10 +1,11 @@
-// lib/pages/projetos/lista_projetos_page.dart (VERSÃO FINAL COM DELEGAÇÃO E SYNC CORRIGIDOS)
+// lib/pages/projetos/lista_projetos_page.dart (VERSÃO COM NAVEGAÇÃO GO_ROUTER)
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:go_router/go_router.dart'; // ✅ 1. IMPORTAR GO_ROUTER
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -12,8 +13,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 // Imports do projeto
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
-import 'package:geoforestv1/pages/projetos/detalhes_projeto_page.dart';
-import 'package:geoforestv1/providers/gerente_provider.dart'; // <<< IMPORT ADICIONADO AQUI
+// import 'package:geoforestv1/pages/projetos/detalhes_projeto_page.dart'; // Não é mais necessário aqui
+import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/data/repositories/import_repository.dart';
 import 'package:geoforestv1/services/sync_service.dart';
@@ -65,10 +66,6 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       _isLoading = true;
     });
 
-    // A lógica de busca local já contempla os projetos delegados,
-    // pois eles são baixados pela sincronização.
-    // Usamos getTodosOsProjetosParaGerente para garantir que vejamos todos os projetos,
-    // incluindo os delegados que podem ter um licenseId diferente.
     final data = await _projetoRepository.getTodosOsProjetosParaGerente();
     
     final projetosVisiveis = data.where((p) => p.status != 'deletado').toList();
@@ -81,6 +78,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     }
   }
 
+  // A maior parte dos métodos permanece igual...
   Future<void> _deletarProjetosSelecionados() async {
     if (_selectedProjetos.isEmpty || !mounted) return;
     if (!_isGerente) {
@@ -215,7 +213,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
 
   Future<void> _vincularProjetoComChave(String chave) async {
     if (chave.trim().isEmpty) return;
-    Navigator.of(context).pop(); // Fecha o diálogo de inserir chave
+    Navigator.of(context).pop();
     
     ProgressDialog.show(context, 'Vinculando projeto...');
 
@@ -233,19 +231,12 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
           backgroundColor: Colors.green,
         ));
         
-        // FORÇA A SINCRONIZAÇÃO COMPLETA PARA BAIXAR O NOVO PROJETO E SUA ESTRUTURA
         await _syncService.sincronizarDados(); 
         
-        // =========================================================================
-        // ======================= >>> INÍCIO DA CORREÇÃO <<< ======================
-        // APÓS SINCRONIZAR, FORÇAMOS O GERENTEPROVIDER A RECARREGAR SEUS DADOS
         if (mounted) {
           await context.read<GerenteProvider>().iniciarMonitoramento();
         }
-        // ======================== >>> FIM DA CORREÇÃO <<< ========================
-        // =========================================================================
         
-        // RECARREGA A LISTA DE PROJETOS DESTA TELA
         await _checkUserRoleAndLoadProjects();
 
       } else {
@@ -333,7 +324,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
             actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
           ),
         );
-        Navigator.of(context).pop(); // Fecha a lista de projetos e volta ao menu
+        Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
@@ -381,9 +372,11 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     }
   }
   
+  // ✅ MÉTODO DE NAVEGAÇÃO ATUALIZADO
   void _navegarParaDetalhes(Projeto projeto) {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => DetalhesProjetoPage(projeto: projeto)))
-      .then((_) => _checkUserRoleAndLoadProjects());
+    // Usamos context.go() para navegar para a rota definida no AppRouter.
+    // O '$' permite inserir o ID do projeto diretamente na string da rota.
+    context.go('/projetos/${projeto.id}');
   }
 
   @override
@@ -451,6 +444,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
                 } else if (_isSelectionMode) {
                   _toggleSelection(projeto.id!);
                 } else {
+                  // A chamada da função de navegação está aqui
                   _navegarParaDetalhes(projeto);
                 }
               },
