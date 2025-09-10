@@ -20,6 +20,7 @@ import 'package:geoforestv1/data/repositories/import_repository.dart';
 import 'package:geoforestv1/services/sync_service.dart';
 import 'package:geoforestv1/widgets/progress_dialog.dart';
 import 'form_projeto_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ListaProjetosPage extends StatefulWidget {
   final String title;
@@ -216,8 +217,10 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     Navigator.of(context).pop();
     
     ProgressDialog.show(context, 'Vinculando projeto...');
+    
 
     try {
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
       final functions = FirebaseFunctions.instanceFor(region: 'southamerica-east1');
       final callable = functions.httpsCallable('vincularProjetoDelegado' );
       final result = await callable.call({'chave': chave.trim()});
