@@ -8,6 +8,7 @@ import 'package:geoforestv1/data/repositories/analise_repository.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
+import 'package:geoforestv1/models/enums.dart'; // <<< 1. IMPORTAR ENUM
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/services/analysis_service.dart';
@@ -82,20 +83,18 @@ class CubagemRepository {
       throw Exception('Não há árvores suficientes neste talhão para gerar um plano.');
     }
 
-    // =========================================================================
-    // ========================== INÍCIO DA CORREÇÃO =========================
-    // A função 'getTalhaoInsights' espera 3 argumentos: talhao, parcelas e arvores.
-    // Você estava passando apenas 2.
-    // =========================================================================
     final analise = analysisService.getTalhaoInsights(talhao, parcelas, arvores);
-    // =========================================================================
-    // =========================== FIM DA CORREÇÃO ===========================
-    // =========================================================================
 
+    // <<< 2. CORREÇÃO APLICADA AQUI >>>
+    // A chamada agora usa os parâmetros nomeados corretamente.
+    // Como esta função não sabe a preferência do usuário, definimos um padrão (DAP).
     final plano = analysisService.gerarPlanoDeCubagem(
-        analise.distribuicaoDiametrica,
-        analise.totalArvoresAmostradas,
-        totalParaCubar);
+      distribuicaoAmostrada: analise.distribuicaoDiametrica,
+      totalArvoresAmostradas: analise.totalArvoresAmostradas,
+      totalArvoresParaCubar: totalParaCubar,
+      metrica: MetricaDistribuicao.dap, // Usando DAP como padrão para esta função
+    );
+    // <<< FIM DA CORREÇÃO >>>
 
     if (plano.isEmpty) {
       throw Exception(

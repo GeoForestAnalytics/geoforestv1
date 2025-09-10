@@ -1,4 +1,4 @@
-// lib/pages/dashboard/relatorio_comparativo_page.dart (COM VERIFICAÇÃO DE ÁREA)
+// lib/pages/dashboard/relatorio_comparativo_page.dart (VERSÃO FINAL COM OPÇÃO CAP/DAP)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -15,11 +15,13 @@ class PlanoConfig {
   final MetodoDistribuicaoCubagem metodoDistribuicao;
   final int quantidade;
   final String metodoCubagem; // 'Fixas' ou 'Relativas'
+  final MetricaDistribuicao metricaDistribuicao; // <<< CAMPO ADICIONADO
 
   PlanoConfig({
     required this.metodoDistribuicao,
     required this.quantidade,
     required this.metodoCubagem,
+    required this.metricaDistribuicao, // <<< ADICIONADO AO CONSTRUTOR
   });
 }
 
@@ -57,51 +59,49 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
     setState(() => _talhoesPorFazenda = grouped);
   }
   
-  // <<< LÓGICA DE VERIFICAÇÃO DE ÁREA ANTES DE EXPORTAR >>>
   Future<void> _verificarAreaEExportarPdf() async {
-  bool dadosIncompletos = _talhoesAtuais.any((t) => t.areaHa == null || t.areaHa! <= 0);
+    bool dadosIncompletos = _talhoesAtuais.any((t) => t.areaHa == null || t.areaHa! <= 0);
 
-  if (dadosIncompletos && mounted) {
-    final bool? querEditar = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Dados Incompletos'),
-        content: const Text('Um ou mais talhões não possuem a área (ha) cadastrada. Deseja editá-los agora para um relatório mais completo?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Exportar Mesmo Assim')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Editar Agora')),
-        ],
-      ),
-    );
+    if (dadosIncompletos && mounted) {
+      final bool? querEditar = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Dados Incompletos'),
+          content: const Text('Um ou mais talhões não possuem a área (ha) cadastrada. Deseja editá-los agora para um relatório mais completo?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Exportar Mesmo Assim')),
+            FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Editar Agora')),
+          ],
+        ),
+      );
 
-    if (querEditar == true) {
-      for (int i = 0; i < _talhoesAtuais.length; i++) {
-        var talhao = _talhoesAtuais[i];
-        if (talhao.areaHa == null || talhao.areaHa! <= 0) {
-          final bool? foiEditado = await Navigator.push<bool>(
-            context,
-            MaterialPageRoute(builder: (context) => FormTalhaoPage(
-              fazendaId: talhao.fazendaId,
-              fazendaAtividadeId: talhao.fazendaAtividadeId,
-              talhaoParaEditar: talhao,
-            )),
-          );
-          if (foiEditado == true) {
-            final talhaoAtualizado = await dbHelper.database.then((db) => db.query('talhoes', where: 'id = ?', whereArgs: [talhao.id]).then((maps) => Talhao.fromMap(maps.first)));
-            _talhoesAtuais[i] = talhaoAtualizado;
+      if (querEditar == true) {
+        for (int i = 0; i < _talhoesAtuais.length; i++) {
+          var talhao = _talhoesAtuais[i];
+          if (talhao.areaHa == null || talhao.areaHa! <= 0) {
+            final bool? foiEditado = await Navigator.push<bool>(
+              context,
+              MaterialPageRoute(builder: (context) => FormTalhaoPage(
+                fazendaId: talhao.fazendaId,
+                fazendaAtividadeId: talhao.fazendaAtividadeId,
+                talhaoParaEditar: talhao,
+              )),
+            );
+            if (foiEditado == true) {
+              final talhaoAtualizado = await dbHelper.database.then((db) => db.query('talhoes', where: 'id = ?', whereArgs: [talhao.id]).then((maps) => Talhao.fromMap(maps.first)));
+              _talhoesAtuais[i] = talhaoAtualizado;
+            }
           }
         }
+        _agruparTalhoes();
       }
-      _agruparTalhoes();
     }
-  }
   
-  // A chamada final é a mesma, mas agora o serviço fará o trabalho pesado da permissão.
-  await pdfService.gerarRelatorioUnificadoPdf(
-    context: context,
-    talhoes: _talhoesAtuais,
-  );
-}
+    await pdfService.gerarRelatorioUnificadoPdf(
+      context: context,
+      talhoes: _talhoesAtuais,
+    );
+  }
 
   Future<PlanoConfig?> _mostrarDialogoDeConfiguracaoLote() async {
     final quantidadeController = TextEditingController();
@@ -109,6 +109,7 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
     
     MetodoDistribuicaoCubagem metodoDistribuicao = MetodoDistribuicaoCubagem.fixoPorTalhao;
     String metodoCubagem = 'Fixas';
+    MetricaDistribuicao metricaSelecionada = MetricaDistribuicao.dap; 
 
     return showDialog<PlanoConfig>(
       context: context,
@@ -125,7 +126,21 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('1. Como distribuir as árvores?', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text('1. Métrica Base para Distribuição', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      SegmentedButton<MetricaDistribuicao>(
+                        segments: const [
+                          ButtonSegment(value: MetricaDistribuicao.dap, label: Text('DAP')),
+                          ButtonSegment(value: MetricaDistribuicao.cap, label: Text('CAP')),
+                        ],
+                        selected: {metricaSelecionada},
+                        onSelectionChanged: (newSelection) {
+                          setDialogState(() => metricaSelecionada = newSelection.first);
+                        },
+                      ),
+                      const Divider(height: 32),
+                      
+                      const Text('2. Como distribuir as árvores?', style: TextStyle(fontWeight: FontWeight.bold)),
                       RadioListTile<MetodoDistribuicaoCubagem>(
                         title: const Text('Quantidade Fixa por Talhão'),
                         value: MetodoDistribuicaoCubagem.fixoPorTalhao,
@@ -153,7 +168,8 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
                         validator: (v) => (v == null || v.isEmpty || int.tryParse(v) == null || int.parse(v) <= 0) ? 'Valor inválido' : null,
                       ),
                       const Divider(height: 32),
-                      const Text('2. Qual o método de medição?', style: TextStyle(fontWeight: FontWeight.bold)),
+
+                      const Text('3. Qual o método de medição?', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
                         value: metodoCubagem,
@@ -182,6 +198,7 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
                           metodoDistribuicao: metodoDistribuicao,
                           quantidade: int.parse(quantidadeController.text),
                           metodoCubagem: metodoCubagem,
+                          metricaDistribuicao: metricaSelecionada,
                         ),
                       );
                     }
@@ -213,6 +230,7 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
         metodo: config.metodoDistribuicao,
         quantidade: config.quantidade,
         metodoCubagem: config.metodoCubagem,
+        metrica: config.metricaDistribuicao, // <<< PASSANDO A MÉTRICA
       );
 
       if (!mounted) return;
@@ -234,6 +252,7 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
       await pdfService.gerarPdfUnificadoDePlanosDeCubagem(
         context: context, 
         planosPorTalhao: planosGerados,
+        metrica: config.metricaDistribuicao, // <<< PASSANDO A MÉTRICA
       );
 
     } catch (e) {

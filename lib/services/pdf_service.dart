@@ -11,6 +11,7 @@ import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
+import 'package:geoforestv1/models/enums.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/services/analysis_service.dart';
@@ -130,7 +131,6 @@ class PdfService {
       }
     }
   }
-
   //endregion
 
   //region Geradores de Relatórios PDF
@@ -387,6 +387,7 @@ class PdfService {
   Future<void> gerarPdfUnificadoDePlanosDeCubagem({
     required BuildContext context,
     required Map<Talhao, Map<String, int>> planosPorTalhao,
+    required MetricaDistribuicao metrica, // <<< PARÂMETRO ADICIONADO
   }) async {
     if (planosPorTalhao.isEmpty) {
       ScaffoldMessenger.of(context)
@@ -410,13 +411,13 @@ class PdfService {
             return [
               pw.SizedBox(height: 20),
               pw.Text(
-                'Plano de Cubagem Estratificada por Classe Diamétrica',
+                'Plano de Cubagem Estratificada por Classe',
                 style:
                     pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
                 textAlign: pw.TextAlign.center,
               ),
               pw.Divider(height: 20),
-              _buildTabelaPlano(plano),
+              _buildTabelaPlano(plano, metrica), // <<< PASSANDO A MÉTRICA
             ];
           },
         ),
@@ -475,7 +476,9 @@ class PdfService {
                 textAlign: pw.TextAlign.center,
               ),
               pw.Divider(height: 20),
-              _buildTabelaPlano(plano),
+              // <<< CORREÇÃO APLICADA AQUI >>>
+              // Adicionado o parâmetro 'metrica' que estava faltando, usando DAP como padrão.
+              _buildTabelaPlano(plano, MetricaDistribuicao.dap),
             ];
           },
         ),
@@ -995,64 +998,75 @@ class PdfService {
     );
   }
 
-  pw.Widget _buildTabelaPlano(Map<String, int> plano) {
-    final headers = ['Classe Diamétrica (CAP)', 'Nº de Árvores para Cubar'];
+   pw.Widget _buildTabelaPlano(Map<String, int> plano, MetricaDistribuicao metrica) {
+  final String headerText = metrica == MetricaDistribuicao.cap
+      ? 'Classe de CAP'
+      : 'Classe Diamétrica (DAP)';
 
-    if (plano.isEmpty) {
-      return pw.Center(child: pw.Text("Nenhum dado para gerar o plano."));
-    }
+  final headers = [headerText, 'Nº de Árvores para Cubar'];
 
-    final data =
-        plano.entries.map((entry) => [entry.key, entry.value.toString()]).toList();
-    final total = plano.values.fold(0, (a, b) => a + b);
-    data.add(['Total', total.toString()]);
-
-    return pw.Table(
-      border: pw.TableBorder.all(),
-      columnWidths: {
-        0: const pw.FlexColumnWidth(2),
-        1: const pw.FlexColumnWidth(1),
-      },
-      children: [
-        pw.TableRow(
-          decoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
-          children: headers
-              .map((header) => pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text(header,
-                        style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.white),
-                        textAlign: pw.TextAlign.center),
-                  ))
-              .toList(),
-        ),
-        ...data.asMap().entries.map((entry) {
-          final index = entry.key;
-          final rowData = entry.value;
-          final bool isLastRow = index == data.length - 1;
-
-          return pw.TableRow(
-            children: rowData.asMap().entries.map((cellEntry) {
-              final colIndex = cellEntry.key;
-              final cellText = cellEntry.value;
-              return pw.Padding(
-                padding: const pw.EdgeInsets.all(8),
-                child: pw.Text(
-                  cellText,
-                  textAlign:
-                      colIndex == 1 ? pw.TextAlign.center : pw.TextAlign.left,
-                  style: isLastRow
-                      ? pw.TextStyle(fontWeight: pw.FontWeight.bold)
-                      : const pw.TextStyle(),
-                ),
-              );
-            }).toList(),
-          );
-        }),
-      ],
-    );
+  if (plano.isEmpty) {
+    return pw.Center(child: pw.Text("Nenhum dado para gerar o plano."));
   }
+
+  final data =
+      plano.entries.map((entry) => [entry.key, entry.value.toString()]).toList();
+  final total = plano.values.fold(0, (a, b) => a + b);
+  data.add(['Total', total.toString()]);
+
+  // <<< INÍCIO DA CORREÇÃO >>>
+  // Construindo a tabela manualmente para ter controle total sobre o estilo.
+  return pw.Table(
+    border: pw.TableBorder.all(),
+    columnWidths: {
+      0: const pw.FlexColumnWidth(2),
+      1: const pw.FlexColumnWidth(1),
+    },
+    children: [
+      // Linha do Cabeçalho
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+        children: headers
+            .map((header) => pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Text(
+                    header,
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                    textAlign: pw.TextAlign.center,
+                  ),
+                ))
+            .toList(),
+      ),
+      // Linhas de Dados
+      ...data.asMap().entries.map((entry) {
+        final rowIndex = entry.key;
+        final rowData = entry.value;
+        final bool isLastRow = rowIndex == data.length - 1; // Verifica se é a linha "Total"
+
+        return pw.TableRow(
+          children: rowData.asMap().entries.map((cellEntry) {
+            final colIndex = cellEntry.key;
+            final cellText = cellEntry.value;
+            return pw.Padding(
+              padding: const pw.EdgeInsets.all(8),
+              child: pw.Text(
+                cellText,
+                // Alinha a segunda coluna (índice 1) ao centro
+                textAlign: colIndex == 1 ? pw.TextAlign.center : pw.TextAlign.left,
+                // Deixa a última linha (Total) em negrito
+                style: isLastRow
+                    ? pw.TextStyle(fontWeight: pw.FontWeight.bold)
+                    : const pw.TextStyle(),
+              ),
+            );
+          }).toList(),
+        );
+      }),
+    ],
+  );
+  // <<< FIM DA CORREÇÃO >>>
+}
 
   pw.Widget _buildTabelaSimulacaoPdf(
       TalhaoAnalysisResult antes, TalhaoAnalysisResult depois) {
