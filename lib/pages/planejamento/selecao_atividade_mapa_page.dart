@@ -11,7 +11,6 @@ import 'package:geoforestv1/models/projeto_model.dart';
 // ---------------------------------------------
 
 import 'package:geoforestv1/pages/menu/map_import_page.dart';
-import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/providers/map_provider.dart';
 
 // O import do database_helper foi removido.
@@ -44,23 +43,16 @@ class _SelecaoAtividadeMapaPageState extends State<SelecaoAtividadeMapaPage> {
 
   // --- MÉTODO ATUALIZADO ---
   Future<void> _carregarProjetos() async {
-    final licenseProvider = context.read<LicenseProvider>();
-    
-    if (licenseProvider.licenseData == null) {
-      if (mounted) {
-        setState(() {
-          _projetosFuture = Future.value([]);
-        });
-      }
-      return;
-    }
-
-    final licenseId = licenseProvider.licenseData!.id; 
+    // A lógica do LicenseProvider foi removida pois o repositório já lida com isso
+    // de forma mais genérica para o gerente.
 
     if (mounted) {
       setState(() {
-        // Usa o ProjetoRepository
-        _projetosFuture = _projetoRepository.getTodosProjetos(licenseId);
+        // <<< CORREÇÃO AQUI >>>
+        // Trocamos 'getTodosProjetos' por 'getTodosOsProjetosParaGerente'.
+        // Esta função busca TODOS os projetos visíveis para o usuário (próprios e delegados),
+        // sem filtrar pela licenseId do usuário logado.
+        _projetosFuture = _projetoRepository.getTodosOsProjetosParaGerente();
       });
     }
   }

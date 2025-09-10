@@ -121,53 +121,79 @@ class SyncService {
 
   Future<void> _uploadHierarquiaCompleta(String licenseId) async {
     final db = await _dbHelper.database;
-    final batch = _firestore.batch();
     
-    final projetosProprios = await db.query('projetos', where: 'delegado_por_license_id IS NULL AND licenseId = ?', whereArgs: [licenseId]);
-    if (projetosProprios.isEmpty) return;
+    // 1. Busca todos os projetos do banco de dados local.
+    final todosProjetosLocais = (await db.query('projetos')).map(Projeto.fromMap).toList();
+    if (todosProjetosLocais.isEmpty) return;
 
-    for (var p in projetosProprios) {
-      final docRef = _firestore.collection('clientes').doc(licenseId).collection('projetos').doc(p['id'].toString());
-      final map = Projeto.fromMap(p).toMap();
-      map['lastModified'] = firestore.FieldValue.serverTimestamp();
-      batch.set(docRef, map, firestore.SetOptions(merge: true));
-    }
-    
-    final projetosIds = projetosProprios.map((p) => p['id'] as int).toList();
-    if(projetosIds.isEmpty) { await batch.commit(); return; }
-    
-    final atividades = await db.query('atividades', where: 'projetoId IN (${projetosIds.join(',')})');
-    for (var a in atividades) {
-        final docRef = _firestore.collection('clientes').doc(licenseId).collection('atividades').doc(a['id'].toString());
+    // 2. Agrupa os projetos pelo seu "destino" na nuvem.
+    //    - Projetos próprios vão para a licença do usuário logado.
+    //    - Projetos delegados vão para a licença do cliente que os delegou.
+    final projetosPorDestino = groupBy<Projeto, String>(
+      todosProjetosLocais,
+      (projeto) => projeto.delegadoPorLicenseId ?? licenseId,
+    );
+
+    // 3. Itera sobre cada destino (cada licença para a qual temos que enviar dados).
+    for (final entry in projetosPorDestino.entries) {
+      final licenseIdDeDestino = entry.key;
+      final projetosParaEsteDestino = entry.value;
+      final batch = _firestore.batch();
+
+      debugPrint("SyncService: Enviando hierarquia para a licença de destino: $licenseIdDeDestino");
+
+      // 4. Adiciona os PROJETOS ao batch de upload.
+      for (var projeto in projetosParaEsteDestino) {
+        final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('projetos').doc(projeto.id.toString());
+        final map = projeto.toMap();
+        map['lastModified'] = firestore.FieldValue.serverTimestamp();
+        batch.set(docRef, map, firestore.SetOptions(merge: true));
+      }
+
+      final projetosIds = projetosParaEsteDestino.map((p) => p.id!).toList();
+      if (projetosIds.isEmpty) continue;
+
+      // 5. Busca e adiciona as ATIVIDADES relacionadas a esses projetos.
+      final atividades = await db.query('atividades', where: 'projetoId IN (${projetosIds.join(',')})');
+      for (var a in atividades) {
+        final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('atividades').doc(a['id'].toString());
         final map = Map<String, dynamic>.from(a);
         map['lastModified'] = firestore.FieldValue.serverTimestamp();
         batch.set(docRef, map, firestore.SetOptions(merge: true));
-    }
+      }
 
-    final atividadeIds = atividades.map((a) => a['id'] as int).toList();
-    if (atividadeIds.isEmpty) { await batch.commit(); return; }
-    
-    final fazendas = await db.query('fazendas', where: 'atividadeId IN (${atividadeIds.join(',')})');
-    for (var f in fazendas) {
-        final docId = "${f['id']}_${f['atividadeId']}";
-        final docRef = _firestore.collection('clientes').doc(licenseId).collection('fazendas').doc(docId);
-        final map = Map<String, dynamic>.from(f);
-        map['lastModified'] = firestore.FieldValue.serverTimestamp();
-        batch.set(docRef, map, firestore.SetOptions(merge: true));
-    }
+      final atividadeIds = atividades.map((a) => a['id'] as int).toList();
+      if (atividadeIds.isEmpty) {
+        await batch.commit();
+        continue; // Pula para a próxima licença de destino
+      }
+      
+      // 6. Busca e adiciona as FAZENDAS relacionadas a essas atividades.
+      final fazendas = await db.query('fazendas', where: 'atividadeId IN (${atividadeIds.join(',')})');
+      for (var f in fazendas) {
+          final docId = "${f['id']}_${f['atividadeId']}";
+          final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('fazendas').doc(docId);
+          final map = Map<String, dynamic>.from(f);
+          map['lastModified'] = firestore.FieldValue.serverTimestamp();
+          batch.set(docRef, map, firestore.SetOptions(merge: true));
+      }
 
-    final todosTalhoes = await db.query('talhoes');
-    final fazendasValidas = fazendas.map((f) => {'id': f['id'], 'atividadeId': f['atividadeId']}).toSet();
-    final talhoesParaEnviar = todosTalhoes.where((t) {
-        return fazendasValidas.any((f) => f['id'] == t['fazendaId'] && f['atividadeId'] == t['fazendaAtividadeId']);
-    });
-    for (var t in talhoesParaEnviar) {
-        final docRef = _firestore.collection('clientes').doc(licenseId).collection('talhoes').doc(t['id'].toString());
-        final map = Talhao.fromMap(t).toFirestoreMap();
-        map['lastModified'] = firestore.FieldValue.serverTimestamp();
-        batch.set(docRef, map, firestore.SetOptions(merge: true));
+      // 7. Busca e adiciona os TALHÕES relacionados a essas fazendas.
+      final todosTalhoes = await db.query('talhoes');
+      final fazendasValidas = fazendas.map((f) => {'id': f['id'], 'atividadeId': f['atividadeId']}).toSet();
+      final talhoesParaEnviar = todosTalhoes.where((t) {
+          return fazendasValidas.any((f) => f['id'] == t['fazendaId'] && f['atividadeId'] == t['fazendaAtividadeId']);
+      });
+      for (var t in talhoesParaEnviar) {
+          final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('talhoes').doc(t['id'].toString());
+          final map = Talhao.fromMap(t).toFirestoreMap();
+          map['lastModified'] = firestore.FieldValue.serverTimestamp();
+          batch.set(docRef, map, firestore.SetOptions(merge: true));
+      }
+
+      // 8. Envia todo o lote de dados de hierarquia para a licença de destino.
+      await batch.commit();
     }
-    await batch.commit();
   }
   
   Future<void> _uploadColetasNaoSincronizadas(String? licenseIdDoUsuarioLogado, int totalGeral) async {

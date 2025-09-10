@@ -68,6 +68,7 @@ class GerenteProvider with ChangeNotifier {
   }
 
   Future<void> iniciarMonitoramento() async {
+    // Cancela as inscrições antigas para evitar múltiplos listeners
     _dadosColetaSubscription?.cancel();
     _dadosCubagemSubscription?.cancel();
     _dadosDiarioSubscription?.cancel();
@@ -83,14 +84,18 @@ class GerenteProvider with ChangeNotifier {
       final licenseDoc = await _licensingService.findLicenseDocumentForUser(user);
       if (licenseDoc == null) throw Exception("Licença do usuário não encontrada.");
       
+      // 1. Pega o ID da licença própria do usuário logado.
       final ownLicenseId = licenseDoc.id;
+      
+      // 2. Busca no banco de dados local por IDs de licenças de clientes (projetos delegados).
       final delegatedLicenseIds = await _getDelegatedLicenseIds();
       
-      // Cria uma lista de todas as licenças que o app precisa "ouvir"
+      // 3. Combina as duas listas, removendo duplicatas, para criar a lista final de licenças a serem monitoradas.
       final allLicenseIdsToMonitor = {ownLicenseId, ...delegatedLicenseIds}.toList();
       
       debugPrint("--- [GerenteProvider] Iniciando monitoramento para as licenças: $allLicenseIdsToMonitor");
       
+      // Carrega a hierarquia local para referência (projetos, atividades, etc.)
       _projetos = await _projetoRepository.getTodosOsProjetosParaGerente();
       _projetos.sort((a, b) => a.nome.compareTo(b.nome));
       
@@ -99,10 +104,11 @@ class GerenteProvider with ChangeNotifier {
       
       await _buildAuxiliaryMaps();
 
-      // Passa a lista de IDs para os streams
+      // 4. Passa a LISTA COMPLETA de IDs para os streams do GerenteService.
+      // Agora, o stream ouvirá tanto a sua coleção no Firestore quanto as coleções dos seus clientes.
       _dadosColetaSubscription = _gerenteService.getDadosColetaStream(licenseIds: allLicenseIdsToMonitor).listen(
         (listaDeParcelas) async {
-          await _buildAuxiliaryMaps(); // Reconstrói mapas para garantir consistência
+          await _buildAuxiliaryMaps();
           _parcelasSincronizadas = listaDeParcelas.map((p) {
             final nomeFazenda = _fazendaIdToNomeMap[p.idFazenda] ?? p.nomeFazenda;
             final nomeTalhao = _talhaoIdToNomeMap[p.talhaoId] ?? p.nomeTalhao;

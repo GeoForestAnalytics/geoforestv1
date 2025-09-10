@@ -132,7 +132,8 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
   }
 
   List<List<dynamic>> rows = [];
-  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'UP', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_m2', 'Area_Corrigida_m2', 'Lado1_m', 'Lado2_m', 'Declividade_%', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Altura_Dano_m', 'Dominante']);
+  // Cabeçalho do CSV
+  rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'UP', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_Inclinada_m2', 'Area_Horizontal_m2', 'Lado1_m', 'Lado2_m', 'Declividade_Graus', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Altura_Dano_m', 'Dominante']);
   
   for (var pMap in payload.parcelasMap) {
     final p = Parcela.fromMap(pMap);
@@ -146,13 +147,18 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
     }
 
     // <<< INÍCIO DA CORREÇÃO >>>
-    // A área salva no banco (p.areaMetrosQuadrados) já é a área corrigida.
-    // Aqui, calculamos a área horizontal original apenas para fins de relatório.
-    double areaHorizontal = p.areaMetrosQuadrados;
+    // A área no banco (p.areaMetrosQuadrados) JÁ É a área horizontal (corrigida).
+    // Para obter a área inclinada original (medida), precisamos fazer o cálculo inverso.
+    double areaInclinada = p.areaMetrosQuadrados; // Assume que é igual se não houver declividade
     if (p.declividade != null && p.declividade! > 0) {
-        areaHorizontal = p.areaMetrosQuadrados / math.sqrt(1 + math.pow(p.declividade! / 100, 2));
+        // A declividade está em graus, então usamos cosseno.
+        final radianos = p.declividade! * (math.pi / 180.0);
+        if (math.cos(radianos) > 0) {
+          // areaHorizontal = areaInclinada * cos(radianos)
+          // Portanto: areaInclinada = areaHorizontal / cos(radianos)
+          areaInclinada = p.areaMetrosQuadrados / math.cos(radianos);
+        }
     }
-    // A variável 'areaCorrigida' foi removida pois era redundante. O valor corrigido já está em 'p.areaMetrosQuadrados'.
     // <<< FIM DA CORREÇÃO >>>
     
     final arvoresMap = payload.arvoresPorParcelaMap[p.dbId] ?? [];
@@ -160,19 +166,19 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
 
     final liderDaColeta = p.nomeLider ?? payload.nomeLider;
     if (arvores.isEmpty) {
-       rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, areaHorizontal.toStringAsFixed(2), p.areaMetrosQuadrados.toStringAsFixed(2), p.lado1, p.lado2, p.declividade, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null, null, null, null]);
+       // A linha agora usa as variáveis de área corretas e o cabeçalho foi ajustado
+       rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, areaInclinada.toStringAsFixed(2), p.areaMetrosQuadrados.toStringAsFixed(2), p.lado1, p.lado2, p.declividade, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null, null, null, null]);
     } else {
       Map<String, int> fusteCounter = {};
       for (final a in arvores) {
         String key = '${a.linha}-${a.posicaoNaLinha}';
         fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
-        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, areaHorizontal.toStringAsFixed(2), p.areaMetrosQuadrados.toStringAsFixed(2), p.lado1, p.lado2, p.declividade, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.alturaDano, a.dominante ? 'Sim' : 'Não']);
+        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, areaInclinada.toStringAsFixed(2), p.areaMetrosQuadrados.toStringAsFixed(2), p.lado1, p.lado2, p.declividade, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.alturaDano, a.dominante ? 'Sim' : 'Não']);
       }
     }
   }
   return const ListToCsvConverter().convert(rows, fieldDelimiter: ';');
 }
-
 Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
