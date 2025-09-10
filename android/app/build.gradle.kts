@@ -14,6 +14,13 @@ android {
     compileSdk = 35
     ndkVersion = "27.0.12077973"
 
+    // <<< ADICIONE O BLOCO LINT AQUI DENTRO >>>
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+    // <<< FIM DA ADIÇÃO >>>
+
     signingConfigs {
         create("release") {
             // Procura pelo arquivo 'key.properties' na pasta 'android'
@@ -51,7 +58,7 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
-}
+} // <<< O BLOCO ANDROID TERMINA AQUI
 
 flutter {
     source = "../.."

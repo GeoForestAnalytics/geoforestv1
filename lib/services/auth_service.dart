@@ -57,6 +57,7 @@ class AuthService { // A classe começa aqui
 
         final trialEndDate = DateTime.now().add(const Duration(days: 7));
         
+        // Dados para o documento da licença do cliente
         final licenseData = {
           'statusAssinatura': 'trial',
           'features': {'exportacao': false, 'analise': true},
@@ -77,7 +78,24 @@ class AuthService { // A classe começa aqui
           }
         };
 
-        await _firestore.collection('clientes').doc(user.uid).set(licenseData);
+        // <<< INÍCIO DA CORREÇÃO >>>
+        // 1. Crie um "lote" de escrita.
+        final batch = _firestore.batch();
+
+        // 2. Defina a operação para a coleção 'clientes'.
+        final clienteDocRef = _firestore.collection('clientes').doc(user.uid);
+        batch.set(clienteDocRef, licenseData);
+
+        // 3. Defina a operação para a coleção 'users'.
+        final userDocRef = _firestore.collection('users').doc(user.uid);
+        batch.set(userDocRef, {
+          'email': email,
+          'licenseId': user.uid,
+        });
+
+        // 4. Envie as duas operações juntas.
+        await batch.commit();
+        // <<< FIM DA CORREÇÃO >>>
       }
       
       return credential;
@@ -91,7 +109,7 @@ class AuthService { // A classe começa aqui
       throw Exception('Ocorreu um erro inesperado durante o registro.');
     }
   }
-
+  
   Future<void> sendPasswordResetEmail({required String email}) async {
     await _firebaseAuth.sendPasswordResetEmail(email: email);
   }

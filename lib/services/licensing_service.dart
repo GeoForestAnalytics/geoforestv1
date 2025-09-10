@@ -17,23 +17,55 @@ class LicensingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<DocumentSnapshot<Map<String, dynamic>>?> findLicenseDocumentForUser(User user) async {
-    print('--- DEBUG: Buscando licença para o UID: ${user.uid}');
-    
-    final query = _firestore
-        .collection('clientes')
-        .where('uidsPermitidos', arrayContains: user.uid)
-        .limit(1);
+  print('--- LICENSING SERVICE: Buscando licença para o usuário com UID: ${user.uid}');
+  
+  try {
+    // ---- NOVA LÓGICA DE BUSCA DIRETA ----
+    print('--- LICENSING SERVICE: Tentando busca direta em /users/${user.uid}');
+    final userDocRef = _firestore.collection('users').doc(user.uid);
+    final userDoc = await userDocRef.get();
 
+    if (userDoc.exists && userDoc.data() != null) {
+      print('--- LICENSING SERVICE: Documento encontrado em /users. Verificando licenseId.');
+      final licenseId = userDoc.data()!['licenseId'] as String?;
+      
+      if (licenseId != null && licenseId.isNotEmpty) {
+        print('--- LICENSING SERVICE: licenseId encontrado: "$licenseId". Buscando /clientes/$licenseId');
+        final clienteDoc = await _firestore.collection('clientes').doc(licenseId).get();
+        
+        if (clienteDoc.exists) {
+          print('--- LICENSING SERVICE: SUCESSO! Documento da licença encontrado em /clientes.');
+          return clienteDoc;
+        } else {
+          print('--- LICENSING SERVICE: ERRO! Documento em /users aponta para uma licença inexistente em /clientes/$licenseId');
+          throw LicenseException('A licença associada à sua conta ($licenseId) não foi encontrada.');
+        }
+      } else {
+        print('--- LICENSING SERVICE: ERRO! Documento em /users existe, mas o campo "licenseId" está ausente ou vazio.');
+        // Continua para o método de fallback
+      }
+    } else {
+       print('--- LICENSING SERVICE: Documento não encontrado em /users. Tentando método antigo de fallback...');
+    }
+
+    // ---- LÓGICA ANTIGA DE FALLBACK ----
+    print('--- LICENSING SERVICE: Executando busca por arrayContains (esperado falhar com as novas regras)...');
+    final query = _firestore.collection('clientes').where('uidsPermitidos', arrayContains: user.uid).limit(1);
     final snapshot = await query.get();
-
+    
     if (snapshot.docs.isNotEmpty) {
-      print('--- DEBUG: Licença encontrada! Documento ID: ${snapshot.docs.first.id}');
-      return snapshot.docs.first;
+       print('--- LICENSING SERVICE: Licença encontrada pelo método de fallback. (Isso não deveria acontecer).');
+       return snapshot.docs.first;
     }
     
-    print('--- DEBUG: NENHUMA licença encontrada para este UID.');
+    print('--- LICENSING SERVICE: NENHUMA licença encontrada para este usuário.');
     return null;
+
+  } catch (e) {
+    print('--- LICENSING SERVICE: Ocorreu uma exceção DENTRO de findLicenseDocumentForUser: $e');
+    rethrow;
   }
+}
 
   Future<void> checkAndRegisterDevice(User user) async {
     final clienteDoc = await findLicenseDocumentForUser(user);

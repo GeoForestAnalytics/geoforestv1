@@ -235,6 +235,7 @@ class SyncService {
         try {
           final projetoPai = await _projetoRepository.getProjetoPelaParcela(parcelaLocal);
           final licenseIdDeDestino = projetoPai?.delegadoPorLicenseId ?? projetoPai?.licenseId ?? licenseIdDoUsuarioLogado;
+          debugPrint(">>> UPLOAD PARCELA ${parcelaLocal.idParcela}: Destino Firestore -> $licenseIdDeDestino");
           
           if (licenseIdDeDestino == null) throw Exception("Licença de destino não encontrada para a parcela ${parcelaLocal.idParcela}.");
           
@@ -273,6 +274,7 @@ class SyncService {
          try {
           final projetoPai = await _projetoRepository.getProjetoPelaCubagem(cubagemLocal);
           final licenseIdDeDestino = projetoPai?.delegadoPorLicenseId ?? projetoPai?.licenseId ?? licenseIdDoUsuarioLogado;
+          debugPrint(">>> UPLOAD Cubagem ${cubagemLocal.id}: Destino Firestore -> $licenseIdDeDestino");
            if (licenseIdDeDestino == null) throw Exception("Licença de destino não encontrada para a cubagem ${cubagemLocal.id}.");
           
           final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('dados_cubagem').doc(cubagemLocal.id.toString());

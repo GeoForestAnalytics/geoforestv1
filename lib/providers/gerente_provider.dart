@@ -93,7 +93,7 @@ class GerenteProvider with ChangeNotifier {
       // 3. Combina as duas listas, removendo duplicatas, para criar a lista final de licenças a serem monitoradas.
       final allLicenseIdsToMonitor = {ownLicenseId, ...delegatedLicenseIds}.toList();
       
-      debugPrint("--- [GerenteProvider] Iniciando monitoramento para as licenças: $allLicenseIdsToMonitor");
+      debugPrint(">>> GerenteProvider INICIANDO MONITORAMENTO PARA AS LICENÇAS: $allLicenseIdsToMonitor");
       
       // Carrega a hierarquia local para referência (projetos, atividades, etc.)
       _projetos = await _projetoRepository.getTodosOsProjetosParaGerente();
