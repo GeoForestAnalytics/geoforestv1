@@ -16,6 +16,7 @@ import 'package:geoforestv1/widgets/menu_card.dart';
 import 'package:geoforestv1/services/sync_service.dart';
 import 'package:geoforestv1/models/sync_progress_model.dart';
 import 'package:geoforestv1/pages/menu/conflict_resolution_page.dart';
+import 'package:geoforestv1/providers/gerente_provider.dart';
 
 class HomePage extends StatefulWidget {
   final String title;
@@ -273,8 +274,6 @@ class _HomePageState extends State<HomePage> {
             
             if (progress?.concluido == true) {
               
-              // <<< INÍCIO DA CORREÇÃO >>>
-              // Adia a lógica de UI para depois que o build terminar
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 Navigator.of(dialogContext).pop(); 
                 
@@ -292,15 +291,21 @@ class _HomePageState extends State<HomePage> {
                 }
 
                 if (mounted) {
+                  // <<< INÍCIO DA CORREÇÃO >>>
+                  // Após a sincronização, independentemente de quem seja o usuário,
+                  // forçamos o GerenteProvider a recarregar todos os dados do banco local.
+                  // Isso garante que tanto o cliente (Empresa A) quanto o contratado (Empresa B)
+                  // tenham seus dashboards atualizados com a nova hierarquia e as novas coletas.
+                  context.read<GerenteProvider>().iniciarMonitoramento();
+                  // <<< FIM DA CORREÇÃO >>>
+
                   setState(() => _isSyncing = false);
                 }
               });
-              // <<< FIM DA CORREÇÃO >>>
               
               return const SizedBox.shrink(); 
             }
 
-            // ... (o resto do AlertDialog continua igual)
             return AlertDialog(
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -324,8 +329,6 @@ class _HomePageState extends State<HomePage> {
       await syncService.sincronizarDados();
     } catch (e) {
       debugPrint("Erro grave na sincronização capturado na UI: $e");
-    } finally {
-      // O setState foi movido para o PostFrameCallback
     }
   }
 }
