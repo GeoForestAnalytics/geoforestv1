@@ -1,4 +1,4 @@
-// lib/pages/talhoes/detalhes_talhao_page.dart (VERSÃO FINAL COM GO_ROUTER)
+// lib/pages/talhoes/detalhes_talhao_page.dart (VERSÃO FINAL COMPLETA COM GO_ROUTER)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
@@ -40,7 +40,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
   final _atividadeRepository = AtividadeRepository();
 
   // ✅ ESTADO COM FUTURES
-  late Future<List<dynamic>> _pageDataFuture;
+  late Future<List<dynamic>> _pageDataFuture; // Para Talhão e Atividade
   late Future<List<dynamic>> _coletasFuture;
 
   bool _isSelectionMode = false;
@@ -70,10 +70,11 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
           _talhaoRepository.getTalhaoById(widget.talhaoId),
           _atividadeRepository.getAtividadeById(widget.atividadeId),
         ]);
-
+        
+        // Define _coletasFuture dentro do .then() para garantir que 'atividade' não seja nulo
         _pageDataFuture.then((data) {
-          final Atividade? atividade = data.length > 1 ? data[1] as Atividade? : null;
           if (mounted) {
+            final Atividade? atividade = data.length > 1 ? data[1] as Atividade? : null;
             setState(() {
               if (_isAtividadeDeInventario(atividade)) {
                 _coletasFuture = _parcelaRepository.getParcelasDoTalhao(widget.talhaoId);
@@ -226,11 +227,11 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     return AppBar(
       title: Text('Talhão: ${talhao?.nome ?? 'Carregando...'}'),
       actions: [
-        if (_isAtividadeDeInventario(atividade))
+        if (_isAtividadeDeInventario(atividade) && talhao != null)
           IconButton(
             icon: const Icon(Icons.analytics_outlined),
             tooltip: 'Ver Análise do Talhão',
-            onPressed: talhao == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (context) => TalhaoDashboardPage(talhao: talhao))),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => TalhaoDashboardPage(talhao: talhao))),
           ),
         IconButton(
           icon: const Icon(Icons.home_outlined),
