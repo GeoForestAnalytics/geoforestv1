@@ -1,4 +1,4 @@
-// lib/providers/operacoes_provider.dart (VERSÃO COM MAIS KPIs PARA OS TOTALIZADORES)
+// lib/providers/operacoes_provider.dart (VERSÃO AJUSTADA E ENCAPSULADA)
 
 import 'package:flutter/foundation.dart';
 import 'package:collection/collection.dart';
@@ -8,7 +8,6 @@ import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
 import 'package:intl/intl.dart';
 
-// <<< 1. ATUALIZAÇÃO DO MODELO DE DADOS DOS KPIs >>>
 class KpiData {
   final int coletasRealizadas;
   final double custoTotalCampo;
@@ -54,6 +53,7 @@ class OperacoesProvider with ChangeNotifier {
   List<CustoPorVeiculo> get custosPorVeiculo => _custosPorVeiculo;
   List<DiarioDeCampo> get diariosFiltrados => _diariosFiltrados;
 
+  /// ✅ PONTO DE ENTRADA PÚBLICO: Chamado pelo ProxyProvider para recalcular todas as métricas.
   void update(GerenteProvider gerenteProvider, OperacoesFilterProvider filterProvider) {
     final todosOsDiarios = gerenteProvider.diariosSincronizados;
     final todasAsParcelas = gerenteProvider.parcelasSincronizadas;
@@ -82,6 +82,7 @@ class OperacoesProvider with ChangeNotifier {
 
     if (_diariosFiltrados.isEmpty && totalColetasFiltradas == 0) {
       _limparDados();
+      notifyListeners(); // Notifica que os dados foram limpos
       return;
     }
     
@@ -94,6 +95,8 @@ class OperacoesProvider with ChangeNotifier {
     notifyListeners();
   }
   
+  // ✅ MÉTODOS DE CÁLCULO AGORA SÃO PRIVADOS
+
   List<DiarioDeCampo> _filtrarDiarios(List<DiarioDeCampo> todos, OperacoesFilterProvider filterProvider) {
     List<DiarioDeCampo> filtradosPorData;
     final agora = DateTime.now();
@@ -147,7 +150,6 @@ class OperacoesProvider with ChangeNotifier {
     }
   }
 
-  // <<< 2. ATUALIZAÇÃO DOS CÁLCULOS GERAIS (KPIs) >>>
   void _calcularKPIs(List<DiarioDeCampo> diarios, int totalColetas) {
     double custoTotal = 0;
     double custoAbastecimentoTotal = 0;
@@ -226,6 +228,5 @@ class OperacoesProvider with ChangeNotifier {
     _coletasPorEquipe = {};
     _custosPorVeiculo = [];
     _diariosFiltrados = [];
-    notifyListeners();
   }
 }

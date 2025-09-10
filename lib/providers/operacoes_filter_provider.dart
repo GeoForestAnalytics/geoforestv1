@@ -1,6 +1,7 @@
-// lib/providers/operacoes_filter_provider.dart (VERSÃO COM PERÍODO PADRÃO "TODOS")
+// lib/providers/operacoes_filter_provider.dart (VERSÃO AJUSTADA E ENCAPSULADA)
 
 import 'package:flutter/material.dart';
+import 'package:geoforestv1/providers/gerente_provider.dart'; // ✅ 1. IMPORT NECESSÁRIO
 
 /// Enum para definir os períodos de filtro pré-configurados.
 enum PeriodoFiltro { todos, hoje, ultimos7Dias, esteMes, mesPassado, personalizado }
@@ -10,7 +11,6 @@ class OperacoesFilterProvider with ChangeNotifier {
   // --- ESTADO DOS FILTROS ---
 
   // Filtro de Período
-  // <<< ALTERAÇÃO: O valor inicial padrão agora é 'todos' >>>
   PeriodoFiltro _periodo = PeriodoFiltro.todos;
   DateTimeRange? _periodoPersonalizado;
 
@@ -24,12 +24,23 @@ class OperacoesFilterProvider with ChangeNotifier {
   Set<String> get lideresSelecionados => _lideresSelecionados;
   List<String> get lideresDisponiveis => _lideresDisponiveis;
 
-  // --- MÉTODOS PARA ATUALIZAR O ESTADO ---
+  // ✅ 2. NOVO MÉTODO CENTRALIZADO
+  /// Atualiza os filtros com base nos dados mais recentes do GerenteProvider.
+  void updateFiltersFrom(GerenteProvider gerenteProvider) {
+    // A lógica que estava no `main.dart` agora está encapsulada aqui.
+    final lideres = gerenteProvider.diariosSincronizados.map((d) => d.nomeLider).toSet().toList();
+    _setLideresDisponiveis(lideres);
+  }
 
-  void setLideresDisponiveis(List<String> lideres) {
+  // ✅ 3. MÉTODO DE ATUALIZAÇÃO TORNA-SE PRIVADO
+  void _setLideresDisponiveis(List<String> lideres) {
     _lideresDisponiveis = lideres..sort();
+    // Garante que nenhum líder que não existe mais continue selecionado
     _lideresSelecionados.removeWhere((l) => !_lideresDisponiveis.contains(l));
   }
+  
+  // --- MÉTODOS PARA ATUALIZAR O ESTADO (chamados pela UI) ---
+  // (Nenhuma mudança necessária aqui)
 
   void setPeriodo(PeriodoFiltro novoPeriodo, {DateTimeRange? personalizado}) {
     _periodo = novoPeriodo;

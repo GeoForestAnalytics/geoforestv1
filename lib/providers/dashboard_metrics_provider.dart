@@ -1,4 +1,4 @@
-// Arquivo: lib\providers\dashboard_metrics_provider.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/providers/dashboard_metrics_provider.dart (VERSÃO COMPLETA E OTIMIZADA)
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
@@ -95,9 +95,38 @@ class DashboardMetricsProvider with ChangeNotifier {
   final AnalysisService _analysisService = AnalysisService();
   final ParcelaRepository _parcelaRepository = ParcelaRepository();
 
-  Future<void> update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) async {
-    debugPrint("METRICS PROVIDER UPDATE: Recebeu ${gerenteProvider.parcelasSincronizadas.length} parcelas para calcular.");
+  // ✅ 1. ADICIONAR VARIÁVEIS DE CACHE
+  // Guardam o estado da última execução para comparação.
+  List<Parcela> _lastUsedParcelas = [];
+  List<CubagemArvore> _lastUsedCubagens = [];
+  DashboardFilterProvider? _lastUsedFilterProvider;
 
+
+  /// ✅ PONTO DE ENTRADA PÚBLICO: Chamado pelo ProxyProvider para recalcular todas as métricas.
+  Future<void> update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) async {
+    // ✅ 2. VERIFICAÇÃO DE MUDANÇAS (MEMOIZATION)
+    // Compara os dados e filtros atuais com os da última execução.
+    final bool hasDataChanged = !listEquals(gerenteProvider.parcelasSincronizadas, _lastUsedParcelas) ||
+                                !listEquals(gerenteProvider.cubagensSincronizadas, _lastUsedCubagens);
+    
+    // A comparação de filtros precisa ser mais detalhada.
+    final bool hasFilterChanged = _haveFiltersChanged(filterProvider);
+
+    // Se nem os dados brutos nem os filtros mudaram, não fazemos NADA.
+    if (!hasDataChanged && !hasFilterChanged) {
+      debugPrint("METRICS PROVIDER UPDATE: Nenhum dado ou filtro mudou. Pulando recálculos.");
+      return;
+    }
+    
+    debugPrint("METRICS PROVIDER UPDATE: Dados ou filtros mudaram. Recalculando métricas...");
+
+    // ✅ 3. ATUALIZAÇÃO DO CACHE
+    // Se houve mudança, atualizamos nosso cache com os novos dados e filtros.
+    _lastUsedParcelas = List.from(gerenteProvider.parcelasSincronizadas);
+    _lastUsedCubagens = List.from(gerenteProvider.cubagensSincronizadas);
+    _lastUsedFilterProvider = filterProvider.clone(); // Usamos um clone para evitar problemas de referência
+
+    // O restante da lógica de cálculo permanece exatamente a mesma.
     final lideres = {
       ...gerenteProvider.parcelasSincronizadas.map((p) => p.nomeLider),
       ...gerenteProvider.cubagensSincronizadas.map((c) => c.nomeLider),
@@ -134,6 +163,23 @@ class DashboardMetricsProvider with ChangeNotifier {
 
     notifyListeners();
   }
+  
+  // ✅ 4. MÉTODO AUXILIAR PARA COMPARAÇÃO DETALHADA DOS FILTROS
+  bool _haveFiltersChanged(DashboardFilterProvider newFilter) {
+    if (_lastUsedFilterProvider == null) return true; // Se é a primeira vez, sempre recalcula
+
+    final oldFilter = _lastUsedFilterProvider!;
+    
+    return !setEquals(newFilter.selectedProjetoIds, oldFilter.selectedProjetoIds) ||
+           !setEquals(newFilter.selectedAtividadeTipos, oldFilter.selectedAtividadeTipos) ||
+           !setEquals(newFilter.selectedFazendaNomes, oldFilter.selectedFazendaNomes) ||
+           newFilter.periodo != oldFilter.periodo ||
+           newFilter.periodoPersonalizado != oldFilter.periodoPersonalizado ||
+           !setEquals(newFilter.lideresSelecionados, oldFilter.lideresSelecionados);
+  }
+
+
+  // MÉTODOS DE CÁLCULO (agora privados)
 
   void _recalcularParcelasFiltradas(
     List<Parcela> todasAsParcelas,

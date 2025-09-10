@@ -1,4 +1,4 @@
-// lib/main.dart (VERSÃO FINAL OTIMIZADA E CORRIGIDA)
+// lib/main.dart (VERSÃO FINAL COM GO_ROUTER)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
-import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
@@ -15,24 +14,17 @@ import 'firebase_options.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
 import 'package:geoforestv1/providers/theme_provider.dart';
-import 'package:geoforestv1/pages/menu/home_page.dart';
-import 'package:geoforestv1/pages/menu/login_page.dart';
-import 'package:geoforestv1/pages/menu/equipe_page.dart';
 import 'package:geoforestv1/providers/map_provider.dart';
 import 'package:geoforestv1/providers/team_provider.dart';
 import 'package:geoforestv1/controller/login_controller.dart';
-import 'package:geoforestv1/pages/projetos/lista_projetos_page.dart';
 import 'package:geoforestv1/pages/menu/splash_page.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
-import 'package:geoforestv1/pages/menu/paywall_page.dart';
-import 'package:geoforestv1/pages/gerente/gerente_main_page.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
-import 'package:geoforestv1/pages/gerente/gerente_map_page.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 import 'package:geoforestv1/providers/operacoes_provider.dart';
 import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
-import 'package:geoforestv1/models/atividade_model.dart';
+import 'package:geoforestv1/utils/app_router.dart'; // ✅ 1. IMPORTAR O NOVO ROTEADOR
 
 
 void initializeProj4Definitions() {
@@ -50,7 +42,6 @@ void initializeProj4Definitions() {
   debugPrint("Definições Proj4 inicializadas/verificadas.");
 }
 
-// ✅ FUNÇÃO MAIN CORRIGIDA E OTIMIZADA
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   initializeProj4Definitions();
@@ -60,20 +51,16 @@ Future<void> main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
-  // 1. Inicializa o Firebase
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
   }
 
-  // 2. ATIVA O APP CHECK IMEDIATAMENTE APÓS A INICIALIZAÇÃO DO FIREBASE
-  // Esta é a forma correta, garantindo que todas as chamadas subsequentes sejam protegidas.
   const androidProvider = kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity;
   await FirebaseAppCheck.instance.activate(androidProvider: androidProvider);
   print("Firebase App Check ativado com sucesso no main().");
 
-  // 3. Inicia o aplicativo
   runApp(const AppServicesLoader());
 }
 
@@ -92,11 +79,8 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
     _initializationFuture = _initializeAllServices();
   }
 
-  // ✅ MÉTODO DE INICIALIZAÇÃO SIMPLIFICADO E MAIS RÁPIDO
   Future<ThemeMode> _initializeAllServices() async {
     try {
-      // O App Check já foi ativado no main(), não precisa estar aqui.
-      // O delay artificial foi removido, pois não é mais necessário.
       await SystemChrome.setPreferredOrientations(
         [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown],
       );
@@ -148,6 +132,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // Providers independentes
         ChangeNotifierProvider(create: (_) => LoginController()),
         ChangeNotifierProvider(create: (_) => MapProvider()),
         ChangeNotifierProvider(create: (_) => TeamProvider()),
@@ -155,89 +140,66 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeProvider(initialThemeMode)),
         ChangeNotifierProvider(create: (_) => GerenteProvider()),
 
+        // Proxy Providers
         ChangeNotifierProxyProvider<GerenteProvider, DashboardFilterProvider>(
           create: (_) => DashboardFilterProvider(),
-          update: (_, gerenteProvider, previous) {
-            final filter = previous ?? DashboardFilterProvider();
-            
-            filter.updateProjetosDisponiveis(gerenteProvider.projetos);
-
-            List<Atividade> atividadesParaFiltro = filter.selectedProjetoIds.isEmpty
-                ? gerenteProvider.atividades
-                : gerenteProvider.atividades.where((a) => filter.selectedProjetoIds.contains(a.projetoId)).toList();
-            filter.updateAtividadesDisponiveis(atividadesParaFiltro);
-
-            List<Parcela> parcelasParaFiltroDeFazenda = gerenteProvider.parcelasSincronizadas;
-            
-            if (filter.selectedProjetoIds.isNotEmpty) {
-              parcelasParaFiltroDeFazenda = parcelasParaFiltroDeFazenda
-                  .where((p) => filter.selectedProjetoIds.contains(p.projetoId)).toList();
-            }
-            
-            if (filter.selectedAtividadeTipos.isNotEmpty) {
-              final idsDeAtividadesFiltradas = gerenteProvider.atividades
-                  .where((a) => filter.selectedAtividadeTipos.contains(a.tipo))
-                  .map((a) => a.id)
-                  .toSet();
-                  
-              parcelasParaFiltroDeFazenda = parcelasParaFiltroDeFazenda.where((p) {
-                final atividadeId = gerenteProvider.talhaoToAtividadeMap[p.talhaoId];
-                return atividadeId != null && idsDeAtividadesFiltradas.contains(atividadeId);
-              }).toList();
-            }
-            
-            filter.updateFazendasDisponiveis(parcelasParaFiltroDeFazenda);
-            
+          update: (_, gerenteProvider, previousFilter) {
+            final filter = previousFilter ?? DashboardFilterProvider();
+            filter.updateFiltersFrom(gerenteProvider);
             return filter;
           },
         ),
         ChangeNotifierProxyProvider<GerenteProvider, OperacoesFilterProvider>(
           create: (_) => OperacoesFilterProvider(),
-          update: (_, gerenteProvider, previous) {
-            final filter = previous ?? OperacoesFilterProvider();
-            final lideres = gerenteProvider.diariosSincronizados.map((d) => d.nomeLider).toSet().toList();
-            filter.setLideresDisponiveis(lideres);
+          update: (_, gerenteProvider, previousFilter) {
+            final filter = previousFilter ?? OperacoesFilterProvider();
+            filter.updateFiltersFrom(gerenteProvider);
             return filter;
           },
         ),
-        
         ChangeNotifierProxyProvider2<GerenteProvider, DashboardFilterProvider, DashboardMetricsProvider>(
           create: (_) => DashboardMetricsProvider(),
-          update: (_, gerenteProvider, filterProvider, previous) {
-            final metrics = previous ?? DashboardMetricsProvider();
+          update: (_, gerenteProvider, filterProvider, previousMetrics) {
+            final metrics = previousMetrics ?? DashboardMetricsProvider();
             metrics.update(gerenteProvider, filterProvider);
             return metrics;
           },
         ),
         ChangeNotifierProxyProvider2<GerenteProvider, OperacoesFilterProvider, OperacoesProvider>(
           create: (_) => OperacoesProvider(),
-          update: (_, gerenteProvider, filterProvider, previous) {
-            final operacoes = previous ?? OperacoesProvider();
+          update: (_, gerenteProvider, filterProvider, previousOperacoes) {
+            final operacoes = previousOperacoes ?? OperacoesProvider();
             operacoes.update(gerenteProvider, filterProvider);
             return operacoes;
           },
         ),
       ],
+      // ✅ 2. O `Consumer` agora envolve a criação do MaterialApp.router
+      // Isso garante que o AppRouter tenha acesso aos providers que ele precisa para o redirecionamento.
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
-              return MaterialApp(
+          // ✅ A instância do roteador agora lê os providers diretamente do context.
+          final appRouter = AppRouter(
+            loginController: context.read<LoginController>(),
+            licenseProvider: context.read<LicenseProvider>(),
+          ).router;
+
+          // ✅ 3. MUDANÇA PARA `MaterialApp.router`
+          // Trocamos o `MaterialApp` padrão pela sua versão que usa um roteador.
+          return MaterialApp.router(
+            routerConfig: appRouter, // Passa a configuração do go_router
+            
             title: 'Geo Forest Analytics',
             debugShowCheckedModeBanner: false,
             theme: _buildThemeData(Brightness.light),
             darkTheme: _buildThemeData(Brightness.dark),
             themeMode: themeProvider.themeMode,
-            initialRoute: '/auth_check',
-            routes: {
-              '/auth_check': (context) => const AuthCheck(),
-              '/equipe': (context) => const EquipePage(),
-              '/home': (context) => const HomePage(title: 'Geo Forest Analytics'),
-              '/lista_projetos': (context) => const ListaProjetosPage(title: 'Meus Projetos'),
-              '/login': (context) => const LoginPage(),
-              '/paywall': (context) => const PaywallPage(),
-              '/gerente_home': (context) => const GerenteMainPage(),
-              '/gerente_map': (context) => const GerenteMapPage(),
-            },
-            navigatorObservers: [MapProvider.routeObserver],
+
+            // As propriedades `initialRoute` e `routes` são removidas,
+            // pois o go_router agora controla isso.
+            
+            // `navigatorObservers` e `builder` continuam funcionando normalmente.
+            // O go_router internamente usa o Navigator 2.0, então isso é compatível.
             builder: (context, child) {
               ErrorWidget.builder = (FlutterErrorDetails details) {
                 debugPrint('Caught a Flutter error: ${details.exception}');
@@ -301,47 +263,19 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// ✅ 4. O WIDGET `AuthCheck` NÃO É MAIS NECESSÁRIO!
+// Toda a sua lógica foi movida para a função `redirect` do AppRouter.
+// Você pode apagar esta classe inteira.
+/*
 class AuthCheck extends StatelessWidget {
   const AuthCheck({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final loginController = context.watch<LoginController>();
-    final licenseProvider = context.watch<LicenseProvider>();
-
-    if (!loginController.isInitialized) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    if (!loginController.isLoggedIn) {
-      return const LoginPage();
-    }
-    
-    if (licenseProvider.error != null && !licenseProvider.isLoading) {
-      return ErrorScreen(
-        message: "Não foi possível verificar sua licença:\n${licenseProvider.error}",
-        onRetry: () => context.read<LicenseProvider>().fetchLicenseData(),
-      );
-    }
-
-    if (licenseProvider.isLoading || licenseProvider.licenseData == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    final license = licenseProvider.licenseData!;
-    final bool isLicenseOk = (license.status == 'ativa' || license.status == 'trial');
-
-    if (isLicenseOk) {
-      if (license.cargo == 'gerente') {
-        return const GerenteMainPage();
-      } else {
-        return const EquipePage();
-      }
-    } else {
-      return const PaywallPage();
-    }
+    // ... toda a lógica antiga ...
   }
 }
+*/
 
 class ErrorScreen extends StatelessWidget {
   final String message;

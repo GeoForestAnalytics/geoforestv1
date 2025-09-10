@@ -1,6 +1,7 @@
-// lib/utils/navigation_helper.dart
+// lib/utils/navigation_helper.dart (VERSÃO ATUALIZADA PARA GO_ROUTER)
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart'; // ✅ 1. IMPORTAR O GO_ROUTER
 import 'package:geoforestv1/providers/license_provider.dart';
 
 class NavigationHelper {
@@ -15,13 +16,16 @@ class NavigationHelper {
       // A rota "home" do gerente é /gerente_home
       homeRoute = '/gerente_home';
     } else {
-      // A rota "home" da equipe é /equipe
+      // A rota da equipe agora é a de identificação da equipe,
+      // e a tela principal de coleta é a /home.
+      // Vamos assumir que, ao clicar em "home", o usuário quer ir para a tela de menu de coleta.
       homeRoute = '/home';
     }
 
-    // Este comando é a chave da solução:
-    // Ele vai para a rota 'homeRoute' e remove TODAS as outras
-    // telas que estavam na pilha antes.
-    Navigator.of(context).pushNamedAndRemoveUntil(homeRoute, (Route<dynamic> route) => false);
+    // ✅ 2. SUBSTITUIR O COMANDO DE NAVEGAÇÃO
+    // O método `context.go(path)` do go_router já substitui a pilha de navegação,
+    // fazendo exatamente o que `pushNamedAndRemoveUntil` fazia, mas de forma
+    // mais limpa e integrada ao novo sistema de roteamento.
+    context.go(homeRoute);
   }
 }
