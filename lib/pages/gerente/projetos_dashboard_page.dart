@@ -142,11 +142,12 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
             const SizedBox(height: 8),
             _buildMultiSelectFazendaFilter(context, filterProvider),
             const SizedBox(height: 16),
-            Row(
+            Wrap(
+              spacing: 16.0, // Espaçamento horizontal entre os itens
+              runSpacing: 12.0, // Espaçamento vertical quando quebrar a linha
               children: [
-                Expanded(flex: 2, child: _buildPeriodoDropdown(context)),
-                const SizedBox(width: 16),
-                Expanded(flex: 3, child: _buildLiderDropdown(context)),
+                _buildPeriodoDropdown(context),
+                _buildLiderDropdown(context),
               ],
             ),
             if (filterProvider.periodo == PeriodoFiltro.personalizado)
