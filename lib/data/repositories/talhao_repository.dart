@@ -44,14 +44,14 @@ class TalhaoRepository {
   Future<List<Talhao>> getTalhoesDaFazenda(String fazendaId, int fazendaAtividadeId) async {
     final db = await _dbHelper.database;
 
-    // A consulta agora inclui uma sub-query para filtrar apenas talhões com parcelas.
+    // A consulta agora é simples e direta: ela busca TODOS os talhões que 
+    // pertencem à fazenda/atividade, sem filtros. Isso garante que o fluxo manual funcione.
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId 
       FROM talhoes T
       INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
       INNER JOIN atividades A ON F.atividadeId = A.id
       WHERE T.fazendaId = ? AND T.fazendaAtividadeId = ?
-        AND T.id IN (SELECT DISTINCT talhaoId FROM parcelas WHERE talhaoId IS NOT NULL) -- FILTRO ADICIONADO
       ORDER BY T.nome ASC
     ''', [fazendaId, fazendaAtividadeId]);
     

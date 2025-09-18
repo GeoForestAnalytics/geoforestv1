@@ -6,21 +6,29 @@ import 'package:device_info_plus/device_info_plus.dart';
 
 class PermissionService {
   
-  /// Solicita a permissão de armazenamento de forma robusta para Android e outras plataformas.
+  /// Solicita a permissão de armazenamento/fotos de forma robusta para Android e outras plataformas.
   Future<bool> requestStoragePermission() async {
     if (Platform.isAndroid) {
-      // Para Android moderno, precisamos da permissão para gerenciar todos os arquivos.
       final deviceInfo = await DeviceInfoPlugin().androidInfo;
       
-      // A partir do Android 11 (SDK 30), a permissão MANAGE_EXTERNAL_STORAGE é necessária.
-      if (deviceInfo.version.sdkInt >= 30) {
-        var status = await Permission.manageExternalStorage.status;
-        if (!status.isGranted) {
-          status = await Permission.manageExternalStorage.request();
+      // Para Android 13 (SDK 33) e superior, precisamos de permissões de mídia granulares.
+      if (deviceInfo.version.sdkInt >= 33) {
+        var photoStatus = await Permission.photos.status;
+        if (!photoStatus.isGranted) {
+          photoStatus = await Permission.photos.request();
         }
-        return status.isGranted;
-      } else {
-        // Para versões mais antigas do Android, a permissão de storage é suficiente.
+        return photoStatus.isGranted;
+      } 
+      // Para Android 11 e 12 (SDK 30-32), a permissão de gerenciar todos os arquivos é a mais garantida.
+      else if (deviceInfo.version.sdkInt >= 30) {
+        var storageStatus = await Permission.manageExternalStorage.status;
+        if (!storageStatus.isGranted) {
+          storageStatus = await Permission.manageExternalStorage.request();
+        }
+        return storageStatus.isGranted;
+      } 
+      // Para versões mais antigas do Android, a permissão de storage simples é suficiente.
+      else {
         var status = await Permission.storage.status;
         if (!status.isGranted) {
           status = await Permission.storage.request();
@@ -28,8 +36,8 @@ class PermissionService {
         return status.isGranted;
       }
     } else {
-      // Para iOS e outras plataformas, a permissão de storage geralmente é suficiente.
-      var status = await Permission.storage.request();
+      // Para iOS, a permissão de 'photos' é a correta.
+      var status = await Permission.photos.request();
       return status.isGranted;
     }
   }

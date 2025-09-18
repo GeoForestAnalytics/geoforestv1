@@ -83,7 +83,7 @@ Future<void> criarAtividadeComPlanoDeCubagem(Atividade novaAtividade, List<Cubag
     fazendaMap['lastModified'] = DateTime.now().toIso8601String();
     await txn.insert('fazendas', fazendaMap, conflictAlgorithm: ConflictAlgorithm.replace);
     
-    // <<< INÍCIO DA CORREÇÃO >>>
+    // <<< INÍCIO DA MELHORIA >>>
     // 1. Busca o talhão original (da atividade de inventário) para obter todos os seus dados.
     // Usamos o nome e o ID da fazenda (da atividade original) para encontrá-lo.
     final talhaoOriginal = await txn.query(
@@ -109,7 +109,7 @@ Future<void> criarAtividadeComPlanoDeCubagem(Atividade novaAtividade, List<Cubag
       materialGenetico: talhaoOriginal?.materialGenetico,
       dataPlantio: talhaoOriginal?.dataPlantio,
     );
-    // <<< FIM DA CORREÇÃO >>>
+    // <<< FIM DA MELHORIA >>>
 
     final talhaoMap = talhaoDoPlano.toMap();
     talhaoMap['lastModified'] = DateTime.now().toIso8601String();
@@ -117,7 +117,7 @@ Future<void> criarAtividadeComPlanoDeCubagem(Atividade novaAtividade, List<Cubag
 
     for (final placeholder in placeholders) {
       final map = placeholder.toMap();
-      map['talhaoId'] = talhaoId;
+      map['talhaoId'] = talhaoId; // Vincula ao NOVO talhão de cubagem
       map.remove('id');
       map['lastModified'] = DateTime.now().toIso8601String();
       await txn.insert('cubagens_arvores', map);
