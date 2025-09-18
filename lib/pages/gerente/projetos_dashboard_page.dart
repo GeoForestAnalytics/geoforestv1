@@ -9,6 +9,7 @@ import 'package:geoforestv1/providers/operacoes_provider.dart';
 import 'package:geoforestv1/services/export_service.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 
 class ProjetosDashboardPage extends StatefulWidget {
   const ProjetosDashboardPage({super.key});
@@ -113,7 +114,10 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
               ),
               const SizedBox(height: 12),
               ElevatedButton.icon(
-                onPressed: () => Navigator.pushNamed(context, '/gerente_map'),
+                onPressed: () {
+                  context.read<DashboardFilterProvider>().clearAllFilters();
+                  context.push('/gerente_map'); // <<-- COMANDO CORRETO PARA GO_ROUTER
+                },
                 icon: const Icon(Icons.map_outlined),
                 label: const Text('Mapa Geral'),
                 style: ElevatedButton.styleFrom(

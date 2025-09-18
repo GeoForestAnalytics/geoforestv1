@@ -1,4 +1,4 @@
-// lib/data/repositories/talhao_repository.dart (VERSÃO FINALMENTE CORRETA)
+// lib/data/repositories/talhao_repository.dart (VERSÃO CORRIGIDA)
 
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -22,11 +22,9 @@ class TalhaoRepository {
     return await db.update('talhoes', map, where: 'id = ?', whereArgs: [t.id]);
   }
   
-  // <<< CORREÇÃO PRINCIPAL AQUI >>>
   Future<Talhao?> getTalhaoById(int id) async {
     final db = await _dbHelper.database;
     
-    // A consulta com JOIN para pegar o projetoId está CORRETA.
     final maps = await db.rawQuery('''
         SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId 
         FROM talhoes T
@@ -37,22 +35,23 @@ class TalhaoRepository {
     ''', [id]);
 
     if (maps.isNotEmpty) {
-      // O factory Talhao.fromMap saberá como ler o projetoId.
       return Talhao.fromMap(maps.first);
     }
     return null;
   }
 
-  // <<< CORREÇÃO APLICADA AQUI TAMBÉM >>>
+  // <<< CORREÇÃO PRINCIPAL APLICADA AQUI >>>
   Future<List<Talhao>> getTalhoesDaFazenda(String fazendaId, int fazendaAtividadeId) async {
     final db = await _dbHelper.database;
 
+    // A consulta agora inclui uma sub-query para filtrar apenas talhões com parcelas.
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId 
       FROM talhoes T
       INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
       INNER JOIN atividades A ON F.atividadeId = A.id
       WHERE T.fazendaId = ? AND T.fazendaAtividadeId = ?
+        AND T.id IN (SELECT DISTINCT talhaoId FROM parcelas WHERE talhaoId IS NOT NULL) -- FILTRO ADICIONADO
       ORDER BY T.nome ASC
     ''', [fazendaId, fazendaAtividadeId]);
     
@@ -81,7 +80,6 @@ class TalhaoRepository {
     if (idMaps.isEmpty) return [];
     final ids = idMaps.map((map) => map['talhaoId'] as int).toList();
     
-    // <<< CORREÇÃO APLICADA AQUI TAMBÉM >>>
     final List<Map<String, dynamic>> talhoesMaps = await db.rawQuery('''
       SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId 
       FROM talhoes T
@@ -94,7 +92,6 @@ class TalhaoRepository {
 
   Future<List<Talhao>> getTodosOsTalhoes() async {
     final db = await _dbHelper.database;
-    // <<< CORREÇÃO APLICADA AQUI TAMBÉM >>>
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId
       FROM talhoes T

@@ -1,4 +1,4 @@
-// lib/providers/dashboard_filter_provider.dart (VERSÃO FINAL COM CLONE)
+// lib/providers/dashboard_filter_provider.dart (VERSÃO CORRIGIDA COM MÉTODO DE LIMPEZA)
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -33,7 +33,6 @@ class DashboardFilterProvider with ChangeNotifier {
   List<String> get atividadesTiposDisponiveis => _atividadesDisponiveis.map((a) => a.tipo).toSet().toList()..sort();
   Set<String> get selectedAtividadeTipos => _selectedAtividadeTipos;
   
-  // Getter adicionado para consistência
   List<Atividade> get atividadesDisponiveis => _atividadesDisponiveis;
 
   List<String> get fazendasDisponiveis => _fazendasDisponiveis;
@@ -45,6 +44,19 @@ class DashboardFilterProvider with ChangeNotifier {
   List<String> get lideresDisponiveis => _lideresDisponiveis;
   Set<String> get lideresSelecionados => _lideresSelecionados;
   
+  // <<< MÉTODO NOVO ADICIONADO AQUI >>>
+  /// Limpa todas as seleções de filtro para redefinir o estado.
+  void clearAllFilters() {
+    _selectedProjetoIds.clear();
+    _selectedAtividadeTipos.clear();
+    _selectedFazendaNomes.clear();
+    _lideresSelecionados.clear();
+    _periodo = PeriodoFiltro.todos;
+    _periodoPersonalizado = null;
+    notifyListeners();
+  }
+  // <<< FIM DA ADIÇÃO >>>
+
   /// Atualiza o estado dos filtros com base nos dados mais recentes do GerenteProvider.
   void updateFiltersFrom(GerenteProvider gerenteProvider) {
     _updateProjetosDisponiveis(gerenteProvider.projetos);
@@ -166,8 +178,6 @@ extension PeriodoFiltroExtension on PeriodoFiltro {
   }
 }
 
-// ✅ EXTENSION MOVIDA PARA O ARQUIVO CORRETO
-// Agora ela tem acesso aos membros privados da classe DashboardFilterProvider.
 extension DashboardFilterProviderClone on DashboardFilterProvider {
   DashboardFilterProvider clone() {
     final newInstance = DashboardFilterProvider();
