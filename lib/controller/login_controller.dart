@@ -1,15 +1,15 @@
-// lib/controller/login_controller.dart (VERSÃO FINAL LIMPA E SEGURA)
+// lib/controller/login_controller.dart (VERSÃO CORRIGIDA E SEGURA)
 
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geoforestv1/services/auth_service.dart';
-// A importação do database_helper não é mais necessária aqui
-// import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+// ✅ 1. IMPORT NECESSÁRIO: Precisamos do DatabaseHelper para poder apagar o banco.
+import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 
 class LoginController with ChangeNotifier {
   final AuthService _authService = AuthService();
-  // A instância do _dbHelper não é mais necessária aqui
-  // final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  // ✅ 2. INSTÂNCIA NECESSÁRIA: Criamos uma instância para acessar o método de apagar.
+  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
   // Propriedades para saber o estado do login
   bool _isLoggedIn = false;
@@ -43,11 +43,25 @@ class LoginController with ChangeNotifier {
     });
   }
 
-  /// Método para realizar o logout usando o AuthService.
+  /// ✅ 3. MÉTODO signOut COMPLETAMENTE SUBSTITUÍDO
+  /// Agora ele garante que todos os dados locais sejam apagados ANTES do logout.
   Future<void> signOut() async {
-    // Agora, apenas desloga do Firebase. Perfeito!
-    await _authService.signOut();
-    
-    // O `authStateChanges` será acionado automaticamente e fará a notificação.
+    try {
+      // ETAPA 1: Apaga completamente o arquivo do banco de dados local.
+      // Isso garante que, quando o próximo usuário fizer login, ele começará do zero.
+      await _dbHelper.deleteDatabaseFile();
+      
+      // ETAPA 2: Apenas depois de apagar os dados, desloga o usuário do Firebase.
+      await _authService.signOut();
+      
+      // O listener `authStateChanges` será acionado automaticamente pelo signOut
+      // e o AppRouter redirecionará o usuário para a tela de login.
+      
+    } catch (e) {
+      debugPrint("!!!!!! Erro durante o processo de logout e limpeza: $e !!!!!");
+      // Como medida de segurança, mesmo que a limpeza do banco falhe,
+      // ainda tentamos deslogar o usuário para que ele não fique preso.
+      await _authService.signOut();
+    }
   }
 }

@@ -73,11 +73,27 @@ class GerenteProvider with ChangeNotifier {
     _dadosCubagemSubscription?.cancel();
     _dadosDiarioSubscription?.cancel();
 
+    // ✅ ETAPA 1: LIMPEZA COMPLETA DOS DADOS EM CACHE
+    // Garante que a "mesa de trabalho" está vazia antes de começar.
+    _parcelasSincronizadas = [];
+    _cubagensSincronizadas = [];
+    _diariosSincronizados = [];
+    _projetos = [];
+    _atividades = [];
+    _talhoes = [];
+    _talhaoToProjetoMap = {};
+    _talhaoToAtividadeMap = {};
+    _talhaoIdToNomeMap = {};
+    _fazendaIdToNomeMap = {};
+    // FIM DA LIMPEZA
+
     _isLoading = true;
     _error = null;
     notifyListeners();
     
     try {
+      // ✅ ETAPA 2: O RESTO DA LÓGICA CONTINUA IGUAL
+      // Agora ela vai popular as listas limpas apenas com os dados do usuário correto.
       final user = _auth.currentUser;
       if (user == null) throw Exception("Usuário não autenticado.");
 

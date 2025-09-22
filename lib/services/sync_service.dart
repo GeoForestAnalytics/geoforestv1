@@ -448,23 +448,41 @@ class SyncService {
         if (querySnapshot.docs.isEmpty) continue;
         
         final db = await _dbHelper.database;
-        for (final docSnapshot in querySnapshot.docs) {
-          final dadosDaNuvem = docSnapshot.data();
-          final parcelaDaNuvem = Parcela.fromMap(dadosDaNuvem);
-          await db.transaction((txn) async {
-            try {
-              final pMap = parcelaDaNuvem.toMap();
-              pMap['isSynced'] = 1;
-              await _upsert(txn, 'parcelas', pMap, 'uuid');
-              final parcelaLocalResult = await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1);
-              final idLocal = Parcela.fromMap(parcelaLocalResult.first).dbId!;
-              await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [idLocal]);
-              await _sincronizarArvores(txn, docSnapshot, idLocal);
-            } catch (e, s) {
-              debugPrint("Erro CRÍTICO ao sincronizar parcela ${parcelaDaNuvem.uuid}: $e\n$s");
-            }
-          });
-        }
+for (final docSnapshot in querySnapshot.docs) {
+  final dadosDaNuvem = docSnapshot.data();
+  final parcelaDaNuvem = Parcela.fromMap(dadosDaNuvem);
+  
+  await db.transaction((txn) async {
+    try {
+      // ✅ ETAPA 1: VERIFICA A VERSÃO LOCAL PRIMEIRO
+      final parcelaLocalResult = await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1);
+
+      // Só continua se a versão local NÃO estiver marcada como "não sincronizada".
+      // Se ela estiver como "não sincronizada", significa que você tem alterações locais que precisam ser enviadas primeiro.
+      if (parcelaLocalResult.isNotEmpty && parcelaLocalResult.first['isSynced'] == 0) {
+        debugPrint("PULANDO DOWNLOAD da parcela ${parcelaDaNuvem.idParcela} pois existem alterações locais não sincronizadas.");
+        return; // Pula para a próxima amostra
+      }
+      
+      // Se não há alterações locais pendentes, ele pode baixar e substituir com segurança.
+      final pMap = parcelaDaNuvem.toMap();
+      pMap['isSynced'] = 1; // Marca como sincronizado
+      await _upsert(txn, 'parcelas', pMap, 'uuid');
+      
+      // Pega o ID local da amostra que acabamos de salvar/atualizar
+      final idLocal = (await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1)).map((map) => Parcela.fromMap(map)).first.dbId!;
+      
+      // Apaga as árvores antigas (agora é seguro fazer isso)
+      await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [idLocal]);
+      
+      // Baixa as novas árvores
+      await _sincronizarArvores(txn, docSnapshot, idLocal);
+
+    } catch (e, s) {
+      debugPrint("Erro CRÍTICO ao sincronizar parcela ${parcelaDaNuvem.uuid}: $e\n$s");
+    }
+  });
+}
     }
   }
   

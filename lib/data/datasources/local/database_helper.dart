@@ -442,6 +442,7 @@ class DatabaseHelper {
   }
 
   Future<void> deleteDatabaseFile() async {
+    // Garante que o banco de dados está fechado antes de tentar apagar
     if (_database != null && _database!.isOpen) {
       await _database!.close();
       _database = null;

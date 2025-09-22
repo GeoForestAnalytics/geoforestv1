@@ -65,27 +65,32 @@ class ParcelaRepository {
       
       await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [pId]);
       
-      // --- INÍCIO DA MUDANÇA IMPORTANTE ---
-      // Cria uma nova lista para guardar as árvores salvas com seus IDs corretos.
-      final List<Arvore> arvoresSalvasComId = [];
+// --- INÍCIO DA MUDANÇA IMPORTANTE ---
+// Cria uma nova lista para guardar as árvores salvas com seus IDs corretos.
+final List<Arvore> arvoresSalvasComId = [];
 
-      for (final a in arvores) {
-        final aMap = a.toMap();
-        aMap['parcelaId'] = pId;
-        aMap['lastModified'] = now;
+for (final a in arvores) {
+  final aMap = a.toMap();
+  
+  // ✅ A CORREÇÃO MÁGICA ESTÁ AQUI ✅
+  // Remove o ID antigo para que o banco de dados local gere um novo e único ID.
+  aMap.remove('id'); 
+  
+  aMap['parcelaId'] = pId;
+  aMap['lastModified'] = now;
         
-        // Captura o novo ID retornado pela operação de inserção.
-        final newId = await txn.insert('arvores', aMap);
+  // Agora o insert funciona, pois o banco irá gerar um ID que não colide com nada.
+  final newId = await txn.insert('arvores', aMap); 
         
-        // Adiciona uma cópia da árvore com seu novo ID à nossa lista.
-        arvoresSalvasComId.add(a.copyWith(id: newId));
-      }
+  // O copyWith continua importante para manter o objeto em memória consistente.
+  arvoresSalvasComId.add(a.copyWith(id: newId));
+}
       
-      // Anexa a lista de árvores CORRETA (com IDs) ao objeto final.
-      parcelaModificavel.arvores = arvoresSalvasComId;
-      // --- FIM DA MUDANÇA IMPORTANTE ---
+// ✅ Anexa a lista de árvores CORRETA (com IDs) ao objeto final.
+parcelaModificavel.arvores = arvoresSalvasComId;
+// --- FIM DA MUDANÇA IMPORTANTE ---
       
-      return parcelaModificavel; 
+return parcelaModificavel;
     });
   }
 
