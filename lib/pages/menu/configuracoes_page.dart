@@ -1,4 +1,4 @@
-// lib/pages/menu/configuracoes_page.dart (VERSÃO ATUALIZADA)
+// lib/pages/menu/configuracoes_page.dart (VERSÃO ATUALIZADA COM VERIFICAÇÃO DE CONSISTÊNCIA)
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -11,11 +11,17 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:geoforestv1/pages/projetos/gerenciar_delegacoes_page.dart';
 import 'package:geoforestv1/providers/theme_provider.dart';
 import 'package:geoforestv1/pages/gerente/gerenciar_equipe_page.dart';
-// <<< ADICIONADO AQUI: Import para a nova página de relatório >>>
 import 'package:geoforestv1/pages/menu/relatorio_diario_page.dart'; 
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/utils/constants.dart';
+
+// <<< 1. IMPORTS NECESSÁRIOS PARA A NOVA FUNCIONALIDADE >>>
+import 'package:geoforestv1/services/validation_service.dart';
+import 'package:geoforestv1/pages/menu/consistencia_resultado_page.dart';
+import 'package:geoforestv1/models/parcela_model.dart';
+import 'package:geoforestv1/models/cubagem_arvore_model.dart';
+import 'package:geoforestv1/widgets/progress_dialog.dart';
 
 class ConfiguracoesPage extends StatefulWidget {
   const ConfiguracoesPage({super.key});
@@ -31,6 +37,9 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
   final _cubagemRepository = CubagemRepository();
   final _licensingService = LicensingService();
   
+  // <<< 2. INSTÂNCIA DO SERVIÇO DE VALIDAÇÃO >>>
+  final _validationService = ValidationService();
+
   Map<String, int>? _deviceUsage;
   bool _isLoadingLicense = true;
 
@@ -40,6 +49,8 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
     _carregarConfiguracoes();
     _fetchDeviceUsage();
   }
+
+  // ... (os outros métodos como _carregarConfiguracoes, _salvarConfiguracoes, etc. permanecem os mesmos)
 
   Future<void> _carregarConfiguracoes() async {
     final prefs = await SharedPreferences.getInstance();
@@ -130,6 +141,50 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
     await openAppSettings(); 
   }
   
+  // <<< 3. MÉTODO PARA ACIONAR A VERIFICAÇÃO DE CONSISTÊNCIA >>>
+  Future<void> _verificarConsistencia() async {
+    if (!mounted) return;
+    ProgressDialog.show(context, 'Verificando consistência dos dados...');
+
+    try {
+      // Busca todas as parcelas e cubagens que já foram finalizadas
+      final List<Parcela> parcelasConcluidas = await _parcelaRepository.getTodasAsParcelas()
+          .then((list) => list.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada).toList());
+
+      final List<CubagemArvore> cubagensConcluidas = await _cubagemRepository.getTodasCubagens()
+          .then((list) => list.where((c) => c.alturaTotal > 0).toList());
+
+      // Executa o serviço de validação
+      final report = await _validationService.performFullConsistencyCheck(
+        parcelas: parcelasConcluidas,
+        cubagens: cubagensConcluidas,
+        parcelaRepo: _parcelaRepository,
+        cubagemRepo: _cubagemRepository,
+      );
+
+      if (!mounted) return;
+      ProgressDialog.hide(context);
+
+      // Navega para a tela de resultados
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ConsistenciaResultadoPage(
+            report: report,
+            parcelasVerificadas: parcelasConcluidas,
+          ),
+        ),
+      );
+
+    } catch (e) {
+      if (!mounted) return;
+      ProgressDialog.hide(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao verificar consistência: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+  
   @override
   Widget build(BuildContext context) {
     final licenseProvider = context.watch<LicenseProvider>();
@@ -217,7 +272,6 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                   const Text('Gerenciamento de Dados', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                   const SizedBox(height: 12),
                   
-                  // <<< ADICIONADO AQUI: O botão para abrir o Diário de Campo >>>
                   ListTile(
                     leading: const Icon(Icons.today_outlined, color: Colors.blueGrey),
                     title: const Text('Gerar Relatório Diário da Equipe'),
@@ -228,6 +282,14 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                         MaterialPageRoute(builder: (context) => const RelatorioDiarioPage()),
                       );
                     },
+                  ),
+                  
+                  // <<< 4. ADICIONANDO O BOTÃO NA INTERFACE DO USUÁRIO >>>
+                  ListTile(
+                    leading: const Icon(Icons.rule_folder_outlined, color: Colors.indigo),
+                    title: const Text('Verificar Consistência dos Dados'),
+                    subtitle: const Text('Busca por erros de sequência, outliers e afilamento.'),
+                    onTap: _verificarConsistencia,
                   ),
 
                   if (isGerente)

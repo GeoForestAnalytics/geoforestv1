@@ -1,12 +1,12 @@
 // lib/pages/menu/home_page.dart (VERSÃO CORRIGIDA)
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 // Importações do Projeto
 import 'package:geoforestv1/pages/analises/analise_selecao_page.dart';
 import 'package:geoforestv1/pages/menu/configuracoes_page.dart';
-import 'package:geoforestv1/pages/projetos/lista_projetos_page.dart';
 import 'package:geoforestv1/pages/planejamento/selecao_atividade_mapa_page.dart';
 import 'package:geoforestv1/pages/menu/paywall_page.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
@@ -50,18 +50,21 @@ class _HomePageState extends State<HomePage> {
             subtitle: const Text('Selecione o projeto de destino para os dados.'),
             onTap: () {
               Navigator.of(ctx).pop();
-              Navigator.push(context, MaterialPageRoute(
-                builder: (context) => const ListaProjetosPage(
-                  title: 'Importar para o Projeto...',
-                  isImporting: true,
-                ),
-              ));
+              // ✅ USANDO O GO_ROUTER COM PARÂMETROS EXTRAS
+              context.push(
+                '/projetos',
+                extra: {
+                  'title': 'Importar para o Projeto...',
+                  'isImporting': true,
+                },
+              );
             },
           ),
         ],
       ),
     );
   }
+
 
   void _abrirAnalistaDeDados(BuildContext context) {
     Navigator.push(
@@ -182,12 +185,7 @@ class _HomePageState extends State<HomePage> {
             MenuCard(
               icon: Icons.folder_copy_outlined,
               label: 'Projetos e Coletas',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ListaProjetosPage(title: 'Meus Projetos'),
-                ),
-              ),
+              onTap: () => context.push('/projetos'), // ✅ USANDO O GO_ROUTER
             ),
             MenuCard(
               icon: Icons.map_outlined,

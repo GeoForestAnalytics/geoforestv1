@@ -1,4 +1,4 @@
-// lib/providers/operacoes_provider.dart (VERSÃO AJUSTADA E ENCAPSULADA)
+// lib/providers/operacoes_provider.dart (VERSÃO FINAL CORRIGIDA)
 
 import 'package:flutter/foundation.dart';
 import 'package:collection/collection.dart';
@@ -6,7 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
-import 'package:intl/intl.dart';
+
+
+// <<< IMPORT ADICIONADO AQUI >>>
+import 'package:geoforestv1/models/parcela_model.dart';
+// <<< FIM DO IMPORT >>>
+
 
 class KpiData {
   final int coletasRealizadas;
@@ -53,40 +58,50 @@ class OperacoesProvider with ChangeNotifier {
   List<CustoPorVeiculo> get custosPorVeiculo => _custosPorVeiculo;
   List<DiarioDeCampo> get diariosFiltrados => _diariosFiltrados;
 
-  /// ✅ PONTO DE ENTRADA PÚBLICO: Chamado pelo ProxyProvider para recalcular todas as métricas.
+  /// PONTO DE ENTRADA PÚBLICO: Chamado pelo ProxyProvider para recalcular todas as métricas.
   void update(GerenteProvider gerenteProvider, OperacoesFilterProvider filterProvider) {
     final todosOsDiarios = gerenteProvider.diariosSincronizados;
     final todasAsParcelas = gerenteProvider.parcelasSincronizadas;
     final todasAsCubagens = gerenteProvider.cubagensSincronizadas;
 
+    // 1. Filtra os diários pelo período e líder
     _diariosFiltrados = _filtrarDiarios(todosOsDiarios, filterProvider);
     
-    final datasFiltradas = _diariosFiltrados.map((d) => d.dataRelatorio).toSet();
-    final lideresFiltrados = _diariosFiltrados.map((d) => d.nomeLider).toSet();
-
-    final parcelasFiltradas = todasAsParcelas.where((p) {
-      if (p.dataColeta == null || p.nomeLider == null) return false;
-      final dataString = DateFormat('yyyy-MM-dd').format(p.dataColeta!);
-      final liderMatch = lideresFiltrados.isEmpty || lideresFiltrados.contains(p.nomeLider!);
-      return datasFiltradas.contains(dataString) && liderMatch;
+    // 2. Filtra as parcelas pelo mesmo período e líder
+    final parcelasNoPeriodo = todasAsParcelas.where((p) {
+      if (p.dataColeta == null) return false;
+      final liderMatch = filterProvider.lideresSelecionados.isEmpty ||
+                         (p.nomeLider != null && filterProvider.lideresSelecionados.contains(p.nomeLider!));
+      return _filtroDeData(p.dataColeta, filterProvider) && liderMatch;
     }).toList();
 
-    final cubagensFiltradas = todasAsCubagens.where((c) {
-      if (c.dataColeta == null || c.nomeLider == null) return false;
-      final dataString = DateFormat('yyyy-MM-dd').format(c.dataColeta!);
-      final liderMatch = lideresFiltrados.isEmpty || lideresFiltrados.contains(c.nomeLider!);
-      return datasFiltradas.contains(dataString) && liderMatch;
+    // 3. Filtra as cubagens pelo mesmo período e líder
+    final cubagensNoPeriodo = todasAsCubagens.where((c) {
+      if (c.dataColeta == null) return false;
+      final liderMatch = filterProvider.lideresSelecionados.isEmpty ||
+                         (c.nomeLider != null && filterProvider.lideresSelecionados.contains(c.nomeLider!));
+      return _filtroDeData(c.dataColeta, filterProvider) && liderMatch;
     }).toList();
+    
+    // 4. Calcula o total de coletas REALIZADAS (concluídas) DENTRO do período filtrado
+    final int parcelasRealizadas = parcelasNoPeriodo
+        .where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada)
+        .length;
+        
+    final int cubagensRealizadas = cubagensNoPeriodo
+        .where((c) => c.alturaTotal > 0)
+        .length;
 
-    final totalColetasFiltradas = parcelasFiltradas.length + cubagensFiltradas.length;
+    final totalColetasRealizadas = parcelasRealizadas + cubagensRealizadas;
 
-    if (_diariosFiltrados.isEmpty && totalColetasFiltradas == 0) {
+    if (_diariosFiltrados.isEmpty && totalColetasRealizadas == 0) {
       _limparDados();
-      notifyListeners(); // Notifica que os dados foram limpos
+      notifyListeners();
       return;
     }
     
-    _calcularKPIs(_diariosFiltrados, totalColetasFiltradas);
+    // 5. Calcula os KPIs usando o número correto de coletas realizadas
+    _calcularKPIs(_diariosFiltrados, totalColetasRealizadas);
     _calcularComposicaoDespesas(_diariosFiltrados);
     _calcularColetasPorEquipe(_diariosFiltrados);
     _calcularCustosPorVeiculo(_diariosFiltrados);
@@ -95,7 +110,7 @@ class OperacoesProvider with ChangeNotifier {
     notifyListeners();
   }
   
-  // ✅ MÉTODOS DE CÁLCULO AGORA SÃO PRIVADOS
+  // MÉTODOS DE CÁLCULO (agora privados)
 
   List<DiarioDeCampo> _filtrarDiarios(List<DiarioDeCampo> todos, OperacoesFilterProvider filterProvider) {
     List<DiarioDeCampo> filtradosPorData;
@@ -149,6 +164,41 @@ class OperacoesProvider with ChangeNotifier {
       return filtradosPorData.where((d) => filterProvider.lideresSelecionados.contains(d.nomeLider)).toList();
     }
   }
+  
+  // <<< FUNÇÃO _filtroDeData ADICIONADA AQUI >>>
+  bool _filtroDeData(DateTime? dataColeta, OperacoesFilterProvider filter) {
+    if (dataColeta == null) return filter.periodo == PeriodoFiltro.todos;
+    if (filter.periodo == PeriodoFiltro.todos) return true;
+
+    final agora = DateTime.now();
+    final dataColetaLocal = dataColeta.toLocal(); // Garante comparação na mesma timezone
+    
+    switch (filter.periodo) {
+      case PeriodoFiltro.hoje:
+        return dataColetaLocal.year == agora.year &&
+            dataColetaLocal.month == agora.month &&
+            dataColetaLocal.day == agora.day;
+      case PeriodoFiltro.ultimos7Dias:
+        return dataColetaLocal.isAfter(agora.subtract(const Duration(days: 7)));
+      case PeriodoFiltro.esteMes:
+        return dataColetaLocal.year == agora.year && dataColetaLocal.month == agora.month;
+      case PeriodoFiltro.mesPassado:
+        final primeiroDiaMesAtual = DateTime(agora.year, agora.month, 1);
+        final ultimoDiaMesPassado = primeiroDiaMesAtual.subtract(const Duration(days: 1));
+        return dataColetaLocal.year == ultimoDiaMesPassado.year &&
+            dataColetaLocal.month == ultimoDiaMesPassado.month;
+      case PeriodoFiltro.personalizado:
+        if (filter.periodoPersonalizado != null) {
+          final dataFim = filter.periodoPersonalizado!.end.add(const Duration(days: 1));
+          return dataColetaLocal.isAfter(filter.periodoPersonalizado!.start.subtract(const Duration(days: 1))) &&
+              dataColetaLocal.isBefore(dataFim);
+        }
+        return true;
+      default:
+        return true;
+    }
+  }
+  // <<< FIM DA FUNÇÃO ADICIONADA >>>
 
   void _calcularKPIs(List<DiarioDeCampo> diarios, int totalColetas) {
     double custoTotal = 0;
