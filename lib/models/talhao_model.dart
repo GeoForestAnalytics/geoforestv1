@@ -1,76 +1,34 @@
-// lib/models/talhao_model.dart (VERSÃO ATUALIZADA PARA O.S. KLABIN)
-import 'package:cloud_firestore/cloud_firestore.dart';
+// lib/models/talhao_model.dart (VERSÃO REFATORADA)
 
-/// Representa uma área de manejo florestal, conhecida como talhão.
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geoforestv1/data/datasources/local/database_constants.dart';
+
 class Talhao {
-  /// ID único do banco de dados local (gerado automaticamente).
   final int? id;
-  
-  /// ID da fazenda à qual o talhão pertence.
   final String fazendaId; 
-  
-  /// ID da atividade à qual o talhão está vinculado.
   final int fazendaAtividadeId;
-  
-  /// ID do projeto pai, obtido através de JOINs.
   final int? projetoId;
-  
-  /// Nome ou código identificador do talhão.
   final String nome;
-  
-  /// Área do talhão em hectares.
   final double? areaHa;
-  
-  /// Idade do plantio em anos.
   final double? idadeAnos;
-  
-  /// Espécie florestal plantada.
   final String? especie;
-  
-  /// Espaçamento de plantio (ex: "3x2").
   final String? espacamento;
-  
-  /// Nome da fazenda (geralmente obtido via JOIN).
   final String? fazendaNome;
-  
   final String? municipio;
   final String? estado;
-  
-  /// Volume total de madeira estimado para o talhão.
   double? volumeTotalTalhao;
-  
-  /// Data e hora da última modificação do registro.
   final DateTime? lastModified;
-
-  // <<< NOVOS CAMPOS DA O.S. KLABIN >>>
-  /// Bloco ao qual o talhão pertence.
   final String? bloco;
-  /// Unidade de Produção (UP), vindo da coluna RF.
   final String? up;
-  /// Material genético utilizado no plantio.
   final String? materialGenetico;
-  /// Data do plantio.
   final String? dataPlantio;
 
   Talhao({
-    this.id,
-    required this.fazendaId,
-    required this.fazendaAtividadeId,
-    this.projetoId,
-    required this.nome,
-    this.areaHa,
-    this.idadeAnos,
-    this.especie,
-    this.espacamento,
-    this.fazendaNome,
-    this.municipio,
-    this.estado,
-    this.volumeTotalTalhao,
-    this.lastModified,
-    this.bloco,
-    this.up,
-    this.materialGenetico,
-    this.dataPlantio,
+    this.id, required this.fazendaId, required this.fazendaAtividadeId,
+    this.projetoId, required this.nome, this.areaHa, this.idadeAnos,
+    this.especie, this.espacamento, this.fazendaNome, this.municipio,
+    this.estado, this.volumeTotalTalhao, this.lastModified, this.bloco,
+    this.up, this.materialGenetico, this.dataPlantio,
   });
 
   Talhao copyWith({
@@ -80,63 +38,52 @@ class Talhao {
     String? bloco, String? up, String? materialGenetico, String? dataPlantio,
   }) {
     return Talhao(
-      id: id ?? this.id,
-      fazendaId: fazendaId ?? this.fazendaId,
+      id: id ?? this.id, fazendaId: fazendaId ?? this.fazendaId,
       fazendaAtividadeId: fazendaAtividadeId ?? this.fazendaAtividadeId,
-      projetoId: projetoId ?? this.projetoId,
-      nome: nome ?? this.nome,
-      areaHa: areaHa ?? this.areaHa,
-      idadeAnos: idadeAnos ?? this.idadeAnos,
-      especie: especie ?? this.especie,
-      espacamento: espacamento ?? this.espacamento,
-      fazendaNome: fazendaNome ?? this.fazendaNome,
-      municipio: municipio ?? this.municipio,
-      estado: estado ?? this.estado,
-      volumeTotalTalhao: volumeTotalTalhao ?? this.volumeTotalTalhao,
-      lastModified: lastModified ?? this.lastModified,
-      bloco: bloco ?? this.bloco,
-      up: up ?? this.up,
-      materialGenetico: materialGenetico ?? this.materialGenetico,
+      projetoId: projetoId ?? this.projetoId, nome: nome ?? this.nome,
+      areaHa: areaHa ?? this.areaHa, idadeAnos: idadeAnos ?? this.idadeAnos,
+      especie: especie ?? this.especie, espacamento: espacamento ?? this.espacamento,
+      fazendaNome: fazendaNome ?? this.fazendaNome, municipio: municipio ?? this.municipio,
+      estado: estado ?? this.estado, volumeTotalTalhao: volumeTotalTalhao ?? this.volumeTotalTalhao,
+      lastModified: lastModified ?? this.lastModified, bloco: bloco ?? this.bloco,
+      up: up ?? this.up, materialGenetico: materialGenetico ?? this.materialGenetico,
       dataPlantio: dataPlantio ?? this.dataPlantio,
     );
   }
 
-  /// Converte para um Map para o BANCO DE DADOS LOCAL.
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'fazendaId': fazendaId,
-      'fazendaAtividadeId': fazendaAtividadeId,
-      'projetoId': projetoId,
-      'nome': nome,
-      'areaHa': areaHa,
-      'idadeAnos': idadeAnos,
-      'especie': especie,
-      'espacamento': espacamento,
-      'bloco': bloco,
-      'up': up,
-      'material_genetico': materialGenetico,
-      'data_plantio': dataPlantio,
-      'lastModified': lastModified?.toIso8601String(), 
+      DbTalhoes.id: id,
+      DbTalhoes.fazendaId: fazendaId,
+      DbTalhoes.fazendaAtividadeId: fazendaAtividadeId,
+      DbTalhoes.projetoId: projetoId,
+      DbTalhoes.nome: nome,
+      DbTalhoes.areaHa: areaHa,
+      DbTalhoes.idadeAnos: idadeAnos,
+      DbTalhoes.especie: especie,
+      DbTalhoes.espacamento: espacamento,
+      DbTalhoes.bloco: bloco,
+      DbTalhoes.up: up,
+      DbTalhoes.materialGenetico: materialGenetico,
+      DbTalhoes.dataPlantio: dataPlantio,
+      DbTalhoes.lastModified: lastModified?.toIso8601String(), 
     };
   }
 
-  /// Converte para um Map para o FIRESTORE.
   Map<String, dynamic> toFirestoreMap() {
     return {
-      'id': id,
-      'fazendaId': fazendaId,
-      'fazendaAtividadeId': fazendaAtividadeId,
-      'nome': nome,
-      'areaHa': areaHa,
-      'idadeAnos': idadeAnos,
-      'especie': especie,
-      'espacamento': espacamento,
-      'bloco': bloco,
-      'up': up,
-      'material_genetico': materialGenetico,
-      'data_plantio': dataPlantio,
-      // lastModified é gerenciado pelo servidor no Firestore
+      DbTalhoes.id: id,
+      DbTalhoes.fazendaId: fazendaId,
+      DbTalhoes.fazendaAtividadeId: fazendaAtividadeId,
+      DbTalhoes.nome: nome,
+      DbTalhoes.areaHa: areaHa,
+      DbTalhoes.idadeAnos: idadeAnos,
+      DbTalhoes.especie: especie,
+      DbTalhoes.espacamento: espacamento,
+      DbTalhoes.bloco: bloco,
+      DbTalhoes.up: up,
+      DbTalhoes.materialGenetico: materialGenetico,
+      DbTalhoes.dataPlantio: dataPlantio,
     };
   }
   
@@ -148,23 +95,23 @@ class Talhao {
     }
 
     return Talhao(
-      id: map['id'],
-      fazendaId: map['fazendaId'],
-      fazendaAtividadeId: map['fazendaAtividadeId'],
-      projetoId: map['projetoId'],
-      nome: map['nome'],
-      areaHa: map['areaHa'],
-      idadeAnos: map['idadeAnos'],
-      especie: map['especie'],
-      espacamento: map['espacamento'],
-      fazendaNome: map['fazendaNome'],
-      municipio: map['municipio'],
-      estado: map['estado'],
-      bloco: map['bloco'],
-      up: map['up'],
-      materialGenetico: map['material_genetico'],
-      dataPlantio: map['data_plantio'],
-      lastModified: parseDate(map['lastModified']),
+      id: map[DbTalhoes.id],
+      fazendaId: map[DbTalhoes.fazendaId],
+      fazendaAtividadeId: map[DbTalhoes.fazendaAtividadeId],
+      projetoId: map[DbTalhoes.projetoId],
+      nome: map[DbTalhoes.nome],
+      areaHa: (map[DbTalhoes.areaHa] as num?)?.toDouble(),
+      idadeAnos: (map[DbTalhoes.idadeAnos] as num?)?.toDouble(),
+      especie: map[DbTalhoes.especie],
+      espacamento: map[DbTalhoes.espacamento],
+      fazendaNome: map['fazendaNome'], // Este vem de um JOIN, não tem constante
+      municipio: map['municipio'],   // Este vem de um JOIN, não tem constante
+      estado: map['estado'],         // Este vem de um JOIN, não tem constante
+      bloco: map[DbTalhoes.bloco],
+      up: map[DbTalhoes.up],
+      materialGenetico: map[DbTalhoes.materialGenetico],
+      dataPlantio: map[DbTalhoes.dataPlantio],
+      lastModified: parseDate(map[DbTalhoes.lastModified]),
     );
   }
 }

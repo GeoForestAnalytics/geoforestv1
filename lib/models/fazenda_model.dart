@@ -1,5 +1,7 @@
-// lib/models/fazenda_model.dart (VERSÃO FINAL E CORRIGIDA)
+// lib/models/fazenda_model.dart (VERSÃO REFATORADA)
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geoforestv1/data/datasources/local/database_constants.dart';
 
 class Fazenda {
   final String id; 
@@ -20,12 +22,12 @@ class Fazenda {
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'atividadeId': atividadeId,
-      'nome': nome,
-      'municipio': municipio,
-      'estado': estado,
-      'lastModified': lastModified?.toIso8601String(),
+      DbFazendas.id: id,
+      DbFazendas.atividadeId: atividadeId,
+      DbFazendas.nome: nome,
+      DbFazendas.municipio: municipio,
+      DbFazendas.estado: estado,
+      DbFazendas.lastModified: lastModified?.toIso8601String(),
     };
   }
 
@@ -37,12 +39,12 @@ class Fazenda {
     }
 
     return Fazenda(
-      id: map['id'],
-      atividadeId: map['atividadeId'],
-      nome: map['nome'],
-      municipio: map['municipio'],
-      estado: map['estado'],
-      lastModified: parseDate(map['lastModified']),
+      id: map[DbFazendas.id],
+      atividadeId: map[DbFazendas.atividadeId],
+      nome: map[DbFazendas.nome],
+      municipio: map[DbFazendas.municipio],
+      estado: map[DbFazendas.estado],
+      lastModified: parseDate(map[DbFazendas.lastModified]),
     );
   }
 }

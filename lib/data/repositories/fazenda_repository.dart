@@ -1,6 +1,7 @@
-// lib/data/repositories/fazenda_repository.dart
+// lib/data/repositories/fazenda_repository.dart (VERSÃO REFATORADA)
 
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/data/datasources/local/database_constants.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -10,32 +11,39 @@ class FazendaRepository {
   Future<void> insertFazenda(Fazenda f) async {
     final db = await _dbHelper.database;
     final map = f.toMap();
-    // <<< ADICIONA O CARIMBO DE TEMPO ANTES DE INSERIR >>>
-    map['lastModified'] = DateTime.now().toIso8601String();
-    await db.insert('fazendas', map, conflictAlgorithm: ConflictAlgorithm.fail);
+    map[DbFazendas.lastModified] = DateTime.now().toIso8601String();
+    await db.insert(DbFazendas.tableName, map, conflictAlgorithm: ConflictAlgorithm.fail);
   }
 
   Future<int> updateFazenda(Fazenda f) async {
     final db = await _dbHelper.database;
     final map = f.toMap();
-    // <<< ADICIONA O CARIMBO DE TEMPO ANTES DE ATUALIZAR >>>
-    map['lastModified'] = DateTime.now().toIso8601String();
+    map[DbFazendas.lastModified] = DateTime.now().toIso8601String();
     return await db.update(
-      'fazendas', 
+      DbFazendas.tableName, 
       map, 
-      where: 'id = ? AND atividadeId = ?', 
+      where: '${DbFazendas.id} = ? AND ${DbFazendas.atividadeId} = ?', 
       whereArgs: [f.id, f.atividadeId]
     );
   }
 
   Future<List<Fazenda>> getFazendasDaAtividade(int atividadeId) async {
     final db = await _dbHelper.database;
-    final maps = await db.query('fazendas', where: 'atividadeId = ?', whereArgs: [atividadeId], orderBy: 'nome');
+    final maps = await db.query(
+      DbFazendas.tableName,
+      where: '${DbFazendas.atividadeId} = ?',
+      whereArgs: [atividadeId],
+      orderBy: DbFazendas.nome,
+    );
     return List.generate(maps.length, (i) => Fazenda.fromMap(maps[i]));
   }
 
   Future<void> deleteFazenda(String id, int atividadeId) async {
     final db = await _dbHelper.database;
-    await db.delete('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [id, atividadeId]);
+    await db.delete(
+      DbFazendas.tableName,
+      where: '${DbFazendas.id} = ? AND ${DbFazendas.atividadeId} = ?',
+      whereArgs: [id, atividadeId],
+    );
   }
 }

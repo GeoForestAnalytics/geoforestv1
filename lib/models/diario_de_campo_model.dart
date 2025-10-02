@@ -1,4 +1,6 @@
-// lib/models/diario_de_campo_model.dart (VERSÃO COM OUTROS GASTOS)
+// lib/models/diario_de_campo_model.dart (VERSÃO REFATORADA)
+
+import 'package:geoforestv1/data/datasources/local/database_constants.dart';
 
 class DiarioDeCampo {
   final int? id;
@@ -14,11 +16,8 @@ class DiarioDeCampo {
   final int? alimentacaoMarmitasQtd;
   final double? alimentacaoRefeicaoValor;
   final String? alimentacaoDescricao;
-
-  // <<< NOVOS CAMPOS ADICIONADOS >>>
   final double? outrasDespesasValor;
   final String? outrasDespesasDescricao;
-  
   final String? veiculoPlaca;
   final String? veiculoModelo;
   final String? equipeNoCarro;
@@ -39,8 +38,8 @@ class DiarioDeCampo {
     this.alimentacaoMarmitasQtd,
     this.alimentacaoRefeicaoValor,
     this.alimentacaoDescricao,
-    this.outrasDespesasValor,       // Adicionado ao construtor
-    this.outrasDespesasDescricao,   // Adicionado ao construtor
+    this.outrasDespesasValor,
+    this.outrasDespesasDescricao,
     this.veiculoPlaca,
     this.veiculoModelo,
     this.equipeNoCarro,
@@ -50,50 +49,49 @@ class DiarioDeCampo {
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'data_relatorio': dataRelatorio,
-      'nome_lider': nomeLider,
-      'projeto_id': projetoId,
-      'talhao_id': talhaoId,
-      'km_inicial': kmInicial,
-      'km_final': kmFinal,
-      'localizacao_destino': localizacaoDestino,
-      'pedagio_valor': pedagioValor,
-      'abastecimento_valor': abastecimentoValor,
-      'alimentacao_marmitas_qtd': alimentacaoMarmitasQtd,
-      'alimentacao_refeicao_valor': alimentacaoRefeicaoValor,
-      'alimentacao_descricao': alimentacaoDescricao,
-      'outras_despesas_valor': outrasDespesasValor,       // Adicionado ao mapa
-      'outras_despesas_descricao': outrasDespesasDescricao, // Adicionado ao mapa
-      'veiculo_placa': veiculoPlaca,
-      'veiculo_modelo': veiculoModelo,
-      'equipe_no_carro': equipeNoCarro,
-      'lastModified': lastModified,
+      DbDiarioDeCampo.id: id,
+      DbDiarioDeCampo.dataRelatorio: dataRelatorio,
+      DbDiarioDeCampo.nomeLider: nomeLider,
+      DbDiarioDeCampo.projetoId: projetoId,
+      DbDiarioDeCampo.talhaoId: talhaoId,
+      DbDiarioDeCampo.kmInicial: kmInicial,
+      DbDiarioDeCampo.kmFinal: kmFinal,
+      DbDiarioDeCampo.localizacaoDestino: localizacaoDestino,
+      DbDiarioDeCampo.pedagioValor: pedagioValor,
+      DbDiarioDeCampo.abastecimentoValor: abastecimentoValor,
+      DbDiarioDeCampo.alimentacaoMarmitasQtd: alimentacaoMarmitasQtd,
+      DbDiarioDeCampo.alimentacaoRefeicaoValor: alimentacaoRefeicaoValor,
+      DbDiarioDeCampo.alimentacaoDescricao: alimentacaoDescricao,
+      DbDiarioDeCampo.outrasDespesasValor: outrasDespesasValor,
+      DbDiarioDeCampo.outrasDespesasDescricao: outrasDespesasDescricao,
+      DbDiarioDeCampo.veiculoPlaca: veiculoPlaca,
+      DbDiarioDeCampo.veiculoModelo: veiculoModelo,
+      DbDiarioDeCampo.equipeNoCarro: equipeNoCarro,
+      DbDiarioDeCampo.lastModified: lastModified,
     };
   }
 
   factory DiarioDeCampo.fromMap(Map<String, dynamic> map) {
     return DiarioDeCampo(
-      id: map['id'],
-      dataRelatorio: map['data_relatorio'],
-      nomeLider: map['nome_lider'],
-      projetoId: map['projeto_id'],
-      talhaoId: map['talhao_id'],
-      kmInicial: map['km_inicial'],
-      kmFinal: map['km_final'],
-      localizacaoDestino: map['localizacao_destino'],
-      pedagioValor: map['pedagio_valor'],
-      abastecimentoValor: map['abastecimento_valor'],
-      alimentacaoMarmitasQtd: map['alimentacao_marmitas_qtd'],
-      alimentacaoRefeicaoValor: map['alimentacao_refeicao_valor'],
-      alimentacaoDescricao: map['alimentacao_descricao'],
-      outrasDespesasValor: map['outras_despesas_valor'],         // Lido do mapa
-      outrasDespesasDescricao: map['outras_despesas_descricao'], // Lido do mapa
-      veiculoPlaca: map['veiculo_placa'],
-      veiculoModelo: map['veiculo_modelo'],
-      equipeNoCarro: map['equipe_no_carro'],
-      lastModified: map['lastModified'],
-      // locaisTrabalhadosJson: map['locais_trabalhados_json'],
+      id: map[DbDiarioDeCampo.id],
+      dataRelatorio: map[DbDiarioDeCampo.dataRelatorio],
+      nomeLider: map[DbDiarioDeCampo.nomeLider],
+      projetoId: map[DbDiarioDeCampo.projetoId],
+      talhaoId: map[DbDiarioDeCampo.talhaoId],
+      kmInicial: (map[DbDiarioDeCampo.kmInicial] as num?)?.toDouble(),
+      kmFinal: (map[DbDiarioDeCampo.kmFinal] as num?)?.toDouble(),
+      localizacaoDestino: map[DbDiarioDeCampo.localizacaoDestino],
+      pedagioValor: (map[DbDiarioDeCampo.pedagioValor] as num?)?.toDouble(),
+      abastecimentoValor: (map[DbDiarioDeCampo.abastecimentoValor] as num?)?.toDouble(),
+      alimentacaoMarmitasQtd: map[DbDiarioDeCampo.alimentacaoMarmitasQtd],
+      alimentacaoRefeicaoValor: (map[DbDiarioDeCampo.alimentacaoRefeicaoValor] as num?)?.toDouble(),
+      alimentacaoDescricao: map[DbDiarioDeCampo.alimentacaoDescricao],
+      outrasDespesasValor: (map[DbDiarioDeCampo.outrasDespesasValor] as num?)?.toDouble(),
+      outrasDespesasDescricao: map[DbDiarioDeCampo.outrasDespesasDescricao],
+      veiculoPlaca: map[DbDiarioDeCampo.veiculoPlaca],
+      veiculoModelo: map[DbDiarioDeCampo.veiculoModelo],
+      equipeNoCarro: map[DbDiarioDeCampo.equipeNoCarro],
+      lastModified: map[DbDiarioDeCampo.lastModified],
     );
   }
 }

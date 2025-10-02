@@ -1,10 +1,11 @@
-// lib/models/parcela_model.dart (VERSÃO FINAL COM DECLIVIDADE)
+// lib/models/parcela_model.dart (VERSÃO REFATORADA)
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
+import 'package:geoforestv1/data/datasources/local/database_constants.dart';
 
 enum StatusParcela {
   pendente(Icons.pending_outlined, Colors.grey),
@@ -18,15 +19,11 @@ enum StatusParcela {
   const StatusParcela(this.icone, this.cor);
 }
 
-/// Representa uma unidade de amostragem (parcela) no inventário florestal.
 class Parcela {
-  /// ID único do banco de dados local (gerado automaticamente).
   int? dbId;
-  /// Identificador universal único para sincronização.
   String uuid;
   int? talhaoId; 
   DateTime? dataColeta;
-  
   final String? idFazenda;
   final String? nomeFazenda;
   final String? nomeTalhao;
@@ -35,26 +32,15 @@ class Parcela {
   final String? municipio;
   final String? estado;
   final String? atividadeTipo;
-  /// Unidade de Produção (UP), vindo da coluna RF do CSV.
   final String? up;
-  
-  /// Referência RF (Registro Florestal), usado para gerar o ID único da amostra.
   final String? referenciaRf;
-  /// Ciclo do plantio.
   final String? ciclo;
-  /// Rotação do plantio.
   final int? rotacao;
-  /// Tipo da parcela (ex: "Instalação", "Medição").
   final String? tipoParcela;
-  /// Forma da parcela (ex: "Retangular", "Circular").
   final String? formaParcela;
-  /// Medida do Lado 1 (largura em retângulos, raio em círculos).
   final double? lado1;
-  /// Medida do Lado 2 (comprimento em retângulos, nulo em círculos).
   final double? lado2;
-  /// Declividade do terreno em porcentagem (%).
   final double? declividade;
-
   final String idParcela;
   final double areaMetrosQuadrados;
   final String? observacao;
@@ -64,45 +50,20 @@ class Parcela {
   StatusParcela status;
   bool exportada;
   bool isSynced;
-  
   List<String> photoPaths;
   List<Arvore> arvores;
   final DateTime? lastModified;
 
   Parcela({
-    this.dbId,
-    String? uuid,
-    required this.talhaoId,
-    required this.idParcela,
-    required this.areaMetrosQuadrados,
-    this.idFazenda,
-    this.nomeFazenda,
-    this.nomeTalhao,
-    this.observacao,
-    this.latitude,
-    this.longitude,
-    this.altitude,
-    this.dataColeta,
-    this.status = StatusParcela.pendente,
-    this.exportada = false,
-    this.isSynced = false,
-    this.nomeLider,
-    this.projetoId,
-    this.municipio,
-    this.estado,
-    this.atividadeTipo,
-    this.up,
-    this.referenciaRf,
-    this.ciclo,
-    this.rotacao,
-    this.tipoParcela,
-    this.formaParcela,
-    this.lado1,
-    this.lado2,
-    this.declividade,
-    this.photoPaths = const [],
-    this.arvores = const [],
-    this.lastModified,
+    this.dbId, String? uuid, required this.talhaoId, required this.idParcela,
+    required this.areaMetrosQuadrados, this.idFazenda, this.nomeFazenda,
+    this.nomeTalhao, this.observacao, this.latitude, this.longitude,
+    this.altitude, this.dataColeta, this.status = StatusParcela.pendente,
+    this.exportada = false, this.isSynced = false, this.nomeLider,
+    this.projetoId, this.municipio, this.estado, this.atividadeTipo,
+    this.up, this.referenciaRf, this.ciclo, this.rotacao, this.tipoParcela,
+    this.formaParcela, this.lado1, this.lado2, this.declividade,
+    this.photoPaths = const [], this.arvores = const [], this.lastModified,
   }) : uuid = uuid ?? const Uuid().v4();
 
   Parcela copyWith({
@@ -112,7 +73,7 @@ class Parcela {
     bool? exportada, bool? isSynced, String? nomeLider, int? projetoId,
     String? municipio, String? estado, String? atividadeTipo, String? up,
     String? referenciaRf, String? ciclo, int? rotacao, String? tipoParcela,
-    String? formaParcela, double? lado1, double? lado2, double? declividade, List<String>? photoPaths, // <<< CORREÇÃO APLICADA AQUI
+    String? formaParcela, double? lado1, double? lado2, double? declividade, List<String>? photoPaths,
     List<Arvore>? arvores, DateTime? lastModified,
   }) {
     return Parcela(
@@ -121,37 +82,36 @@ class Parcela {
       nomeTalhao: nomeTalhao ?? this.nomeTalhao, idParcela: idParcela ?? this.idParcela,
       areaMetrosQuadrados: areaMetrosQuadrados ?? this.areaMetrosQuadrados, observacao: observacao ?? this.observacao,
       latitude: latitude ?? this.latitude, longitude: longitude ?? this.longitude,
-      altitude: altitude ?? this.altitude,
-      dataColeta: dataColeta ?? this.dataColeta, status: status ?? this.status,
-      exportada: exportada ?? this.exportada, isSynced: isSynced ?? this.isSynced,
-      nomeLider: nomeLider ?? this.nomeLider, projetoId: projetoId ?? this.projetoId,
-      municipio: municipio ?? this.municipio, estado: estado ?? this.estado,
-      atividadeTipo: atividadeTipo ?? this.atividadeTipo, up: up ?? this.up,
-      referenciaRf: referenciaRf ?? this.referenciaRf, ciclo: ciclo ?? this.ciclo,
+      altitude: altitude ?? this.altitude, dataColeta: dataColeta ?? this.dataColeta, 
+      status: status ?? this.status, exportada: exportada ?? this.exportada, 
+      isSynced: isSynced ?? this.isSynced, nomeLider: nomeLider ?? this.nomeLider, 
+      projetoId: projetoId ?? this.projetoId, municipio: municipio ?? this.municipio, 
+      estado: estado ?? this.estado, atividadeTipo: atividadeTipo ?? this.atividadeTipo, 
+      up: up ?? this.up, referenciaRf: referenciaRf ?? this.referenciaRf, ciclo: ciclo ?? this.ciclo,
       rotacao: rotacao ?? this.rotacao, tipoParcela: tipoParcela ?? this.tipoParcela,
       formaParcela: formaParcela ?? this.formaParcela, lado1: lado1 ?? this.lado1,
-      lado2: lado2 ?? this.lado2, 
-      declividade: declividade ?? this.declividade,
-      photoPaths: photoPaths ?? this.photoPaths,
-      arvores: arvores ?? this.arvores, 
+      lado2: lado2 ?? this.lado2, declividade: declividade ?? this.declividade,
+      photoPaths: photoPaths ?? this.photoPaths, arvores: arvores ?? this.arvores, 
       lastModified: lastModified ?? this.lastModified,
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'id': dbId, 'uuid': uuid, 'talhaoId': talhaoId, 'idFazenda': idFazenda,
-      'nomeFazenda': nomeFazenda, 'nomeTalhao': nomeTalhao, 'idParcela': idParcela,
-      'areaMetrosQuadrados': areaMetrosQuadrados, 'observacao': observacao,
-      'latitude': latitude, 'longitude': longitude,'altitude': altitude, 'dataColeta': dataColeta?.toIso8601String(),
-      'status': status.name, 'exportada': exportada ? 1 : 0, 'isSynced': isSynced ? 1 : 0,
-      'nomeLider': nomeLider, 'projetoId': projetoId, 'municipio': municipio, 'estado': estado,
-      'up': up, 'referencia_rf': referenciaRf, 'ciclo': ciclo, 'rotacao': rotacao,
-      'tipo_parcela': tipoParcela, 'forma_parcela': formaParcela,
-      'lado1': lado1, 'lado2': lado2,
-      'declividade': declividade, 
-      'photoPaths': jsonEncode(photoPaths),
-      'lastModified': lastModified?.toIso8601String()
+      DbParcelas.id: dbId, DbParcelas.uuid: uuid, DbParcelas.talhaoId: talhaoId, 
+      DbParcelas.idFazenda: idFazenda, DbParcelas.nomeFazenda: nomeFazenda, 
+      DbParcelas.nomeTalhao: nomeTalhao, DbParcelas.idParcela: idParcela,
+      DbParcelas.areaMetrosQuadrados: areaMetrosQuadrados, DbParcelas.observacao: observacao,
+      DbParcelas.latitude: latitude, DbParcelas.longitude: longitude, 
+      DbParcelas.altitude: altitude, DbParcelas.dataColeta: dataColeta?.toIso8601String(),
+      DbParcelas.status: status.name, DbParcelas.exportada: exportada ? 1 : 0, 
+      DbParcelas.isSynced: isSynced ? 1 : 0, DbParcelas.nomeLider: nomeLider, 
+      DbParcelas.projetoId: projetoId, DbParcelas.municipio: municipio, DbParcelas.estado: estado,
+      DbParcelas.up: up, DbParcelas.referenciaRf: referenciaRf, DbParcelas.ciclo: ciclo, 
+      DbParcelas.rotacao: rotacao, DbParcelas.tipoParcela: tipoParcela, 
+      DbParcelas.formaParcela: formaParcela, DbParcelas.lado1: lado1, DbParcelas.lado2: lado2,
+      DbParcelas.declividade: declividade, DbParcelas.photoPaths: jsonEncode(photoPaths),
+      DbParcelas.lastModified: lastModified?.toIso8601String()
     };
   }
 
@@ -163,56 +123,45 @@ class Parcela {
     }
 
     List<String> paths = [];
-    if (map['photoPaths'] != null) {
+    if (map[DbParcelas.photoPaths] != null) {
       try {
-        paths = List<String>.from(jsonDecode(map['photoPaths']));
+        paths = List<String>.from(jsonDecode(map[DbParcelas.photoPaths]));
       } catch (e) {
         debugPrint("Erro ao decodificar photoPaths: $e");
       }
     }
-
-    double? lado1 = (map['lado1'] as num?)?.toDouble();
-    double? lado2 = (map['lado2'] as num?)?.toDouble();
-
-    if (lado1 == null && map.containsKey('largura')) {
-        lado1 = (map['largura'] as num?)?.toDouble();
-        lado2 = (map['comprimento'] as num?)?.toDouble();
-    }
-    if (lado1 == null && map.containsKey('raio')) {
-        lado1 = (map['raio'] as num?)?.toDouble();
-    }
     
     return Parcela(
-      dbId: map['id'],
-      uuid: map['uuid'] ?? const Uuid().v4(),
-      talhaoId: map['talhaoId'],
-      idFazenda: map['idFazenda'],
-      nomeFazenda: map['nomeFazenda'],
-      nomeTalhao: map['nomeTalhao'],
-      idParcela: map['idParcela'] ?? 'ID_N/A',
-      areaMetrosQuadrados: (map['areaMetrosQuadrados'] as num?)?.toDouble() ?? 0.0,
-      observacao: map['observacao'],
-      latitude: (map['latitude'] as num?)?.toDouble(),
-      longitude: (map['longitude'] as num?)?.toDouble(),
-      altitude: (map['altitude'] as num?)?.toDouble(),
-      dataColeta: parseDate(map['dataColeta']),
-      status: StatusParcela.values.firstWhere((e) => e.name == map['status'], orElse: () => StatusParcela.pendente),
-      exportada: map['exportada'] == 1,
-      isSynced: map['isSynced'] == 1,
-      nomeLider: map['nomeLider'],
-      projetoId: map['projetoId'],
-      atividadeTipo: map['atividadeTipo'],
-      up: map['up'],
-      referenciaRf: map['referencia_rf'],
-      ciclo: map['ciclo']?.toString(),
-      rotacao: int.tryParse(map['rotacao']?.toString() ?? ''),
-      tipoParcela: map['tipo_parcela'],
-      formaParcela: map['forma_parcela'],
-      lado1: lado1,
-      lado2: lado2,
-      declividade: (map['declividade'] as num?)?.toDouble(),
+      dbId: map[DbParcelas.id],
+      uuid: map[DbParcelas.uuid] ?? const Uuid().v4(),
+      talhaoId: map[DbParcelas.talhaoId],
+      idFazenda: map[DbParcelas.idFazenda],
+      nomeFazenda: map[DbParcelas.nomeFazenda],
+      nomeTalhao: map[DbParcelas.nomeTalhao],
+      idParcela: map[DbParcelas.idParcela] ?? 'ID_N/A',
+      areaMetrosQuadrados: (map[DbParcelas.areaMetrosQuadrados] as num?)?.toDouble() ?? 0.0,
+      observacao: map[DbParcelas.observacao],
+      latitude: (map[DbParcelas.latitude] as num?)?.toDouble(),
+      longitude: (map[DbParcelas.longitude] as num?)?.toDouble(),
+      altitude: (map[DbParcelas.altitude] as num?)?.toDouble(),
+      dataColeta: parseDate(map[DbParcelas.dataColeta]),
+      status: StatusParcela.values.firstWhere((e) => e.name == map[DbParcelas.status], orElse: () => StatusParcela.pendente),
+      exportada: map[DbParcelas.exportada] == 1,
+      isSynced: map[DbParcelas.isSynced] == 1,
+      nomeLider: map[DbParcelas.nomeLider],
+      projetoId: map[DbParcelas.projetoId],
+      atividadeTipo: map['atividadeTipo'], // Este não é do banco, vem do provider
+      up: map[DbParcelas.up],
+      referenciaRf: map[DbParcelas.referenciaRf],
+      ciclo: map[DbParcelas.ciclo]?.toString(),
+      rotacao: int.tryParse(map[DbParcelas.rotacao]?.toString() ?? ''),
+      tipoParcela: map[DbParcelas.tipoParcela],
+      formaParcela: map[DbParcelas.formaParcela],
+      lado1: (map[DbParcelas.lado1] as num?)?.toDouble(),
+      lado2: (map[DbParcelas.lado2] as num?)?.toDouble(),
+      declividade: (map[DbParcelas.declividade] as num?)?.toDouble(),
       photoPaths: paths,
-      lastModified: parseDate(map['lastModified']),
+      lastModified: parseDate(map[DbParcelas.lastModified]),
     );
   }
 }

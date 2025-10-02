@@ -1,29 +1,27 @@
-// lib/data/repositories/diario_de_campo_repository.dart (VERSÃO AJUSTADA)
+// lib/data/repositories/diario_de_campo_repository.dart (VERSÃO REFATORADA)
 
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/data/datasources/local/database_constants.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:sqflite/sqflite.dart';
 
 class DiarioDeCampoRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  /// Salva um novo diário ou atualiza um existente se a chave única (data, lider) for a mesma.
   Future<void> insertOrUpdateDiario(DiarioDeCampo diario) async {
     final db = await _dbHelper.database;
     await db.insert(
-      'diario_de_campo',
+      DbDiarioDeCampo.tableName,
       diario.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace, // Isso faz o "update" caso já exista
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  /// Busca um diário específico para pré-preencher o formulário.
-  /// <<< ALTERAÇÃO: Não precisa mais do talhaoId para a busca. >>>
   Future<DiarioDeCampo?> getDiario(String data, String lider) async {
     final db = await _dbHelper.database;
     final maps = await db.query(
-      'diario_de_campo',
-      where: 'data_relatorio = ? AND nome_lider = ?',
+      DbDiarioDeCampo.tableName,
+      where: '${DbDiarioDeCampo.dataRelatorio} = ? AND ${DbDiarioDeCampo.nomeLider} = ?',
       whereArgs: [data, lider],
       limit: 1,
     );

@@ -1,6 +1,7 @@
-// lib/data/repositories/talhao_repository.dart (VERSÃO CORRIGIDA)
+// lib/data/repositories/talhao_repository.dart (VERSÃO REFATORADA)
 
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/data/datasources/local/database_constants.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:sqflite/sqflite.dart';
@@ -11,26 +12,26 @@ class TalhaoRepository {
   Future<int> insertTalhao(Talhao t) async {
     final db = await _dbHelper.database;
     final map = t.toMap();
-    map['lastModified'] = DateTime.now().toIso8601String();
-    return await db.insert('talhoes', map, conflictAlgorithm: ConflictAlgorithm.fail);
+    map[DbTalhoes.lastModified] = DateTime.now().toIso8601String();
+    return await db.insert(DbTalhoes.tableName, map, conflictAlgorithm: ConflictAlgorithm.fail);
   }
 
   Future<int> updateTalhao(Talhao t) async {
     final db = await _dbHelper.database;
     final map = t.toMap();
-    map['lastModified'] = DateTime.now().toIso8601String();
-    return await db.update('talhoes', map, where: 'id = ?', whereArgs: [t.id]);
+    map[DbTalhoes.lastModified] = DateTime.now().toIso8601String();
+    return await db.update(DbTalhoes.tableName, map, where: '${DbTalhoes.id} = ?', whereArgs: [t.id]);
   }
   
   Future<Talhao?> getTalhaoById(int id) async {
     final db = await _dbHelper.database;
     
     final maps = await db.rawQuery('''
-        SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId 
-        FROM talhoes T
-        INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
-        INNER JOIN atividades A ON F.atividadeId = A.id
-        WHERE T.id = ?
+        SELECT T.*, F.${DbFazendas.nome} as fazendaNome, A.${DbAtividades.projetoId} as ${DbTalhoes.projetoId} 
+        FROM ${DbTalhoes.tableName} T
+        INNER JOIN ${DbFazendas.tableName} F ON F.${DbFazendas.id} = T.${DbTalhoes.fazendaId} AND F.${DbFazendas.atividadeId} = T.${DbTalhoes.fazendaAtividadeId}
+        INNER JOIN ${DbAtividades.tableName} A ON F.${DbFazendas.atividadeId} = A.${DbAtividades.id}
+        WHERE T.${DbTalhoes.id} = ?
         LIMIT 1
     ''', [id]);
 
@@ -40,19 +41,16 @@ class TalhaoRepository {
     return null;
   }
 
-  // <<< CORREÇÃO PRINCIPAL APLICADA AQUI >>>
   Future<List<Talhao>> getTalhoesDaFazenda(String fazendaId, int fazendaAtividadeId) async {
     final db = await _dbHelper.database;
 
-    // A consulta agora é simples e direta: ela busca TODOS os talhões que 
-    // pertencem à fazenda/atividade, sem filtros. Isso garante que o fluxo manual funcione.
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId 
-      FROM talhoes T
-      INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
-      INNER JOIN atividades A ON F.atividadeId = A.id
-      WHERE T.fazendaId = ? AND T.fazendaAtividadeId = ?
-      ORDER BY T.nome ASC
+      SELECT T.*, F.${DbFazendas.nome} as fazendaNome, A.${DbAtividades.projetoId} as ${DbTalhoes.projetoId} 
+      FROM ${DbTalhoes.tableName} T
+      INNER JOIN ${DbFazendas.tableName} F ON F.${DbFazendas.id} = T.${DbTalhoes.fazendaId} AND F.${DbFazendas.atividadeId} = T.${DbTalhoes.fazendaAtividadeId}
+      INNER JOIN ${DbAtividades.tableName} A ON F.${DbFazendas.atividadeId} = A.${DbAtividades.id}
+      WHERE T.${DbTalhoes.fazendaId} = ? AND T.${DbTalhoes.fazendaAtividadeId} = ?
+      ORDER BY T.${DbTalhoes.nome} ASC
     ''', [fazendaId, fazendaAtividadeId]);
     
     return List.generate(maps.length, (i) => Talhao.fromMap(maps[i]));
@@ -61,31 +59,41 @@ class TalhaoRepository {
   Future<void> deleteTalhao(int id) async {
     final db = await _dbHelper.database;
     await db.transaction((txn) async {
-      await txn.delete('cubagens_arvores', where: 'talhaoId = ?', whereArgs: [id]);
-      await txn.delete('parcelas', where: 'talhaoId = ?', whereArgs: [id]);
-      await txn.delete('talhoes', where: 'id = ?', whereArgs: [id]);
+      await txn.delete(DbCubagensArvores.tableName, where: '${DbCubagensArvores.talhaoId} = ?', whereArgs: [id]);
+      await txn.delete(DbParcelas.tableName, where: '${DbParcelas.talhaoId} = ?', whereArgs: [id]);
+      await txn.delete(DbTalhoes.tableName, where: '${DbTalhoes.id} = ?', whereArgs: [id]);
     });
   }
 
   Future<double> getAreaTotalTalhoesDaFazenda(String fazendaId, int fazendaAtividadeId) async {
     final db = await _dbHelper.database;
-    final result = await db.rawQuery('SELECT SUM(areaHa) as total FROM talhoes WHERE fazendaId = ? AND fazendaAtividadeId = ?', [fazendaId, fazendaAtividadeId]);
+    final result = await db.rawQuery(
+      'SELECT SUM(${DbTalhoes.areaHa}) as total FROM ${DbTalhoes.tableName} WHERE ${DbTalhoes.fazendaId} = ? AND ${DbTalhoes.fazendaAtividadeId} = ?',
+      [fazendaId, fazendaAtividadeId]
+    );
     if (result.isNotEmpty && result.first['total'] != null) return (result.first['total'] as num).toDouble();
     return 0.0;
   }
   
   Future<List<Talhao>> getTalhoesComParcelasConcluidas() async {
     final db = await _dbHelper.database;
-    final List<Map<String, dynamic>> idMaps = await db.query('parcelas', distinct: true, columns: ['talhaoId'], where: 'status = ?', whereArgs: [StatusParcela.concluida.name]);
+    final List<Map<String, dynamic>> idMaps = await db.query(
+      DbParcelas.tableName,
+      distinct: true,
+      columns: [DbParcelas.talhaoId],
+      where: '${DbParcelas.status} = ?',
+      whereArgs: [StatusParcela.concluida.name]
+    );
     if (idMaps.isEmpty) return [];
-    final ids = idMaps.map((map) => map['talhaoId'] as int).toList();
+    
+    final ids = idMaps.map((map) => map[DbParcelas.talhaoId] as int).toList();
     
     final List<Map<String, dynamic>> talhoesMaps = await db.rawQuery('''
-      SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId 
-      FROM talhoes T
-      INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
-      INNER JOIN atividades A ON F.atividadeId = A.id
-      WHERE T.id IN (${List.filled(ids.length, '?').join(',')})
+      SELECT T.*, F.${DbFazendas.nome} as fazendaNome, A.${DbAtividades.projetoId} as ${DbTalhoes.projetoId} 
+      FROM ${DbTalhoes.tableName} T
+      INNER JOIN ${DbFazendas.tableName} F ON F.${DbFazendas.id} = T.${DbTalhoes.fazendaId} AND F.${DbFazendas.atividadeId} = T.${DbTalhoes.fazendaAtividadeId}
+      INNER JOIN ${DbAtividades.tableName} A ON F.${DbFazendas.atividadeId} = A.${DbAtividades.id}
+      WHERE T.${DbTalhoes.id} IN (${List.filled(ids.length, '?').join(',')})
     ''', ids);
     return List.generate(talhoesMaps.length, (i) => Talhao.fromMap(talhoesMaps[i]));
   }
@@ -93,11 +101,11 @@ class TalhaoRepository {
   Future<List<Talhao>> getTodosOsTalhoes() async {
     final db = await _dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT T.*, F.nome as fazendaNome, A.projetoId as projetoId
-      FROM talhoes T
-      INNER JOIN fazendas F ON F.id = T.fazendaId AND F.atividadeId = T.fazendaAtividadeId
-      INNER JOIN atividades A ON F.atividadeId = A.id
-      ORDER BY T.nome ASC
+      SELECT T.*, F.${DbFazendas.nome} as fazendaNome, A.${DbAtividades.projetoId} as ${DbTalhoes.projetoId}
+      FROM ${DbTalhoes.tableName} T
+      INNER JOIN ${DbFazendas.tableName} F ON F.${DbFazendas.id} = T.${DbTalhoes.fazendaId} AND F.${DbFazendas.atividadeId} = T.${DbTalhoes.fazendaAtividadeId}
+      INNER JOIN ${DbAtividades.tableName} A ON F.${DbFazendas.atividadeId} = A.${DbAtividades.id}
+      ORDER BY T.${DbTalhoes.nome} ASC
     ''');
     return List.generate(maps.length, (i) => Talhao.fromMap(maps[i]));
   }
