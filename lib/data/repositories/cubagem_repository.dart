@@ -1,14 +1,15 @@
-// lib/data/repositories/cubagem_repository.dart (VERSÃO CORRIGIDA)
+// lib/data/repositories/cubagem_repository.dart (VERSÃO REFATORADA)
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/data/datasources/local/database_constants.dart';
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_secao_model.dart';
-import 'package:geoforestv1/models/enums.dart'; // <<< 1. IMPORTAR ENUM
+import 'package:geoforestv1/models/enums.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/services/analysis_service.dart';
@@ -21,7 +22,7 @@ class CubagemRepository {
 
   Future<void> limparTodasAsCubagens() async {
     final db = await _dbHelper.database;
-    await db.delete('cubagens_arvores');
+    await db.delete(DbCubagensArvores.tableName);
     debugPrint('Tabela de cubagens e seções limpa.');
   }
 
@@ -40,7 +41,7 @@ class CubagemRepository {
       );
 
       final map = arvoreParaSalvar.toMap();
-      map['lastModified'] = nowAsString;
+      map[DbCubagensArvores.lastModified] = nowAsString;
 
       final prefs = await SharedPreferences.getInstance();
       String? nomeDoResponsavel = prefs.getString('nome_lider');
@@ -51,23 +52,23 @@ class CubagemRepository {
         }
       }
       if (nomeDoResponsavel != null) {
-        map['nomeLider'] = nomeDoResponsavel;
+        map[DbCubagensArvores.nomeLider] = nomeDoResponsavel;
       }
 
       if (arvoreParaSalvar.id == null) {
-        id = await txn.insert('cubagens_arvores', map,
+        id = await txn.insert(DbCubagensArvores.tableName, map,
             conflictAlgorithm: ConflictAlgorithm.replace);
       } else {
         id = arvoreParaSalvar.id!;
-        await txn.update('cubagens_arvores', map,
-            where: 'id = ?', whereArgs: [id]);
+        await txn.update(DbCubagensArvores.tableName, map,
+            where: '${DbCubagensArvores.id} = ?', whereArgs: [id]);
       }
-      await txn.delete('cubagens_secoes', where: 'cubagemArvoreId = ?', whereArgs: [id]);
+      await txn.delete(DbCubagensSecoes.tableName, where: '${DbCubagensSecoes.cubagemArvoreId} = ?', whereArgs: [id]);
       for (var s in secoes) {
         s.cubagemArvoreId = id;
         final secaoMap = s.toMap();
-        secaoMap['lastModified'] = nowAsString;
-        await txn.insert('cubagens_secoes', secaoMap);
+        secaoMap[DbCubagensSecoes.lastModified] = nowAsString;
+        await txn.insert(DbCubagensSecoes.tableName, secaoMap);
       }
     });
   }
@@ -85,16 +86,12 @@ class CubagemRepository {
 
     final analise = analysisService.getTalhaoInsights(talhao, parcelas, arvores);
 
-    // <<< 2. CORREÇÃO APLICADA AQUI >>>
-    // A chamada agora usa os parâmetros nomeados corretamente.
-    // Como esta função não sabe a preferência do usuário, definimos um padrão (DAP).
     final plano = analysisService.gerarPlanoDeCubagem(
       distribuicaoAmostrada: analise.distribuicaoDiametrica,
       totalArvoresAmostradas: analise.totalArvoresAmostradas,
       totalArvoresParaCubar: totalParaCubar,
-      metrica: MetricaDistribuicao.dap, // Usando DAP como padrão para esta função
+      metrica: MetricaDistribuicao.dap,
     );
-    // <<< FIM DA CORREÇÃO >>>
 
     if (plano.isEmpty) {
       throw Exception(
@@ -122,8 +119,8 @@ class CubagemRepository {
           );
 
           final map = arvoreCubagem.toMap();
-          map['lastModified'] = nowAsString;
-          await txn.insert('cubagens_arvores', map);
+          map[DbCubagensArvores.lastModified] = nowAsString;
+          await txn.insert(DbCubagensArvores.tableName, map);
         }
       }
     });
@@ -131,8 +128,8 @@ class CubagemRepository {
 
   Future<List<CubagemArvore>> getTodasCubagensDoTalhao(int talhaoId) async {
     final db = await _dbHelper.database;
-    final maps = await db.query('cubagens_arvores',
-        where: 'talhaoId = ?', whereArgs: [talhaoId], orderBy: 'id ASC');
+    final maps = await db.query(DbCubagensArvores.tableName,
+        where: '${DbCubagensArvores.talhaoId} = ?', whereArgs: [talhaoId], orderBy: '${DbCubagensArvores.id} ASC');
     return List.generate(maps.length, (i) => CubagemArvore.fromMap(maps[i]));
   }
 
@@ -146,14 +143,14 @@ class CubagemRepository {
     final dataFormatadaParaQuery =
         DateFormat('yyyy-MM-dd').format(dataSelecionada);
 
-    String whereClause = 'nomeLider = ? AND talhaoId = ? AND DATE(dataColeta) = ?';
+    String whereClause = '${DbCubagensArvores.nomeLider} = ? AND ${DbCubagensArvores.talhaoId} = ? AND DATE(${DbCubagensArvores.dataColeta}) = ?';
     List<dynamic> whereArgs = [nomeLider, talhaoId, dataFormatadaParaQuery];
 
     final List<Map<String, dynamic>> maps = await db.query(
-      'cubagens_arvores',
+      DbCubagensArvores.tableName,
       where: whereClause,
       whereArgs: whereArgs,
-      orderBy: 'lastModified DESC',
+      orderBy: '${DbCubagensArvores.lastModified} DESC',
     );
 
     if (maps.isNotEmpty) {
@@ -164,44 +161,44 @@ class CubagemRepository {
 
   Future<List<CubagemArvore>> getTodasCubagens() async {
     final db = await _dbHelper.database;
-    final maps = await db.query('cubagens_arvores', orderBy: 'id DESC');
+    final maps = await db.query(DbCubagensArvores.tableName, orderBy: '${DbCubagensArvores.id} DESC');
     return List.generate(maps.length, (i) => CubagemArvore.fromMap(maps[i]));
   }
 
   Future<List<CubagemSecao>> getSecoesPorArvoreId(int id) async {
     final db = await _dbHelper.database;
-    final maps = await db.query('cubagens_secoes',
-        where: 'cubagemArvoreId = ?',
+    final maps = await db.query(DbCubagensSecoes.tableName,
+        where: '${DbCubagensSecoes.cubagemArvoreId} = ?',
         whereArgs: [id],
-        orderBy: 'alturaMedicao ASC');
+        orderBy: '${DbCubagensSecoes.alturaMedicao} ASC');
     return List.generate(maps.length, (i) => CubagemSecao.fromMap(maps[i]));
   }
 
   Future<void> deletarCubagem(int id) async {
     final db = await _dbHelper.database;
-    await db.delete('cubagens_arvores', where: 'id = ?', whereArgs: [id]);
+    await db.delete(DbCubagensArvores.tableName, where: '${DbCubagensArvores.id} = ?', whereArgs: [id]);
   }
 
   Future<void> deletarMultiplasCubagens(List<int> ids) async {
     if (ids.isEmpty) return;
     final db = await _dbHelper.database;
-    await db.delete('cubagens_arvores',
-        where: 'id IN (${List.filled(ids.length, '?').join(',')})',
+    await db.delete(DbCubagensArvores.tableName,
+        where: '${DbCubagensArvores.id} IN (${List.filled(ids.length, '?').join(',')})',
         whereArgs: ids);
   }
 
   Future<List<CubagemArvore>> getUnsyncedCubagens() async {
     final db = await _dbHelper.database;
     final maps =
-        await db.query('cubagens_arvores', where: 'isSynced = ?', whereArgs: [0]);
+        await db.query(DbCubagensArvores.tableName, where: '${DbCubagensArvores.isSynced} = ?', whereArgs: [0]);
     return List.generate(maps.length, (i) => CubagemArvore.fromMap(maps[i]));
   }
 
   Future<CubagemArvore?> getOneUnsyncedCubagem() async {
     final db = await _dbHelper.database;
     final maps = await db.query(
-      'cubagens_arvores',
-      where: 'isSynced = ?',
+      DbCubagensArvores.tableName,
+      where: '${DbCubagensArvores.isSynced} = ?',
       whereArgs: [0],
       limit: 1,
     );
@@ -214,27 +211,27 @@ class CubagemRepository {
   Future<List<CubagemArvore>> getUnexportedCubagens() async {
     final db = await _dbHelper.database;
     final maps =
-        await db.query('cubagens_arvores', where: 'exportada = ?', whereArgs: [0]);
+        await db.query(DbCubagensArvores.tableName, where: '${DbCubagensArvores.exportada} = ?', whereArgs: [0]);
     return List.generate(maps.length, (i) => CubagemArvore.fromMap(maps[i]));
   }
 
   Future<List<CubagemArvore>> getTodasCubagensParaBackup() async {
     final db = await _dbHelper.database;
-    final maps = await db.query('cubagens_arvores');
+    final maps = await db.query(DbCubagensArvores.tableName);
     return List.generate(maps.length, (i) => CubagemArvore.fromMap(maps[i]));
   }
 
   Future<void> markCubagemAsSynced(int id) async {
     final db = await _dbHelper.database;
-    await db.update('cubagens_arvores', {'isSynced': 1},
-        where: 'id = ?', whereArgs: [id]);
+    await db.update(DbCubagensArvores.tableName, {DbCubagensArvores.isSynced: 1},
+        where: '${DbCubagensArvores.id} = ?', whereArgs: [id]);
   }
 
   Future<void> marcarCubagensComoExportadas(List<int> ids) async {
     if (ids.isEmpty) return;
     final db = await _dbHelper.database;
-    await db.update('cubagens_arvores', {'exportada': 1},
-        where: 'id IN (${List.filled(ids.length, '?').join(',')})',
+    await db.update(DbCubagensArvores.tableName, {DbCubagensArvores.exportada: 1},
+        where: '${DbCubagensArvores.id} IN (${List.filled(ids.length, '?').join(',')})',
         whereArgs: ids);
   }
 
@@ -243,9 +240,9 @@ class CubagemRepository {
     final db = await _dbHelper.database;
 
     final List<Map<String, dynamic>> talhoesMaps = await db.query(
-      'talhoes',
-      columns: ['id'],
-      where: 'fazendaAtividadeId = ?',
+      DbTalhoes.tableName,
+      columns: [DbTalhoes.id],
+      where: '${DbTalhoes.fazendaAtividadeId} = ?',
       whereArgs: [atividadeId],
     );
 
@@ -254,11 +251,11 @@ class CubagemRepository {
     }
 
     final List<int> talhaoIds =
-        talhoesMaps.map((map) => map['id'] as int).toList();
+        talhoesMaps.map((map) => map[DbTalhoes.id] as int).toList();
 
     final List<Map<String, dynamic>> cubagensMaps = await db.query(
-      'cubagens_arvores',
-      where: 'talhaoId IN (${List.filled(talhaoIds.length, '?').join(',')})',
+      DbCubagensArvores.tableName,
+      where: '${DbCubagensArvores.talhaoId} IN (${List.filled(talhaoIds.length, '?').join(',')})',
       whereArgs: talhaoIds,
     );
 
@@ -268,12 +265,12 @@ class CubagemRepository {
 
   Future<Set<String>> getDistinctLideres() async {
     final db = await _dbHelper.database;
-    final maps = await db.query('cubagens_arvores',
+    final maps = await db.query(DbCubagensArvores.tableName,
         distinct: true,
-        columns: ['nomeLider'],
-        where: 'nomeLider IS NOT NULL AND nomeLider != ? AND alturaTotal > 0',
+        columns: [DbCubagensArvores.nomeLider],
+        where: '${DbCubagensArvores.nomeLider} IS NOT NULL AND ${DbCubagensArvores.nomeLider} != ? AND ${DbCubagensArvores.alturaTotal} > 0',
         whereArgs: ['']);
-    return maps.map((map) => map['nomeLider'] as String).toSet();
+    return maps.map((map) => map[DbCubagensArvores.nomeLider] as String).toSet();
   }
 
   Future<List<CubagemArvore>> getConcludedCubagensFiltrado(
@@ -281,22 +278,22 @@ class CubagemRepository {
     final db = await _dbHelper.database;
 
     String query = '''
-      SELECT C.*, A.projetoId FROM cubagens_arvores C
-      INNER JOIN talhoes T ON C.talhaoId = T.id
-      INNER JOIN atividades A ON T.fazendaAtividadeId = A.id
-      WHERE C.alturaTotal > 0
+      SELECT C.*, A.${DbAtividades.projetoId} FROM ${DbCubagensArvores.tableName} C
+      INNER JOIN ${DbTalhoes.tableName} T ON C.${DbCubagensArvores.talhaoId} = T.${DbTalhoes.id}
+      INNER JOIN ${DbAtividades.tableName} A ON T.${DbTalhoes.fazendaAtividadeId} = A.${DbAtividades.id}
+      WHERE C.${DbCubagensArvores.alturaTotal} > 0
     ''';
 
     List<dynamic> whereArgs = [];
 
     if (projetoIds != null && projetoIds.isNotEmpty) {
       query +=
-          ' AND A.projetoId IN (${List.filled(projetoIds.length, '?').join(',')})';
+          ' AND A.${DbAtividades.projetoId} IN (${List.filled(projetoIds.length, '?').join(',')})';
       whereArgs.addAll(projetoIds);
     }
     if (lideresNomes != null && lideresNomes.isNotEmpty) {
       query +=
-          ' AND C.nomeLider IN (${List.filled(lideresNomes.length, '?').join(',')})';
+          ' AND C.${DbCubagensArvores.nomeLider} IN (${List.filled(lideresNomes.length, '?').join(',')})';
       whereArgs.addAll(lideresNomes);
     }
 
