@@ -692,15 +692,34 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
         ],
       );
     } else { 
-      return Row(
-        children: [
-          Expanded(child: SizedBox(height: 50, child: OutlinedButton(onPressed: _salvando ? null : _finalizarParcelaVazia, style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFF1D4433)), foregroundColor: const Color(0xFF1D4433)), child: const Text('Finalizar Vazia')))),
-          const SizedBox(width: 16),
-          Expanded(child: SizedBox(height: 50, child: ElevatedButton(onPressed: _salvando ? null : _salvarEIniciarColeta, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1D4433), foregroundColor: Colors.white), child: _salvando ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white)) : const Text('Iniciar Coleta', style: TextStyle(fontSize: 18))))),
-        ],
-      );
-    }
+  return Wrap( // ✅ Substitua Row por Wrap
+    spacing: 16.0, // Espaço horizontal entre os botões
+    runSpacing: 12.0, // Espaço vertical se quebrar a linha
+    alignment: WrapAlignment.center, // Centraliza os botões
+    children: [
+      SizedBox(
+        width: 150, // Dê uma largura mínima razoável
+        height: 50, 
+        child: OutlinedButton(
+          onPressed: _salvando ? null : _finalizarParcelaVazia, 
+          style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFF1D4433)), foregroundColor: const Color(0xFF1D4433)), 
+          child: const Text('Finalizar Vazia')
+        )
+      ),
+      SizedBox(
+        width: 150, // Dê uma largura mínima razoável
+        height: 50, 
+        child: ElevatedButton(
+          onPressed: _salvando ? null : _salvarEIniciarColeta, 
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1D4433), foregroundColor: Colors.white), 
+          child: _salvando ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white)) : const Text('Iniciar Coleta', style: TextStyle(fontSize: 18))
+        )
+      ),
+    ],
+  );
+}
   }
+
 
    Widget _buildCalculadoraArea(double areaInclinada, double areaHorizontal) {
     final double areaParaExibir = (areaInclinada <= 0 && _areaAlvoDaParcela > 0)
