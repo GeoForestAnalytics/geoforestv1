@@ -431,8 +431,9 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   void _navegarParaDetalhes(Projeto projeto) {
-    context.go('/projetos/${projeto.id}');
-  }
+  // CORRETO
+  context.push('/projetos/${projeto.id}'); 
+}
 
   @override
   Widget build(BuildContext context) {

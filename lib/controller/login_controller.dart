@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geoforestv1/services/auth_service.dart';
 // ✅ 1. IMPORT NECESSÁRIO: Precisamos do DatabaseHelper para poder apagar o banco.
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <-- Adicione este import
 
 class LoginController with ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -46,22 +47,26 @@ class LoginController with ChangeNotifier {
   /// ✅ 3. MÉTODO signOut COMPLETAMENTE SUBSTITUÍDO
   /// Agora ele garante que todos os dados locais sejam apagados ANTES do logout.
   Future<void> signOut() async {
-    try {
-      // ETAPA 1: Apaga completamente o arquivo do banco de dados local.
-      // Isso garante que, quando o próximo usuário fizer login, ele começará do zero.
-      await _dbHelper.deleteDatabaseFile();
-      
-      // ETAPA 2: Apenas depois de apagar os dados, desloga o usuário do Firebase.
-      await _authService.signOut();
-      
-      // O listener `authStateChanges` será acionado automaticamente pelo signOut
-      // e o AppRouter redirecionará o usuário para a tela de login.
-      
-    } catch (e) {
-      debugPrint("!!!!!! Erro durante o processo de logout e limpeza: $e !!!!!");
-      // Como medida de segurança, mesmo que a limpeza do banco falhe,
-      // ainda tentamos deslogar o usuário para que ele não fique preso.
-      await _authService.signOut();
-    }
+  try {
+    // ETAPA 1: Limpa o banco de dados local (SQLite)
+    await _dbHelper.deleteDatabaseFile();
+    
+    // ETAPA 2: Limpa o cache offline do Firestore
+    // Isso força o app a buscar dados frescos da nuvem no próximo login.
+    await FirebaseFirestore.instance.clearPersistence();
+
+    // ETAPA 3: Desloga o usuário do Firebase Auth
+    await _authService.signOut();
+
+    // Opcional, mas recomendado:
+    // Termina a instância do Firestore para garantir que todas as conexões sejam fechadas.
+    await FirebaseFirestore.instance.terminate();
+
+  } catch (e) {
+    debugPrint("!!!!!! Erro durante o processo de logout e limpeza: $e !!!!!");
+    // Como medida de segurança, mesmo que a limpeza falhe,
+    // ainda tentamos deslogar o usuário.
+    await _authService.signOut();
   }
+}
 }

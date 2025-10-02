@@ -1,4 +1,4 @@
-// lib/pages/menu/relatorio_diario_page.dart (VERSÃO COMPLETA COM "OUTROS GASTOS")
+// lib/pages/menu/relatorio_diario_page.dart (VERSÃO CORRIGIDA COM MULTI-SELECT)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -24,13 +24,11 @@ import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/data/repositories/diario_de_campo_repository.dart';
 import 'visualizador_relatorio_page.dart';
 
-/// Enum para controlar qual etapa do relatório está sendo exibida.
 enum RelatorioStep {
   selecionarFiltros,
   consolidarEPreencher,
 }
 
-/// Página para geração de relatórios diários de atividades de campo.
 class RelatorioDiarioPage extends StatefulWidget {
   const RelatorioDiarioPage({super.key});
 
@@ -41,7 +39,6 @@ class RelatorioDiarioPage extends StatefulWidget {
 class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   RelatorioStep _currentStep = RelatorioStep.selecionarFiltros;
 
-  // Controladores do formulário do diário
   final _liderController = TextEditingController();
   final _ajudantesController = TextEditingController();
   final _kmInicialController = TextEditingController();
@@ -57,7 +54,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   final _placaController = TextEditingController();
   final _modeloController = TextEditingController();
 
-  // Repositórios
   final _projetoRepo = ProjetoRepository();
   final _atividadeRepo = AtividadeRepository();
   final _fazendaRepo = FazendaRepository();
@@ -66,11 +62,9 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   final _cubagemRepo = CubagemRepository();
   final _diarioRepo = DiarioDeCampoRepository();
 
-  // Estado dos filtros
   DateTime _dataSelecionada = DateTime.now();
   List<Talhao> _locaisTrabalhados = [];
 
-  // Estado dos resultados consolidados
   DiarioDeCampo? _diarioAtual;
   List<Parcela> _parcelasDoRelatorio = [];
   List<CubagemArvore> _cubagensDoRelatorio = [];
@@ -103,7 +97,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     super.dispose();
   }
 
-  /// Preenche os nomes da equipe, tratando o caso do gerente.
   void _preencherNomesEquipe() {
     final teamProvider = Provider.of<TeamProvider>(context, listen: false);
     _liderController.text = teamProvider.lider ?? '';
@@ -120,7 +113,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     }
   }
 
-  /// Exibe o seletor de data.
   Future<void> _selecionarData(BuildContext context) async {
     final DateTime? dataEscolhida = await showDatePicker(
       context: context,
@@ -131,9 +123,10 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     if (dataEscolhida != null) setState(() => _dataSelecionada = dataEscolhida);
   }
 
-  /// Abre o diálogo para o usuário selecionar um local de trabalho.
+  // >>> MÉTODO ATUALIZADO <<<
   Future<void> _adicionarLocalTrabalho() async {
-    final Talhao? talhaoSelecionado = await showDialog<Talhao>(
+    // Agora esperamos uma Lista de Talhões
+    final List<Talhao>? talhoesSelecionados = await showDialog<List<Talhao>>(
       context: context,
       builder: (_) => _SelecaoLocalTrabalhoDialog(
         projetoRepo: _projetoRepo,
@@ -143,16 +136,19 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       ),
     );
 
-    if (talhaoSelecionado != null) {
+    // Se a lista não for nula e não estiver vazia
+    if (talhoesSelecionados != null && talhoesSelecionados.isNotEmpty) {
       setState(() {
-        if (!_locaisTrabalhados.any((t) => t.id == talhaoSelecionado.id)) {
-          _locaisTrabalhados.add(talhaoSelecionado);
+        // Itera sobre cada talhão selecionado e o adiciona
+        for (final talhao in talhoesSelecionados) {
+          if (!_locaisTrabalhados.any((t) => t.id == talhao.id)) {
+            _locaisTrabalhados.add(talhao);
+          }
         }
       });
     }
   }
   
-  /// Busca todas as coletas (parcelas e cubagens) dos locais selecionados na data escolhida.
   Future<void> _gerarRelatorioConsolidado() async {
     if (_locaisTrabalhados.isEmpty || _liderController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -198,7 +194,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     });
   }
   
-  /// Preenche o formulário do diário com dados existentes.
   void _preencherControladoresDiario() {
     _kmInicialController.text = _diarioAtual?.kmInicial?.toString().replaceAll('.', ',') ?? '';
     _kmFinalController.text = _diarioAtual?.kmFinal?.toString().replaceAll('.', ',') ?? '';
@@ -214,7 +209,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     _modeloController.text = _diarioAtual?.veiculoModelo ?? '';
   }
   
-  /// Salva o diário e navega para a tela de visualização e ações finais.
   Future<void> _navegarParaVisualizacao() async {
     if (mounted) setState(() => _isLoading = true);
 
@@ -292,7 +286,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     );
   }
 
-  /// Constrói a UI da primeira etapa (filtros).
   Widget _buildFiltros() {
     return ListView(
       padding: const EdgeInsets.all(16.0),
@@ -369,7 +362,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     );
   }
 
-  /// Constrói a UI da segunda etapa (visualização e preenchimento).
   Widget _buildConsolidacaoEFormulario() {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 90.0),
@@ -458,7 +450,6 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   }
 }
 
-/// Um widget de diálogo para selecionar a hierarquia: Projeto -> Atividade -> Fazenda -> Talhão.
 class _SelecaoLocalTrabalhoDialog extends StatefulWidget {
   final ProjetoRepository projetoRepo;
   final AtividadeRepository atividadeRepo;
@@ -477,7 +468,6 @@ class _SelecaoLocalTrabalhoDialog extends StatefulWidget {
 }
 
 class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialog> {
-  // Listas para popular os dropdowns
   List<Projeto> _projetosDisponiveis = [];
   Projeto? _projetoSelecionado;
   List<Atividade> _atividadesDisponiveis = [];
@@ -485,7 +475,9 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
   List<Fazenda> _fazendasDisponiveis = [];
   Fazenda? _fazendaSelecionada;
   List<Talhao> _talhoesDisponiveis = [];
-  Talhao? _talhaoSelecionado;
+  
+  // >>> MUDANÇA 1: DE UM ÚNICO TALHÃO PARA UM CONJUNTO DE TALHÕES <<<
+  final Set<Talhao> _talhoesSelecionados = {};
 
   @override
   void initState() {
@@ -503,7 +495,7 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
       _projetoSelecionado = projeto;
       _atividadeSelecionada = null; _atividadesDisponiveis = [];
       _fazendaSelecionada = null; _fazendasDisponiveis = [];
-      _talhaoSelecionado = null; _talhoesDisponiveis = [];
+      _talhoesSelecionados.clear(); _talhoesDisponiveis = [];
     });
     if (projeto != null) {
       _atividadesDisponiveis = await widget.atividadeRepo.getAtividadesDoProjeto(projeto.id!);
@@ -515,7 +507,7 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
     setState(() {
       _atividadeSelecionada = atividade;
       _fazendaSelecionada = null; _fazendasDisponiveis = [];
-      _talhaoSelecionado = null; _talhoesDisponiveis = [];
+      _talhoesSelecionados.clear(); _talhoesDisponiveis = [];
     });
     if (atividade != null) {
       _fazendasDisponiveis = await widget.fazendaRepo.getFazendasDaAtividade(atividade.id!);
@@ -526,7 +518,7 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
   Future<void> _onFazendaSelecionada(Fazenda? fazenda) async {
     setState(() {
       _fazendaSelecionada = fazenda;
-      _talhaoSelecionado = null; _talhoesDisponiveis = [];
+      _talhoesSelecionados.clear(); _talhoesDisponiveis = [];
     });
     if (fazenda != null) {
       _talhoesDisponiveis = await widget.talhaoRepo.getTalhoesDaFazenda(fazenda.id, fazenda.atividadeId);
@@ -541,11 +533,12 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DropdownButtonFormField<Projeto>(
               value: _projetoSelecionado,
               hint: const Text('Selecione o Projeto'),
-              items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome))).toList(),
+              items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome, overflow: TextOverflow.ellipsis))).toList(),
               onChanged: _onProjetoSelecionado,
               isExpanded: true,
             ),
@@ -554,7 +547,7 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
               DropdownButtonFormField<Atividade>(
                 value: _atividadeSelecionada,
                 hint: const Text('Selecione a Atividade'),
-                items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo))).toList(),
+                items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo, overflow: TextOverflow.ellipsis))).toList(),
                 onChanged: _onAtividadeSelecionada,
                 isExpanded: true,
               ),
@@ -563,26 +556,69 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
               DropdownButtonFormField<Fazenda>(
                 value: _fazendaSelecionada,
                 hint: const Text('Selecione a Fazenda'),
-                items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome))).toList(),
+                items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome, overflow: TextOverflow.ellipsis))).toList(),
                 onChanged: _onFazendaSelecionada,
                 isExpanded: true,
               ),
             const SizedBox(height: 16),
-            if (_fazendaSelecionada != null)
-              DropdownButtonFormField<Talhao>(
-                value: _talhaoSelecionado,
-                hint: const Text('Selecione o Talhão'),
-                items: _talhoesDisponiveis.map((t) => DropdownMenuItem(value: t, child: Text(t.nome))).toList(),
-                onChanged: (t) => setState(() => _talhaoSelecionado = t),
-                isExpanded: true,
-              ),
+            
+            // >>> MUDANÇA 2: SUBSTITUIÇÃO DO DROPDOWN PELA LISTA DE CHECKBOXES <<<
+            if (_fazendaSelecionada != null && _talhoesDisponiveis.isNotEmpty)
+              Container(
+                height: 250, 
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ListView(
+                  children: [
+                    CheckboxListTile(
+                      title: const Text('Selecionar Todos os Talhões', style: TextStyle(fontWeight: FontWeight.bold)),
+                      value: _talhoesDisponiveis.isNotEmpty && _talhoesSelecionados.length == _talhoesDisponiveis.length,
+                      onChanged: (selecionarTodos) {
+                        setState(() {
+                          if (selecionarTodos == true) {
+                            _talhoesSelecionados.addAll(_talhoesDisponiveis);
+                          } else {
+                            _talhoesSelecionados.clear();
+                          }
+                        });
+                      },
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                    const Divider(height: 1),
+                    ..._talhoesDisponiveis.map((talhao) {
+                      return CheckboxListTile(
+                        title: Text(talhao.nome),
+                        value: _talhoesSelecionados.contains(talhao),
+                        onChanged: (isSelected) {
+                          setState(() {
+                            if (isSelected == true) {
+                              _talhoesSelecionados.add(talhao);
+                            } else {
+                              _talhoesSelecionados.remove(talhao);
+                            }
+                          });
+                        },
+                        controlAffinity: ListTileControlAffinity.leading,
+                      );
+                    }),
+                  ],
+                ),
+              )
+            else if (_fazendaSelecionada != null)
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text("Nenhum talhão encontrado para esta fazenda.", textAlign: TextAlign.center),
+              )
           ],
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        // >>> MUDANÇA 3: AJUSTE DO BOTÃO ADICIONAR <<<
         FilledButton(
-          onPressed: _talhaoSelecionado != null ? () => Navigator.of(context).pop(_talhaoSelecionado) : null,
+          onPressed: _talhoesSelecionados.isNotEmpty ? () => Navigator.of(context).pop(_talhoesSelecionados.toList()) : null,
           child: const Text('Adicionar'),
         ),
       ],

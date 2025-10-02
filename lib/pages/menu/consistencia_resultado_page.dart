@@ -1,14 +1,15 @@
-// ✅ NOVO ARQUIVO: lib/pages/menu/consistencia_resultado_page.dart (COM CORREÇÕES)
+// lib/pages/menu/consistencia_resultado_page.dart (VERSÃO CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:geoforestv1/models/arvore_model.dart'; // <-- IMPORT NECESSÁRIO
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/pages/amostra/inventario_page.dart';
 import 'package:geoforestv1/services/validation_service.dart';
 
 class ConsistenciaResultadoPage extends StatelessWidget {
   final FullValidationReport report;
-  final List<Parcela> parcelasVerificadas; // Para poder re-verificar
+  final List<Parcela> parcelasVerificadas;
 
   const ConsistenciaResultadoPage({
     super.key,
@@ -26,7 +27,6 @@ class ConsistenciaResultadoPage extends StatelessWidget {
         actions: [
           TextButton.icon(
             onPressed: () {
-              // TODO: Implementar lógica de exportação aqui
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Exportação iniciada com os dados consistidos.'))
               );
@@ -51,21 +51,29 @@ class ConsistenciaResultadoPage extends StatelessWidget {
                     children: issuesDoTipo.map((issue) {
                       return ListTile(
                         leading: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
-                        // ✅ CORREÇÃO 1: Trocar 'identificadorParcela' por 'identificador'
                         title: Text(issue.identificador),
                         subtitle: Text(issue.mensagem),
                         onTap: () async {
-                          // ✅ CORREÇÃO 2: Verificar se o ID não é nulo antes de usar
                           if (issue.parcelaId != null) {
-                            // Navega para a tela de inventário para correção
-                            final parcela = await ParcelaRepository().getParcelaById(issue.parcelaId!); // O '!' garante que não é nulo
+                            final parcelaRepo = ParcelaRepository();
+                            
+                            // 1. Busca a parcela (cabeçalho)
+                            final Parcela? parcela = await parcelaRepo.getParcelaById(issue.parcelaId!);
+                            
                             if (parcela != null && context.mounted) {
+                              // 2. Busca as árvores associadas
+                              final List<Arvore> arvoresDaParcela = await parcelaRepo.getArvoresDaParcela(parcela.dbId!);
+                              
+                              // 3. Anexa as árvores ao objeto
+                              parcela.arvores = arvoresDaParcela;
+                              
+                              // 4. Navega com o objeto completo
                               Navigator.push(context, MaterialPageRoute(
                                 builder: (_) => InventarioPage(parcela: parcela)
                               ));
                             }
                           }
-                          // Adicionar lógica para cubagem aqui se necessário
+                          // Lógica para cubagem pode ser adicionada aqui
                         },
                       );
                     }).toList(),
@@ -85,7 +93,6 @@ class ConsistenciaResultadoPage extends StatelessWidget {
           const SizedBox(height: 16),
           const Text('Nenhuma inconsistência encontrada!', style: TextStyle(fontSize: 20)),
           const SizedBox(height: 8),
-          // ✅ CORREÇÃO 3: Adicionar a contagem de cubagens verificadas
           Text('${report.parcelasVerificadas} amostras, ${report.arvoresVerificadas} árvores e ${report.cubagensVerificadas} cubagens verificadas.'),
         ],
       ),
@@ -93,7 +100,7 @@ class ConsistenciaResultadoPage extends StatelessWidget {
   }
 }
 
-// Função auxiliar para agrupar a lista (pode ficar no mesmo arquivo)
+// Função auxiliar para agrupar a lista
 Map<T, List<S>> groupBy<S, T>(Iterable<S> values, T Function(S) key) {
   var map = <T, List<S>>{};
   for (var element in values) {

@@ -147,9 +147,9 @@ class _DetalhesProjetoPageState extends State<DetalhesProjetoPage> {
   // Não precisa mais passar o objeto 'atividade', pois a próxima página buscará seus dados.
    // ✅ NAVEGAÇÃO CORRIGIDA PARA USAR GO_ROUTER
   void _navegarParaDetalhesAtividade(Atividade atividade) {
-    // Constrói a rota hierárquica usando os IDs
-    context.go('/projetos/${widget.projetoId}/atividades/${atividade.id}');
-  }
+  // CORRETO
+  context.push('/projetos/${widget.projetoId}/atividades/${atividade.id}');
+}
 
   AppBar _buildSelectionAppBar() {
     return AppBar(
