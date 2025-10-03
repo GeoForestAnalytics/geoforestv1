@@ -17,27 +17,39 @@ class InventarioImportStrategy extends BaseImportStrategy {
 
   // ... (a função _mapCodigo permanece a mesma)
   Codigo _mapCodigo(String? cod) {
-    if (cod == null) return Codigo.Normal;
-    switch(cod.trim().toUpperCase()){
-      case 'FALHA': return Codigo.Falha; 
-      case 'MORTA': return Codigo.MortaOuSeca;
-      case 'QUEBRADA': return Codigo.Quebrada;
-      case 'BIFURCADA': return Codigo.Bifurcada;
-      case 'CAIDA': return Codigo.Caida;
-      case 'ATAQUEMACACO': return Codigo.AtaqueMacaco;
-      case 'REGENERACAO': return Codigo.Rebrota;
-      case 'INCLINADA': return Codigo.Inclinada;
-      case 'FOGO': return Codigo.Fogo;
-      case 'FORMIGA': return Codigo.AtaqueFormiga;
-      case 'OUTRO': return Codigo.Outro;
-      case 'NORMAL': return Codigo.Normal;
-      case 'F': return Codigo.Falha; case 'M': return Codigo.MortaOuSeca;
-      case 'Q': return Codigo.Quebrada; case 'B': return Codigo.Bifurcada;
-      case 'C': return Codigo.Caida; case 'A': return Codigo.AtaqueMacaco;
-      case 'R': return Codigo.Rebrota; case 'I': return Codigo.Inclinada;
-      default: return Codigo.Normal;
-    }
+  if (cod == null) return Codigo.Normal;
+  
+  // 1. Limpa e padroniza o texto de entrada
+  final codTratado = cod.trim().toUpperCase();
+
+  // 2. Usa 'contains' para uma verificação flexível
+  if (codTratado.contains('MULTIPLA')) return Codigo.Multipla;
+  if (codTratado.contains('BIFURCADA')) return Codigo.Bifurcada;
+  if (codTratado.contains('QUEBRADA')) return Codigo.Quebrada;
+  if (codTratado.contains('MORTA') || codTratado.contains('SECA')) return Codigo.MortaOuSeca;
+  if (codTratado.contains('CAIDA')) return Codigo.Caida;
+  if (codTratado.contains('FALHA')) return Codigo.Falha;
+  if (codTratado.contains('ATAQUEMACACO')) return Codigo.AtaqueMacaco;
+  if (codTratado.contains('REGENERACAO') || codTratado.contains('REBROTA')) return Codigo.Rebrota;
+  if (codTratado.contains('INCLINADA')) return Codigo.Inclinada;
+  if (codTratado.contains('FOGO')) return Codigo.Fogo;
+  if (codTratado.contains('FORMIGA')) return Codigo.AtaqueFormiga;
+  if (codTratado.contains('OUTRO')) return Codigo.Outro;
+
+  // Verificações de abreviações, se necessário
+  switch(codTratado) {
+    case 'F': return Codigo.Falha;
+    case 'M': return Codigo.MortaOuSeca;
+    case 'Q': return Codigo.Quebrada;
+    case 'B': return Codigo.Bifurcada;
+    case 'C': return Codigo.Caida;
+    case 'A': return Codigo.AtaqueMacaco;
+    case 'R': return Codigo.Rebrota;
+    case 'I': return Codigo.Inclinada;
+    case 'NORMAL': return Codigo.Normal;
+    default: return Codigo.Normal; // Se nada corresponder, assume como Normal
   }
+}
 
   @override
   Future<ImportResult> processar(List<Map<String, dynamic>> dataRows) async {
