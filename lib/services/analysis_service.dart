@@ -398,56 +398,60 @@ class AnalysisService {
     );
   }
 
-  TalhaoAnalysisResult simularDesbaste(Talhao talhao, List<Parcela> parcelasOriginais, List<Arvore> todasAsArvores, double porcentagemRemocao) {
-    if (parcelasOriginais.isEmpty || porcentagemRemocao <= 0) return getTalhaoInsights(talhao, parcelasOriginais, todasAsArvores);
-    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
-    final List<Arvore> arvoresVivas = todasAsArvores.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
-    if (arvoresVivas.isEmpty) return getTalhaoInsights(talhao, parcelasOriginais, todasAsArvores);
+  TalhaoAnalysisResult simularDesbaste({ // Renomeie a função para aceitar parâmetros nomeados
+  required Talhao talhao,
+  required List<Parcela> parcelasOriginais,
+  required List<Arvore> todasAsArvores,
+  required double porcentagemRemocaoSeletiva, // Parâmetro antigo
+  required bool sistematicoAtivo,            // Novo parâmetro
+  required int? linhaSistematica,           // Novo parâmetro
+}) {
+  if (parcelasOriginais.isEmpty) {
+    return getTalhaoInsights(talhao, parcelasOriginais, todasAsArvores);
+  }
+
+  const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
+  final List<Arvore> arvoresVivas = todasAsArvores.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
+  if (arvoresVivas.isEmpty) {
+    return getTalhaoInsights(talhao, parcelasOriginais, todasAsArvores);
+  }
+
+  List<Arvore> arvoresRemanescentes;
+
+  // --- NOVA LÓGICA DE DESBASTE MISTO ---
+  if (sistematicoAtivo && linhaSistematica != null && linhaSistematica > 0) {
+    
+    // 1. Separa as árvores: as que estão na linha do ramal e as que não estão.
+    final arvoresParaDesbasteSeletivo = <Arvore>[];
+    for (var arvore in arvoresVivas) {
+      if (arvore.linha % linhaSistematica != 0) {
+        arvoresParaDesbasteSeletivo.add(arvore);
+      }
+      // As árvores da linha sistemática (arvore.linha % linhaSistematica == 0) são simplesmente ignoradas,
+      // pois serão removidas por completo.
+    }
+    
+    // 2. Aplica o desbaste SELETIVO (por CAP) APENAS nas linhas remanescentes.
+    arvoresParaDesbasteSeletivo.sort((a, b) => a.cap.compareTo(b.cap));
+    final int quantidadeRemoverSeletivo = (arvoresParaDesbasteSeletivo.length * (porcentagemRemocaoSeletiva / 100)).floor();
+    
+    arvoresRemanescentes = arvoresParaDesbasteSeletivo.sublist(quantidadeRemoverSeletivo);
+
+  } else {
+    // Lógica antiga (apenas desbaste seletivo)
     arvoresVivas.sort((a, b) => a.cap.compareTo(b.cap));
-    final int quantidadeRemover = (arvoresVivas.length * (porcentagemRemocao / 100)).floor();
-    final List<Arvore> arvoresRemanescentes = arvoresVivas.sublist(quantidadeRemover);
-    final double areaTotalAmostradaM2 = parcelasOriginais.map((p) => p.areaMetrosQuadrados).fold(0.0, (a, b) => a + b);
-    final double areaTotalAmostradaHa = areaTotalAmostradaM2 / 10000;
-    final codeAnalysisRemanescente = getTreeCodeAnalysis(arvoresRemanescentes);
-    return _analisarListaDeArvores(talhao, arvoresRemanescentes, areaTotalAmostradaHa, parcelasOriginais.length, codeAnalysisRemanescente);
+    final int quantidadeRemover = (arvoresVivas.length * (porcentagemRemocaoSeletiva / 100)).floor();
+    arvoresRemanescentes = arvoresVivas.sublist(quantidadeRemover);
   }
+  // --- FIM DA NOVA LÓGICA ---
 
-  List<DapClassResult> analisarRendimentoPorDAP(List<Parcela> parcelasDoTalhao, List<Arvore> todasAsArvores) {
-    if (parcelasDoTalhao.isEmpty || todasAsArvores.isEmpty) return [];
-    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
-    final List<Arvore> arvoresVivas = todasAsArvores.where((a) => !codigosSemVolume.contains(a.codigo) && a.cap > 0).toList();
-    if (arvoresVivas.isEmpty) return [];
-    final Map<String, List<Arvore>> arvoresPorClasse = { for (var s in _sortimentosFixos) s.nome: [] };
-
-    for (var arv in arvoresVivas) {
-      final double dap = arv.cap / pi;
-      for (var sortimento in _sortimentosFixos) {
-        if (dap >= sortimento.diametroMinimo && dap < sortimento.diametroMaximo) {
-          arvoresPorClasse[sortimento.nome]!.add(arv);
-          break;
-        }
-      }
-    }
-
-    final double totalArvoresVivas = arvoresVivas.length.toDouble();
-    if (totalArvoresVivas == 0) return [];
-
-    final List<DapClassResult> resultadoFinal = [];
-    final sortedKeys = arvoresPorClasse.keys.toList()..sort((a, b) {
-      final diametroA = _sortimentosFixos.firstWhere((s) => s.nome == a).diametroMinimo;
-      final diametroB = _sortimentosFixos.firstWhere((s) => s.nome == b).diametroMinimo;
-      return diametroA.compareTo(diametroB);
-    });
-
-    for (var classe in sortedKeys) {
-      final arvores = arvoresPorClasse[classe]!;
-      if (arvores.isNotEmpty) {
-        final double porcentagem = (arvores.length / totalArvoresVivas) * 100;
-        resultadoFinal.add(DapClassResult(classe: classe, quantidade: arvores.length, porcentagemDoTotal: porcentagem));
-      }
-    }
-    return resultadoFinal;
-  }
+  final double areaTotalAmostradaM2 = parcelasOriginais.map((p) => p.areaMetrosQuadrados).fold(0.0, (a, b) => a + b);
+  final double areaTotalAmostradaHa = areaTotalAmostradaM2 / 10000;
+  
+  // A análise final é feita com base nas árvores que sobraram após AMBOS os desbastes.
+  final codeAnalysisRemanescente = getTreeCodeAnalysis(arvoresRemanescentes);
+  return _analisarListaDeArvores(talhao, arvoresRemanescentes, areaTotalAmostradaHa, parcelasOriginais.length, codeAnalysisRemanescente);
+}  
   
   Map<String, int> gerarPlanoDeCubagem({
     required Map<double, int> distribuicaoAmostrada,

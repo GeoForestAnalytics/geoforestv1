@@ -12,7 +12,6 @@ import 'package:geoforestv1/services/export_service.dart';
 import 'package:geoforestv1/services/pdf_service.dart';
 import 'package:geoforestv1/widgets/grafico_distribuicao_widget.dart';
 import 'package:geoforestv1/pages/analises/simulacao_desbaste_page.dart';
-import 'package:geoforestv1/pages/analises/rendimento_dap_page.dart';
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
 import 'package:geoforestv1/widgets/grafico_dispersao_cap_altura.dart';
@@ -157,29 +156,7 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
         ),
       ),
     );
-  }
-
-  void _analisarRendimento() {
-    if (_analysisResult == null) return;
-    final resultadoRendimento = _analysisService.analisarRendimentoPorDAP(_parcelasDoTalhao, _arvoresDoTalhao);
-    if (resultadoRendimento.isEmpty && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não há dados suficientes para a análise de rendimento.'), backgroundColor: Colors.orange),
-      );
-      return;
-    }
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => RendimentoDapPage(
-          nomeFazenda: widget.talhao.fazendaNome ?? 'Fazenda não informada',
-          nomeTalhao: widget.talhao.nome,
-          dadosRendimento: resultadoRendimento,
-          analiseGeral: _analysisResult!,
-        ),
-      ),
-    );
-  }
+  }  
 
   @override
   Widget build(BuildContext context) {
@@ -245,13 +222,7 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
                 style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
               ),
               const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: _analisarRendimento,
-                icon: const Icon(Icons.bar_chart_outlined),
-                label: const Text('Analisar Distribuição por DAP'),
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
-              ),
-            ],
+              ],
           ),
         );
       },

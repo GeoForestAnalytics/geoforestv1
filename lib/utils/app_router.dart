@@ -22,6 +22,12 @@ import 'package:geoforestv1/pages/atividades/detalhes_atividade_page.dart';
 import 'package:geoforestv1/pages/fazenda/detalhes_fazenda_page.dart';
 import 'package:geoforestv1/pages/talhoes/detalhes_talhao_page.dart';
 import 'package:geoforestv1/providers/team_provider.dart';
+import 'package:geoforestv1/pages/menu/visualizador_relatorio_page.dart'; // ✅ IMPORT ADICIONADO
+
+// Imports dos Modelos
+import 'package:geoforestv1/models/diario_de_campo_model.dart'; // ✅ IMPORT ADICIONADO
+import 'package:geoforestv1/models/parcela_model.dart';         // ✅ IMPORT ADICIONADO
+import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 
 
 class AppRouter {
@@ -68,6 +74,23 @@ class AppRouter {
         path: '/gerente_map',
         builder: (context, state) => const GerenteMapPage(),
       ),
+
+      GoRoute(
+      path: '/visualizar-relatorio',
+      builder: (context, state) {
+        // Recebe os dados passados pelo parâmetro 'extra'
+        final data = state.extra as Map<String, dynamic>;
+        // É necessário importar os modelos nesta página para que o Dart entenda os tipos
+        // import 'package:geoforestv1/models/diario_de_campo_model.dart';
+        // import 'package:geoforestv1/models/parcela_model.dart';
+        // import 'package:geoforestv1/models/cubagem_arvore_model.dart';
+        return VisualizadorRelatorioPage(
+          diario: data['diario'] as DiarioDeCampo,
+          parcelas: data['parcelas'] as List<Parcela>,
+          cubagens: data['cubagens'] as List<CubagemArvore>,
+        );
+      },
+    ),
 
       // ROTA PRINCIPAL DE PROJETOS E SUA HIERARQUIA ANINHADA
       GoRoute(

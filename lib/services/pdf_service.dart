@@ -185,48 +185,7 @@ class PdfService {
         'Analise_Talhao_${talhao.nome.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.pdf';
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
-
-  Future<void> gerarRelatorioRendimentoPdf({
-    required BuildContext context,
-    required String nomeFazenda,
-    required String nomeTalhao,
-    required List<DapClassResult> dadosRendimento,
-    required TalhaoAnalysisResult analiseGeral,
-    required pw.ImageProvider graficoImagem,
-  }) async {
-    final pdf = pw.Document();
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        header: (pw.Context context) => _buildHeader(nomeFazenda, nomeTalhao),
-        footer: (pw.Context context) => _buildFooter(),
-        build: (pw.Context context) {
-          return [
-            pw.Text(
-              'Relatório de Distribuição de Indivíduos por Classe de DAP',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
-              textAlign: pw.TextAlign.center,
-            ),
-            pw.Divider(height: 20),
-            _buildResumoTalhaoPdf(analiseGeral),
-            pw.SizedBox(height: 20),
-            pw.Center(
-              child: pw.SizedBox(
-                width: 400,
-                child: pw.Image(graficoImagem),
-              ),
-            ),
-            pw.SizedBox(height: 20),
-            _buildTabelaRendimentoPdf(dadosRendimento),
-          ];
-        },
-      ),
-    );
-    final nomeArquivo =
-        'Relatorio_Distribuicao_DAP_${nomeTalhao.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.pdf';
-    await _salvarEAbriPdf(context, pdf, nomeArquivo);
-  }
-
+ 
   Future<void> gerarRelatorioDiarioConsolidadoPdf({
     required BuildContext context,
     required DiarioDeCampo diario,
@@ -942,31 +901,7 @@ class PdfService {
         cellAlignments: {1: pw.Alignment.centerRight, 2: pw.Alignment.centerRight},
       ),
     ]);
-  }
-
-  pw.Widget _buildTabelaRendimentoPdf(List<DapClassResult> dados) {
-    final headers = ['Classe DAP', 'Quantidade (árvores)', '% do Total'];
-
-    final data = dados
-        .map((item) => [
-              item.classe,
-              item.quantidade.toString(),
-              '${item.porcentagemDoTotal.toStringAsFixed(1)}%',
-            ])
-        .toList();
-
-    return pw.TableHelper.fromTextArray(
-      headers: headers,
-      data: data,
-      headerStyle:
-          pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-      headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
-      cellAlignment: pw.Alignment.center,
-      cellAlignments: {
-        0: pw.Alignment.centerLeft,
-      },
-    );
-  }
+  }  
 
   pw.Widget _buildTabelaDistribuicaoPdf(TalhaoAnalysisResult analise) {
     final headers = ['Classe (CAP)', 'Nº de Árvores', '%'];

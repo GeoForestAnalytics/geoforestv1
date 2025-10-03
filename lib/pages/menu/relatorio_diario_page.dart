@@ -1,6 +1,7 @@
 // lib/pages/menu/relatorio_diario_page.dart (VERSÃO CORRIGIDA COM MULTI-SELECT)
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -22,7 +23,7 @@ import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/data/repositories/diario_de_campo_repository.dart';
-import 'visualizador_relatorio_page.dart';
+
 
 enum RelatorioStep {
   selecionarFiltros,
@@ -238,13 +239,14 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     if (mounted) setState(() => _isLoading = false);
     
     if (mounted) {
-      final bool? precisaEditar = await Navigator.push<bool>(context, MaterialPageRoute(
-        builder: (context) => VisualizadorRelatorioPage(
-          diario: diarioParaSalvar,
-          parcelas: _parcelasDoRelatorio,
-          cubagens: _cubagensDoRelatorio,
-        ),
-      ));
+      final bool? precisaEditar = await context.push<bool>(
+  '/visualizar-relatorio',
+  extra: {
+    'diario': diarioParaSalvar,
+    'parcelas': _parcelasDoRelatorio,
+    'cubagens': _cubagensDoRelatorio,
+  },
+); 
 
       if (precisaEditar != true) {
         setState(() {
