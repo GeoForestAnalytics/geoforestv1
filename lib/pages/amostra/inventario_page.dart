@@ -108,6 +108,7 @@ class _InventarioPageState extends State<InventarioPage> {
     try {
       if (concluir) {
         _parcelaAtual.status = StatusParcela.concluida;
+        _parcelaAtual = _parcelaAtual.copyWith(dataColeta: DateTime.now());
         setState(() => _isReadOnly = true);
         _identificarArvoresDominantes();
       } else {
