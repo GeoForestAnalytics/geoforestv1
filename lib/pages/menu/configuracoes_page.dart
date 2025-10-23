@@ -1,4 +1,4 @@
-// lib/pages/menu/configuracoes_page.dart (VERSÃO ATUALIZADA COM VERIFICAÇÃO DE CONSISTÊNCIA)
+// lib/pages/menu/configuracoes_page.dart (VERSÃO AJUSTADA)
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -11,17 +11,20 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:geoforestv1/pages/projetos/gerenciar_delegacoes_page.dart';
 import 'package:geoforestv1/providers/theme_provider.dart';
 import 'package:geoforestv1/pages/gerente/gerenciar_equipe_page.dart';
-import 'package:geoforestv1/pages/menu/relatorio_diario_page.dart'; 
+import 'package:geoforestv1/pages/menu/relatorio_diario_page.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/utils/constants.dart';
 
-// <<< 1. IMPORTS NECESSÁRIOS PARA A NOVA FUNCIONALIDADE >>>
+// Imports para novas funcionalidades
 import 'package:geoforestv1/services/validation_service.dart';
 import 'package:geoforestv1/pages/menu/consistencia_resultado_page.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/widgets/progress_dialog.dart';
+
+// <<< Import da nova página de histórico >>>
+import 'package:geoforestv1/pages/menu/historico_diarios_page.dart';
 
 class ConfiguracoesPage extends StatefulWidget {
   const ConfiguracoesPage({super.key});
@@ -32,12 +35,10 @@ class ConfiguracoesPage extends StatefulWidget {
 
 class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
   String? _zonaSelecionada;
-  
+
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
   final _licensingService = LicensingService();
-  
-  // <<< 2. INSTÂNCIA DO SERVIÇO DE VALIDAÇÃO >>>
   final _validationService = ValidationService();
 
   Map<String, int>? _deviceUsage;
@@ -49,8 +50,6 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
     _carregarConfiguracoes();
     _fetchDeviceUsage();
   }
-
-  // ... (os outros métodos como _carregarConfiguracoes, _salvarConfiguracoes, etc. permanecem os mesmos)
 
   Future<void> _carregarConfiguracoes() async {
     final prefs = await SharedPreferences.getInstance();
@@ -70,7 +69,7 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
       );
     }
   }
-  
+
   Future<void> _fetchDeviceUsage() async {
     try {
       final usage = await _licensingService.getDeviceUsage();
@@ -82,7 +81,7 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
       }
     } catch (e) {
       print("Erro ao buscar uso de dispositivos: $e");
-      if(mounted) {
+      if (mounted) {
         setState(() {
           _isLoadingLicense = false;
           _deviceUsage = null;
@@ -138,23 +137,20 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
     debugPrint("DEBUG: Status da permissão [manageExternalStorage]: $statusManage");
     final statusMedia = await Permission.accessMediaLocation.status;
     debugPrint("DEBUG: Status da permissão [accessMediaLocation]: $statusMedia");
-    await openAppSettings(); 
+    await openAppSettings();
   }
-  
-  // <<< 3. MÉTODO PARA ACIONAR A VERIFICAÇÃO DE CONSISTÊNCIA >>>
+
   Future<void> _verificarConsistencia() async {
     if (!mounted) return;
     ProgressDialog.show(context, 'Verificando consistência dos dados...');
 
     try {
-      // Busca todas as parcelas e cubagens que já foram finalizadas
       final List<Parcela> parcelasConcluidas = await _parcelaRepository.getTodasAsParcelas()
           .then((list) => list.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada).toList());
 
       final List<CubagemArvore> cubagensConcluidas = await _cubagemRepository.getTodasCubagens()
           .then((list) => list.where((c) => c.alturaTotal > 0).toList());
 
-      // Executa o serviço de validação
       final report = await _validationService.performFullConsistencyCheck(
         parcelas: parcelasConcluidas,
         cubagens: cubagensConcluidas,
@@ -165,7 +161,6 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
       if (!mounted) return;
       ProgressDialog.hide(context);
 
-      // Navega para a tela de resultados
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -184,11 +179,11 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
       );
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final licenseProvider = context.watch<LicenseProvider>();
-    final themeProvider = context.watch<ThemeProvider>(); 
+    final themeProvider = context.watch<ThemeProvider>();
     final isGerente = licenseProvider.licenseData?.cargo == 'gerente';
 
     return Scaffold(
@@ -284,7 +279,20 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                     },
                   ),
                   
-                  // <<< 4. ADICIONANDO O BOTÃO NA INTERFACE DO USUÁRIO >>>
+                  // <<< INSERÇÃO DA NOVA OPÇÃO DE MENU >>>
+                  ListTile(
+                    leading: const Icon(Icons.history_outlined, color: Colors.blueGrey),
+                    title: const Text('Histórico de Diários de Campo'),
+                    subtitle: const Text('Visualize ou apague relatórios já salvos.'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const HistoricoDiariosPage()),
+                      );
+                    },
+                  ),
+                  // <<< FIM DA INSERÇÃO >>>
+
                   ListTile(
                     leading: const Icon(Icons.rule_folder_outlined, color: Colors.indigo),
                     title: const Text('Verificar Consistência dos Dados'),

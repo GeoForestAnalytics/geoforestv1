@@ -1,4 +1,4 @@
-// lib/pages/gerente/operacoes_dashboard_page.dart (VERSÃO COM TOTALIZADORES NAS TABELAS)
+// lib/pages/gerente/operacoes_dashboard_page.dart (VERSÃO COM LAYOUT CORRIGIDO)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -102,6 +102,8 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
+  // <<< INÍCIO DA CORREÇÃO >>>
+  // O widget _buildFiltros agora usa um LayoutBuilder para ser responsivo.
   Widget _buildFiltros(BuildContext context) {
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -109,23 +111,42 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                // <<< 1. LAYOUT DOS FILTROS ATUALIZADO >>>
-                Expanded(flex: 2, child: _buildPeriodoDropdown(context)),
-                const SizedBox(width: 16),
-                Expanded(flex: 3, child: _buildLiderDropdown(context)),
-              ],
-            ),
-            if (context.watch<OperacoesFilterProvider>().periodo == PeriodoFiltro.personalizado)
-              _buildDatePicker(context),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Se a largura for menor que 380 pixels, usa uma coluna.
+            if (constraints.maxWidth < 380) {
+              return Column(
+                children: [
+                  _buildPeriodoDropdown(context),
+                  const SizedBox(height: 16),
+                  _buildLiderDropdown(context),
+                  if (context.watch<OperacoesFilterProvider>().periodo == PeriodoFiltro.personalizado)
+                    _buildDatePicker(context),
+                ],
+              );
+            }
+            // Senão, usa uma linha.
+            else {
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: _buildPeriodoDropdown(context)),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildLiderDropdown(context)),
+                    ],
+                  ),
+                  if (context.watch<OperacoesFilterProvider>().periodo == PeriodoFiltro.personalizado)
+                    _buildDatePicker(context),
+                ],
+              );
+            }
+          },
         ),
       ),
     );
   }
+  // <<< FIM DA CORREÇÃO >>>
 
   Widget _buildPeriodoDropdown(BuildContext context) {
     final filterProvider = context.watch<OperacoesFilterProvider>();
@@ -401,7 +422,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
-  // <<< 2. ATUALIZAÇÃO DA TABELA DE CUSTOS POR VEÍCULO >>>
   Widget _buildCustoVeiculoTable(BuildContext context, List<CustoPorVeiculo> custos) {
     if (custos.isEmpty) return const SizedBox.shrink();
     final kpis = context.watch<OperacoesProvider>().kpis;
@@ -432,7 +452,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                     DataCell(Text(_currencyFormat.format(c.custoAbastecimento))),
                     DataCell(Text(_currencyFormat.format(c.custoMedioPorKm))),
                   ])).toList(),
-                  // --- Linha de Totalizador ---
                   DataRow(
                     color: MaterialStateProperty.all(Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5)),
                     cells: [
@@ -451,7 +470,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
-  // <<< 3. ATUALIZAÇÃO DA TABELA DO HISTÓRICO DE DIÁRIOS >>>
   Widget _buildHistoricoDiariosTable(BuildContext context, List<DiarioDeCampo> diarios) {
     if (diarios.isEmpty) return const SizedBox.shrink();
     final kpis = context.watch<OperacoesProvider>().kpis;
@@ -473,7 +491,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                   DataColumn(label: Text('Data')),
                   DataColumn(label: Text('Líder')),
                   DataColumn(label: Text('Destino')),
-                  // --- Nova Coluna ---
                   DataColumn(label: Text('Custo Total'), numeric: true),
                 ],
                 rows: [
@@ -483,17 +500,15 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                       DataCell(Text(DateFormat('dd/MM/yy').format(DateTime.parse(d.dataRelatorio)))),
                       DataCell(Text(d.nomeLider)),
                       DataCell(Text(d.localizacaoDestino ?? '')),
-                      // --- Nova Célula ---
                       DataCell(Text(_currencyFormat.format(custoTotalDiario))),
                     ]);
                   }).toList(),
-                  // --- Linha de Totalizador ---
                   DataRow(
                     color: MaterialStateProperty.all(Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5)),
                     cells: [
                       DataCell(Text('${diarios.length} DIAS', style: const TextStyle(fontWeight: FontWeight.bold))),
                       const DataCell(Text('')),
-                      const DataCell(Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                      const DataCell(Text('TOTAL', style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
                       DataCell(Text(_currencyFormat.format(kpis.custoTotalCampo), style: const TextStyle(fontWeight: FontWeight.bold))),
                     ]
                   ),

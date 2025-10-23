@@ -1,4 +1,4 @@
-// lib/data/repositories/projeto_repository.dart (VERSÃO REFATORADA)
+// lib/data/repositories/projeto_repository.dart (VERSÃO ATUALIZADA)
 
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/data/datasources/local/database_constants.dart';
@@ -40,9 +40,16 @@ class ProjetoRepository {
     return List.generate(maps.length, (i) => Projeto.fromMap(maps[i]));
   }
 
+  // <<< MÉTODO CORRIGIDO >>>
   Future<List<Projeto>> getTodosOsProjetosParaGerente() async {
     final db = await _dbHelper.database;
-    final maps = await db.query(DbProjetos.tableName, orderBy: '${DbProjetos.dataCriacao} DESC');
+    // Adiciona o filtro para buscar apenas projetos com status 'ativo'
+    final maps = await db.query(
+      DbProjetos.tableName,
+      where: '${DbProjetos.status} = ?',
+      whereArgs: ['ativo'],
+      orderBy: '${DbProjetos.dataCriacao} DESC',
+    );
     return List.generate(maps.length, (i) => Projeto.fromMap(maps[i]));
   }
 

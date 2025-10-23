@@ -1,4 +1,4 @@
-// lib/pages/menu/relatorio_diario_page.dart (VERSÃO CORRIGIDA COM MULTI-SELECT)
+// lib/pages/menu/relatorio_diario_page.dart (VERSÃO CORRIGIDA)
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -124,9 +124,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     if (dataEscolhida != null) setState(() => _dataSelecionada = dataEscolhida);
   }
 
-  // >>> MÉTODO ATUALIZADO <<<
   Future<void> _adicionarLocalTrabalho() async {
-    // Agora esperamos uma Lista de Talhões
     final List<Talhao>? talhoesSelecionados = await showDialog<List<Talhao>>(
       context: context,
       builder: (_) => _SelecaoLocalTrabalhoDialog(
@@ -137,10 +135,8 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       ),
     );
 
-    // Se a lista não for nula e não estiver vazia
     if (talhoesSelecionados != null && talhoesSelecionados.isNotEmpty) {
       setState(() {
-        // Itera sobre cada talhão selecionado e o adiciona
         for (final talhao in talhoesSelecionados) {
           if (!_locaisTrabalhados.any((t) => t.id == talhao.id)) {
             _locaisTrabalhados.add(talhao);
@@ -478,8 +474,9 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
   Fazenda? _fazendaSelecionada;
   List<Talhao> _talhoesDisponiveis = [];
   
-  // >>> MUDANÇA 1: DE UM ÚNICO TALHÃO PARA UM CONJUNTO DE TALHÕES <<<
-  final Set<Talhao> _talhoesSelecionados = {};
+  // <<< CORREÇÃO 1: MUDAR DE SET<TALHAO> PARA SET<INT> >>>
+  final Set<int> _talhoesSelecionados = {};
+  bool _isLoadingTalhoes = false;
 
   @override
   void initState() {
@@ -520,11 +517,17 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
   Future<void> _onFazendaSelecionada(Fazenda? fazenda) async {
     setState(() {
       _fazendaSelecionada = fazenda;
-      _talhoesSelecionados.clear(); _talhoesDisponiveis = [];
+      _talhoesSelecionados.clear(); 
+      _talhoesDisponiveis = [];
+      _isLoadingTalhoes = fazenda != null; // Mostra o loading se uma fazenda for selecionada
     });
     if (fazenda != null) {
       _talhoesDisponiveis = await widget.talhaoRepo.getTalhoesDaFazenda(fazenda.id, fazenda.atividadeId);
-      if (mounted) setState(() {});
+    }
+    if (mounted) {
+      setState(() {
+        _isLoadingTalhoes = false; // Esconde o loading após carregar
+      });
     }
   }
 
@@ -532,95 +535,109 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Adicionar Local de Trabalho'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            DropdownButtonFormField<Projeto>(
-              value: _projetoSelecionado,
-              hint: const Text('Selecione o Projeto'),
-              items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome, overflow: TextOverflow.ellipsis))).toList(),
-              onChanged: _onProjetoSelecionado,
-              isExpanded: true,
-            ),
-            const SizedBox(height: 16),
-            if (_projetoSelecionado != null)
-              DropdownButtonFormField<Atividade>(
-                value: _atividadeSelecionada,
-                hint: const Text('Selecione a Atividade'),
-                items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo, overflow: TextOverflow.ellipsis))).toList(),
-                onChanged: _onAtividadeSelecionada,
+      // <<< CORREÇÃO 2: CORRIGIR O LAYOUT DO DIÁLOGO >>>
+      // Envolve o conteúdo com um SizedBox para dar um tamanho fixo e evitar o overflow.
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DropdownButtonFormField<Projeto>(
+                value: _projetoSelecionado,
+                hint: const Text('Selecione o Projeto'),
+                items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome, overflow: TextOverflow.ellipsis))).toList(),
+                onChanged: _onProjetoSelecionado,
                 isExpanded: true,
               ),
-            const SizedBox(height: 16),
-            if (_atividadeSelecionada != null)
-              DropdownButtonFormField<Fazenda>(
-                value: _fazendaSelecionada,
-                hint: const Text('Selecione a Fazenda'),
-                items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome, overflow: TextOverflow.ellipsis))).toList(),
-                onChanged: _onFazendaSelecionada,
-                isExpanded: true,
-              ),
-            const SizedBox(height: 16),
-            
-            // >>> MUDANÇA 2: SUBSTITUIÇÃO DO DROPDOWN PELA LISTA DE CHECKBOXES <<<
-            if (_fazendaSelecionada != null && _talhoesDisponiveis.isNotEmpty)
-              Container(
-                height: 250, 
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade400),
-                  borderRadius: BorderRadius.circular(8),
+              const SizedBox(height: 16),
+              if (_projetoSelecionado != null)
+                DropdownButtonFormField<Atividade>(
+                  value: _atividadeSelecionada,
+                  hint: const Text('Selecione a Atividade'),
+                  items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo, overflow: TextOverflow.ellipsis))).toList(),
+                  onChanged: _onAtividadeSelecionada,
+                  isExpanded: true,
                 ),
-                child: ListView(
-                  children: [
-                    CheckboxListTile(
-                      title: const Text('Selecionar Todos os Talhões', style: TextStyle(fontWeight: FontWeight.bold)),
-                      value: _talhoesDisponiveis.isNotEmpty && _talhoesSelecionados.length == _talhoesDisponiveis.length,
-                      onChanged: (selecionarTodos) {
-                        setState(() {
-                          if (selecionarTodos == true) {
-                            _talhoesSelecionados.addAll(_talhoesDisponiveis);
-                          } else {
-                            _talhoesSelecionados.clear();
-                          }
-                        });
-                      },
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                    const Divider(height: 1),
-                    ..._talhoesDisponiveis.map((talhao) {
-                      return CheckboxListTile(
-                        title: Text(talhao.nome),
-                        value: _talhoesSelecionados.contains(talhao),
-                        onChanged: (isSelected) {
+              const SizedBox(height: 16),
+              if (_atividadeSelecionada != null)
+                DropdownButtonFormField<Fazenda>(
+                  value: _fazendaSelecionada,
+                  hint: const Text('Selecione a Fazenda'),
+                  items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome, overflow: TextOverflow.ellipsis))).toList(),
+                  onChanged: _onFazendaSelecionada,
+                  isExpanded: true,
+                ),
+              const SizedBox(height: 16),
+              
+              if (_isLoadingTalhoes)
+                const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()))
+              else if (_fazendaSelecionada != null && _talhoesDisponiveis.isNotEmpty)
+                Container(
+                  height: 250, 
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: ListView(
+                    children: [
+                      CheckboxListTile(
+                        title: const Text('Selecionar Todos os Talhões', style: TextStyle(fontWeight: FontWeight.bold)),
+                        value: _talhoesDisponiveis.isNotEmpty && _talhoesSelecionados.length == _talhoesDisponiveis.length,
+                        onChanged: (selecionarTodos) {
                           setState(() {
-                            if (isSelected == true) {
-                              _talhoesSelecionados.add(talhao);
+                            if (selecionarTodos == true) {
+                              _talhoesSelecionados.addAll(_talhoesDisponiveis.map((t) => t.id!));
                             } else {
-                              _talhoesSelecionados.remove(talhao);
+                              _talhoesSelecionados.clear();
                             }
                           });
                         },
                         controlAffinity: ListTileControlAffinity.leading,
-                      );
-                    }),
-                  ],
-                ),
-              )
-            else if (_fazendaSelecionada != null)
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text("Nenhum talhão encontrado para esta fazenda.", textAlign: TextAlign.center),
-              )
-          ],
+                      ),
+                      const Divider(height: 1),
+                      ..._talhoesDisponiveis.map((talhao) {
+                        return CheckboxListTile(
+                          title: Text(talhao.nome),
+                          // <<< CORREÇÃO 3: USAR O ID DO TALHÃO >>>
+                          value: _talhoesSelecionados.contains(talhao.id),
+                          onChanged: (isSelected) {
+                            setState(() {
+                              if (isSelected == true) {
+                                _talhoesSelecionados.add(talhao.id!);
+                              } else {
+                                _talhoesSelecionados.remove(talhao.id);
+                              }
+                            });
+                          },
+                          controlAffinity: ListTileControlAffinity.leading,
+                        );
+                      }),
+                    ],
+                  ),
+                )
+              else if (_fazendaSelecionada != null)
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text("Nenhum talhão encontrado para esta fazenda.", textAlign: TextAlign.center),
+                )
+            ],
+          ),
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-        // >>> MUDANÇA 3: AJUSTE DO BOTÃO ADICIONAR <<<
         FilledButton(
-          onPressed: _talhoesSelecionados.isNotEmpty ? () => Navigator.of(context).pop(_talhoesSelecionados.toList()) : null,
+          // <<< CORREÇÃO 4: AJUSTE DO BOTÃO ADICIONAR >>>
+          onPressed: _talhoesSelecionados.isNotEmpty
+              ? () {
+                  final selecionados = _talhoesDisponiveis
+                      .where((t) => _talhoesSelecionados.contains(t.id!))
+                      .toList();
+                  Navigator.of(context).pop(selecionados);
+                }
+              : null,
           child: const Text('Adicionar'),
         ),
       ],
