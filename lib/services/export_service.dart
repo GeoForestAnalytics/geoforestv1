@@ -1,4 +1,4 @@
-// lib/services/export_service.dart (VERSÃO CORRIGIDA E FINAL)
+// lib/services/export_service.dart (VERSÃO CORRIGIDA PARA FORMATAÇÃO DE NÚMEROS)
 
 import 'dart:io';
 import 'dart:math' as math;
@@ -35,7 +35,7 @@ import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 
-// PAYLOADS ...
+// PAYLOADS ... (Sem alterações aqui)
 class _CsvParcelaPayload {
   final List<Map<String, dynamic>> parcelasMap;
   final Map<int, List<Map<String, dynamic>>> arvoresPorParcelaMap;
@@ -117,6 +117,11 @@ class _CsvConsolidadoPayload {
 
 
 // FUNÇÕES DE ISOLATE...
+
+// =========================================================================
+// ==================== INÍCIO DAS CORREÇÕES DE FORMATAÇÃO ====================
+// =========================================================================
+
 Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
@@ -131,8 +136,11 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
       return 'ERRO,"Não foi possível inicializar o sistema de projeção de coordenadas."';
   }
 
+  // ✅ 1. CRIAR OS FORMATADORES DE NÚMERO
+  final nf1 = NumberFormat("0.0", "pt_BR");   // Formato para 1 casa decimal
+  final nf2 = NumberFormat("0.00", "pt_BR");  // Formato para 2 casas decimais
+
   List<List<dynamic>> rows = [];
-  // Cabeçalho do CSV
   rows.add(['Atividade', 'Lider_Equipe', 'Ajudantes', 'ID_Db_Parcela', 'Codigo_Fazenda', 'Fazenda', 'UP', 'Talhao', 'Area_Talhao_ha', 'Especie', 'Espacamento', 'Idade_Anos', 'ID_Coleta_Parcela', 'Area_Inclinada_m2', 'Area_Horizontal_m2', 'Lado1_m', 'Lado2_m', 'Declividade_Graus', 'Observacao_Parcela', 'Easting', 'Northing', 'Data_Coleta', 'Status_Parcela', 'Linha', 'Posicao_na_Linha', 'Fuste_Num', 'Codigo_Arvore', 'Codigo_Arvore_2', 'CAP_cm', 'Altura_m', 'Altura_Dano_m', 'Dominante']);
   
   for (var pMap in payload.parcelasMap) {
@@ -142,43 +150,58 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
     String easting = '', northing = '';
     if (p.latitude != null && p.longitude != null) {
       var pUtm = projWGS84.transform(projUTM, proj4.Point(x: p.longitude!, y: p.latitude!));
-      easting = pUtm.x.toStringAsFixed(2);
-      northing = pUtm.y.toStringAsFixed(2);
+      easting = nf2.format(pUtm.x);
+      northing = nf2.format(pUtm.y);
     }
 
-    // <<< INÍCIO DA CORREÇÃO >>>
-    // A área no banco (p.areaMetrosQuadrados) JÁ É a área horizontal (corrigida).
-    // Para obter a área inclinada original (medida), precisamos fazer o cálculo inverso.
-    double areaInclinada = p.areaMetrosQuadrados; // Assume que é igual se não houver declividade
+    double areaInclinada = p.areaMetrosQuadrados;
     if (p.declividade != null && p.declividade! > 0) {
-        // A declividade está em graus, então usamos cosseno.
         final radianos = p.declividade! * (math.pi / 180.0);
         if (math.cos(radianos) > 0) {
-          // areaHorizontal = areaInclinada * cos(radianos)
-          // Portanto: areaInclinada = areaHorizontal / cos(radianos)
           areaInclinada = p.areaMetrosQuadrados / math.cos(radianos);
         }
     }
-    // <<< FIM DA CORREÇÃO >>>
     
     final arvoresMap = payload.arvoresPorParcelaMap[p.dbId] ?? [];
     final arvores = arvoresMap.map((aMap) => Arvore.fromMap(aMap)).toList();
-
     final liderDaColeta = p.nomeLider ?? payload.nomeLider;
+
+    // ✅ 2. FUNÇÃO AUXILIAR PARA FORMATAR VALORES NULOS
+    String formatValue(double? value, NumberFormat formatter) {
+      return value != null ? formatter.format(value) : '';
+    }
+
     if (arvores.isEmpty) {
-       // A linha agora usa as variáveis de área corretas e o cabeçalho foi ajustado
-       rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, areaInclinada.toStringAsFixed(2), p.areaMetrosQuadrados.toStringAsFixed(2), p.lado1, p.lado2, p.declividade, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, null, null, null, null, null, null, null, null, null, null, null]);
+       rows.add([
+         p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, 
+         p.up, p.nomeTalhao, formatValue(talhaoData['areaHa'], nf2), talhaoData['especie'], 
+         talhaoData['espacamento'], formatValue(talhaoData['idadeAnos'], nf1), p.idParcela, 
+         nf2.format(areaInclinada), nf2.format(p.areaMetrosQuadrados), formatValue(p.lado1, nf2), 
+         formatValue(p.lado2, nf2), formatValue(p.declividade, nf2), p.observacao, 
+         easting, northing, p.dataColeta?.toIso8601String(), p.status.name, 
+         null, null, null, null, null, null, null, null, null, null, null
+       ]);
     } else {
       Map<String, int> fusteCounter = {};
       for (final a in arvores) {
         String key = '${a.linha}-${a.posicaoNaLinha}';
         fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
-        rows.add([p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, p.up, p.nomeTalhao, talhaoData['areaHa'], talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], p.idParcela, areaInclinada.toStringAsFixed(2), p.areaMetrosQuadrados.toStringAsFixed(2), p.lado1, p.lado2, p.declividade, p.observacao, easting, northing, p.dataColeta?.toIso8601String(), p.status.name, a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, a.cap, a.altura, a.alturaDano, a.dominante ? 'Sim' : 'Não']);
+        rows.add([
+          p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, 
+          p.up, p.nomeTalhao, formatValue(talhaoData['areaHa'], nf2), talhaoData['especie'], 
+          talhaoData['espacamento'], formatValue(talhaoData['idadeAnos'], nf1), p.idParcela, 
+          nf2.format(areaInclinada), nf2.format(p.areaMetrosQuadrados), formatValue(p.lado1, nf2), 
+          formatValue(p.lado2, nf2), formatValue(p.declividade, nf2), p.observacao, 
+          easting, northing, p.dataColeta?.toIso8601String(), p.status.name, 
+          a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, 
+          formatValue(a.cap, nf1), formatValue(a.altura, nf1), formatValue(a.alturaDano, nf1), a.dominante ? 'Sim' : 'Não'
+        ]);
       }
     }
   }
   return const ListToCsvConverter().convert(rows, fieldDelimiter: ';');
 }
+
 Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   payload.proj4Defs.forEach((epsg, def) {
@@ -193,6 +216,10 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
       return 'ERRO,"Não foi possível inicializar o sistema de projeção de coordenadas."';
   }
 
+  // ✅ 1. CRIAR OS FORMATADORES DE NÚMERO
+  final nf1 = NumberFormat("0.0", "pt_BR");
+  final nf2 = NumberFormat("0.00", "pt_BR");
+
   List<List<dynamic>> rows = [];
   rows.add([
     'Atividade', 'Lider_Equipe', 'Ajudantes', 'id_db_arvore', 'id_fazenda', 'fazenda', 'UP', 'talhao', 'area_talhao_ha', 'especie', 'espacamento', 'idade_anos', 'identificador_arvore', 'classe', 'altura_total_m', 'tipo_medida_cap', 'valor_cap', 'altura_base_m', 'Data_Coleta', 'Easting_Cubagem', 'Northing_Cubagem', 'Observacao_Cubagem', 'altura_medicao_secao_m', 'circunferencia_secao_cm', 'casca1_mm', 'casca2_mm', 'dsc_cm'
@@ -206,8 +233,8 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
     String easting = '', northing = '';
     if (arvore.latitude != null && arvore.longitude != null) {
       var pUtm = projWGS84.transform(projUTM, proj4.Point(x: arvore.longitude!, y: arvore.latitude!));
-      easting = pUtm.x.toStringAsFixed(2);
-      northing = pUtm.y.toStringAsFixed(2);
+      easting = nf2.format(pUtm.x);
+      northing = nf2.format(pUtm.y);
     }
     
     final secoesMap = payload.secoesPorCubagemMap[arvore.id] ?? [];
@@ -218,13 +245,18 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
         ? DateFormat('dd/MM/yyyy HH:mm').format(arvore.dataColeta!) 
         : '';
         
+    // ✅ 2. FUNÇÃO AUXILIAR PARA FORMATAR
+    String formatValue(double? value, NumberFormat formatter) {
+      return value != null ? formatter.format(value) : '';
+    }
+
     if (secoes.isEmpty) {
       rows.add([
         'CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, 
-        arvore.nomeFazenda, rf, arvore.nomeTalhao, talhaoData['areaHa'], 
-        talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], 
-        arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, 
-        arvore.valorCAP, arvore.alturaBase, 
+        arvore.nomeFazenda, rf, arvore.nomeTalhao, formatValue(talhaoData['areaHa'], nf2), 
+        talhaoData['especie'], talhaoData['espacamento'], formatValue(talhaoData['idadeAnos'], nf1), 
+        arvore.identificador, arvore.classe, formatValue(arvore.alturaTotal, nf2), arvore.tipoMedidaCAP, 
+        formatValue(arvore.valorCAP, nf2), formatValue(arvore.alturaBase, nf2), 
         dataColetaFormatada,
         easting, northing, arvore.observacao,
         null, null, null, null, null
@@ -233,20 +265,24 @@ Future<String> _generateCsvCubagemDataInIsolate(_CsvCubagemPayload payload) asyn
       for (var secao in secoes) {
         rows.add([
           'CUB', liderDaColeta, payload.nomesAjudantes, arvore.id, arvore.idFazenda, 
-          arvore.nomeFazenda, rf, arvore.nomeTalhao, talhaoData['areaHa'], 
-          talhaoData['especie'], talhaoData['espacamento'], talhaoData['idadeAnos'], 
-          arvore.identificador, arvore.classe, arvore.alturaTotal, arvore.tipoMedidaCAP, 
-          arvore.valorCAP, arvore.alturaBase, 
+          arvore.nomeFazenda, rf, arvore.nomeTalhao, formatValue(talhaoData['areaHa'], nf2), 
+          talhaoData['especie'], talhaoData['espacamento'], formatValue(talhaoData['idadeAnos'], nf1), 
+          arvore.identificador, arvore.classe, formatValue(arvore.alturaTotal, nf2), arvore.tipoMedidaCAP, 
+          formatValue(arvore.valorCAP, nf2), formatValue(arvore.alturaBase, nf2), 
           dataColetaFormatada,
           easting, northing, arvore.observacao,
-          secao.alturaMedicao, secao.circunferencia, secao.casca1_mm, 
-          secao.casca2_mm, secao.diametroSemCasca.toStringAsFixed(2)
+          formatValue(secao.alturaMedicao, nf2), formatValue(secao.circunferencia, nf2), formatValue(secao.casca1_mm, nf2), 
+          formatValue(secao.casca2_mm, nf2), nf2.format(secao.diametroSemCasca)
         ]);
       }
     }
   }
   return const ListToCsvConverter().convert(rows, fieldDelimiter: ';');
 }
+
+// =========================================================================
+// ===================== FIM DAS CORREÇÕES DE FORMATAÇÃO =====================
+// =========================================================================
 
 Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
   proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
@@ -261,7 +297,9 @@ Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
   if (projWGS84 == null || projUTM == null) {
       return 'ERRO,"Não foi possível inicializar o sistema de projeção de coordenadas."';
   }
-
+  
+  final nf2 = NumberFormat("0.00", "pt_BR");
+  
   List<List<dynamic>> rows = [];
   rows.add([
     'Projeto', 'Atividade', 'Fazenda', 'Talhao', 'ID_Amostra_Coleta', 'Area_Talhao_ha',
@@ -277,8 +315,14 @@ Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
     final lon = rowData['longitude'] as double?;
     if (lat != null && lon != null) {
       var pUtm = projWGS84.transform(projUTM, proj4.Point(x: lon, y: lat));
-      easting = pUtm.x.toStringAsFixed(2);
-      northing = pUtm.y.toStringAsFixed(2);
+      easting = nf2.format(pUtm.x);
+      northing = nf2.format(pUtm.y);
+    }
+    
+    String formatValue(dynamic value, NumberFormat formatter) {
+      if (value == null) return '';
+      if (value is double) return formatter.format(value);
+      return value.toString();
     }
     
     rows.add([
@@ -287,23 +331,23 @@ Future<String> _generateDevEquipeCsvInIsolate(_DevEquipePayload payload) async {
       rowData['fazenda_nome'],
       rowData['talhao_nome'],
       rowData['id_coleta'],
-      rowData['talhao_area_ha'],
+      formatValue(rowData['talhao_area_ha'], nf2),
       rowData['situacao'],
       rowData['data_alteracao'],
       rowData['responsavel'],
       easting,
       northing,
-      rowData['parcela_area_m2'],
-      rowData['parcela_lado1_m'],
-      rowData['parcela_lado2_m'],
+      formatValue(rowData['parcela_area_m2'], nf2),
+      formatValue(rowData['parcela_lado1_m'], nf2),
+      formatValue(rowData['parcela_lado2_m'], nf2),
       rowData['parcela_observacao'],
       rowData['total_fustes'],
       rowData['total_covas'],
       rowData['total_falhas'],
       rowData['total_codigos_especiais'],
       rowData['cubagem_classe'],
-      rowData['cubagem_cap'],
-      rowData['cubagem_altura'],
+      formatValue(rowData['cubagem_cap'], nf2),
+      formatValue(rowData['cubagem_altura'], nf2),
     ]);
   }
 
@@ -324,13 +368,13 @@ Future<String> _generateCsvOperacoesInIsolate(_CsvOperacoesPayload payload) asyn
   
   String formatValue(dynamic value) {
     if (value == null) return '';
-    if (value is double) return nf.format(value).replaceAll('.', ',');
+    if (value is double) return nf.format(value);
     return value.toString();
   }
   
   String formatKm(dynamic value) {
     if (value == null || value <= 0) return '0,0';
-    return nfKm.format(value).replaceAll('.', ',');
+    return nfKm.format(value);
   }
 
   for (final diarioMap in payload.diariosMap) {
@@ -377,13 +421,13 @@ Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) 
   
   String formatValue(dynamic value) {
     if (value == null) return '';
-    if (value is double) return nf.format(value).replaceAll('.', ',');
+    if (value is double) return nf.format(value);
     return value.toString();
   }
   
   String formatKm(dynamic value) {
-    if (value == null || value <= 0) return '0.0';
-    return nfKm.format(value).replaceAll('.', '.');
+    if (value == null || value <= 0) return '0,0';
+    return nfKm.format(value);
   }
   
   final distancia = (diario.kmFinal ?? 0) - (diario.kmInicial ?? 0);
@@ -413,8 +457,8 @@ Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) 
       totaisCubagens,
       p.status.name,
       p.up,
-      diario.kmInicial,
-      diario.kmFinal,
+      formatValue(diario.kmInicial),
+      formatValue(diario.kmFinal),
       formatKm(distancia),
       diario.localizacaoDestino,
       formatValue(diario.pedagioValor),
@@ -452,8 +496,8 @@ Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) 
       totaisCubagens,
       c.alturaTotal > 0 ? 'concluida' : 'pendente',
       c.rf,
-      diario.kmInicial,
-      diario.kmFinal,
+      formatValue(diario.kmInicial),
+      formatValue(diario.kmFinal),
       formatKm(distancia),
       diario.localizacaoDestino,
       formatValue(diario.pedagioValor),
@@ -467,7 +511,7 @@ Future<String> _generateCsvConsolidadoInIsolate(_CsvConsolidadoPayload payload) 
     ]);
   }
 
-  return const ListToCsvConverter().convert(rows, fieldDelimiter: ';');
+  return const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
 }
 
 
@@ -584,6 +628,7 @@ class ExportService {
     try {
       if (!await _requestPermission(context)) return;
 
+      final nf = NumberFormat("0.00", "pt_BR");
       final projeto = await _projetoRepository.getProjetoById(diario.projetoId);
       final talhao = diario.talhaoId != null ? await _talhaoRepository.getTalhaoById(diario.talhaoId!) : null;
 
@@ -597,15 +642,15 @@ class ExportService {
         ['Talhão (Referência)', talhao?.nome ?? 'N/A'],
         ['Placa do Veículo', diario.veiculoPlaca],
         ['Modelo do Veículo', diario.veiculoModelo],
-        ['KM Inicial', diario.kmInicial],
-        ['KM Final', diario.kmFinal],
+        ['KM Inicial', diario.kmInicial != null ? nf.format(diario.kmInicial) : ''],
+        ['KM Final', diario.kmFinal != null ? nf.format(diario.kmFinal) : ''],
         ['Destino', diario.localizacaoDestino],
-        ['Pedágio (R\$)', diario.pedagioValor?.toStringAsFixed(2).replaceAll('.', ',')],
-        ['Abastecimento (R\$)', diario.abastecimentoValor?.toStringAsFixed(2).replaceAll('.', ',')],
+        ['Pedágio (R\$)', diario.pedagioValor != null ? nf.format(diario.pedagioValor) : ''],
+        ['Abastecimento (R\$)', diario.abastecimentoValor != null ? nf.format(diario.abastecimentoValor) : ''],
         ['Qtd. Marmitas', diario.alimentacaoMarmitasQtd],
-        ['Valor Refeição (R\$)', diario.alimentacaoRefeicaoValor?.toStringAsFixed(2).replaceAll('.', ',')],
+        ['Valor Refeição (R\$)', diario.alimentacaoRefeicaoValor != null ? nf.format(diario.alimentacaoRefeicaoValor) : ''],
         ['Descrição Alimentação', diario.alimentacaoDescricao],
-        ['Outras Despesas (R\$)', diario.outrasDespesasValor?.toStringAsFixed(2).replaceAll('.', ',')],
+        ['Outras Despesas (R\$)', diario.outrasDespesasValor != null ? nf.format(diario.outrasDespesasValor) : ''],
         ['Descrição Outras Despesas', diario.outrasDespesasDescricao],
       ];
 
@@ -1091,6 +1136,10 @@ class ExportService {
       if (!await _requestPermission(context)) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando arquivo CSV...')));
       
+      final nf1 = NumberFormat("0.0", "pt_BR");
+      final nf2 = NumberFormat("0.00", "pt_BR");
+      final nf4 = NumberFormat("0.0000", "pt_BR");
+
       List<List<dynamic>> rows = [];
       rows.add(['Resumo do Talhão']);
       rows.add(['Métrica', 'Valor']);
@@ -1098,18 +1147,18 @@ class ExportService {
       rows.add(['Talhão', talhao.nome]);
       rows.add(['Nº de Parcelas Amostradas', analise.totalParcelasAmostradas]);
       rows.add(['Nº de Árvores Medidas', analise.totalArvoresAmostradas]);
-      rows.add(['Área Total Amostrada (ha)', analise.areaTotalAmostradaHa.toStringAsFixed(4)]);
+      rows.add(['Área Total Amostrada (ha)', nf4.format(analise.areaTotalAmostradaHa)]);
       rows.add(['']);
       rows.add(['Resultados por Hectare']);
       rows.add(['Métrica', 'Valor']);
       rows.add(['Árvores / ha', analise.arvoresPorHectare]);
-      rows.add(['Área Basal (G) m²/ha', analise.areaBasalPorHectare.toStringAsFixed(2)]);
-      rows.add(['Volume Estimado m³/ha', analise.volumePorHectare.toStringAsFixed(2)]);
+      rows.add(['Área Basal (G) m²/ha', nf2.format(analise.areaBasalPorHectare)]);
+      rows.add(['Volume Estimado m³/ha', nf2.format(analise.volumePorHectare)]);
       rows.add(['']);
       rows.add(['Estatísticas da Amostra']);
       rows.add(['Métrica', 'Valor']);
-      rows.add(['CAP Médio (cm)', analise.mediaCap.toStringAsFixed(1)]);
-      rows.add(['Altura Média (m)', analise.mediaAltura.toStringAsFixed(1)]);
+      rows.add(['CAP Médio (cm)', nf1.format(analise.mediaCap)]);
+      rows.add(['Altura Média (m)', nf1.format(analise.mediaAltura)]);
       rows.add(['']);
       rows.add(['Distribuição Diamétrica (CAP)']);
       rows.add(['Classe (cm)', 'Nº de Árvores', '%']);
@@ -1119,12 +1168,12 @@ class ExportService {
         final inicioClasse = pontoMedio - 2.5;
         final fimClasse = pontoMedio + 2.5 - 0.1;
         final porcentagem = totalArvoresVivas > 0 ? (contagem / totalArvoresVivas) * 100 : 0;
-        rows.add(['${inicioClasse.toStringAsFixed(1)} - ${fimClasse.toStringAsFixed(1)}', contagem, '${porcentagem.toStringAsFixed(1)}%']);
+        rows.add(['${nf1.format(inicioClasse)} - ${nf1.format(fimClasse)}', contagem, '${nf1.format(porcentagem)}%']);
       });
 
       final hoje = DateTime.now();
       final fName = 'analise_talhao_${talhao.nome.replaceAll(' ', '_')}_${DateFormat('yyyy-MM-dd_HH-mm').format(hoje)}.csv';
-      final csvData = const ListToCsvConverter().convert(rows);
+      final csvData = const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
 
       await _salvarECompartilharCsv(context, csvData, fName, 'Análise do Talhão ${talhao.nome}');
 
