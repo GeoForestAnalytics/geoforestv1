@@ -33,9 +33,6 @@ class ArvoreDialog extends StatefulWidget {
     this.isAdicionandoFuste = false,
   });
 
-  // <<< CORREÇÃO CRÍTICA AQUI >>>
-  // A lógica de "edição" agora é mais simples e robusta.
-  // Estamos editando se uma árvore foi passada e não estamos explicitamente adicionando um fuste.
   bool get isEditing => arvoreParaEditar != null && !isAdicionandoFuste;
 
   @override
@@ -136,7 +133,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         linha: linha,
         posicaoNaLinha: posicao,
         codigo: _codigo,
-        codigo2: _codigo2,
+        codigo2: _codigo2, // ✅ Garante que o código 2 é nulo se o código 1 for Normal
         fimDeLinha: _fimDeLinha,
         dominante: widget.arvoreParaEditar?.dominante ?? false,
         capAuditoria: widget.arvoreParaEditar?.capAuditoria,
@@ -157,6 +154,8 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bool showAlturaDano = _codesRequiringAlturaDano.contains(_codigo);
+    // ✅ 1. Cria uma variável para verificar se o código é "Normal"
+    final bool isCodigoNormal = _codigo == Codigo.Normal;
 
     return Dialog(
       insetPadding: const EdgeInsets.all(16.0),
@@ -213,7 +212,13 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                       items: Codigo.values.map((s) => DropdownMenuItem(value: s, child: Text(s.name))).toList(),
                       onChanged: (value) {
                         if (value != null) {
-                          setState(() => _codigo = value);
+                          setState(() {
+                            _codigo = value;
+                            // ✅ 2. Se o novo código for Normal, limpa o código 2
+                            if (value == Codigo.Normal) {
+                              _codigo2 = null;
+                            }
+                          });
                           _atualizarEstadoCampos();
                           _checkMultiplaFlow();
                         }
@@ -221,13 +226,20 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<Codigo2?>(
-                      value: _codigo2,
-                      decoration: const InputDecoration(labelText: 'Código 2 (Opcional)'),
+                      // ✅ 3. Garante que o valor exibido seja nulo se o código 1 for Normal
+                      value: isCodigoNormal ? null : _codigo2,
+                      decoration: InputDecoration(
+                        labelText: 'Código 2 (Opcional)',
+                        // ✅ 4. Adiciona um feedback visual quando desabilitado
+                        filled: isCodigoNormal,
+                        fillColor: isCodigoNormal ? Colors.grey.shade200 : null,
+                      ),
                       items: [
                         const DropdownMenuItem(value: null, child: Text('Nenhum')),
                         ...Codigo2.values.map((s) => DropdownMenuItem(value: s, child: Text(s.name))),
                       ],
-                      onChanged: (value) => setState(() => _codigo2 = value),
+                      // ✅ 5. Desabilita o campo se o código 1 for Normal
+                      onChanged: isCodigoNormal ? null : (value) => setState(() => _codigo2 = value),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(

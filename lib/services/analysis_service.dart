@@ -1,4 +1,4 @@
-// lib/services/analysis_service.dart (VERSÃO FINAL, LIMPA E CORRIGIDA)
+// lib/services/analysis_service.dart (VERSÃO COMPLETA E CORRIGIDA)
 
 import 'dart:math';
 import 'package:collection/collection.dart';
@@ -398,68 +398,60 @@ class AnalysisService {
     );
   }
 
-  TalhaoAnalysisResult simularDesbaste({ // Renomeie a função para aceitar parâmetros nomeados
-  required Talhao talhao,
-  required List<Parcela> parcelasOriginais,
-  required List<Arvore> todasAsArvores,
-  required double porcentagemRemocaoSeletiva, // Parâmetro antigo
-  required bool sistematicoAtivo,            // Novo parâmetro
-  required int? linhaSistematica,           // Novo parâmetro
-}) {
-  if (parcelasOriginais.isEmpty) {
-    return getTalhaoInsights(talhao, parcelasOriginais, todasAsArvores);
-  }
-
-  const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
-  final List<Arvore> arvoresVivas = todasAsArvores.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
-  if (arvoresVivas.isEmpty) {
-    return getTalhaoInsights(talhao, parcelasOriginais, todasAsArvores);
-  }
-
-  List<Arvore> arvoresRemanescentes;
-
-  // --- NOVA LÓGICA DE DESBASTE MISTO ---
-  if (sistematicoAtivo && linhaSistematica != null && linhaSistematica > 0) {
-    
-    // 1. Separa as árvores: as que estão na linha do ramal e as que não estão.
-    final arvoresParaDesbasteSeletivo = <Arvore>[];
-    for (var arvore in arvoresVivas) {
-      if (arvore.linha % linhaSistematica != 0) {
-        arvoresParaDesbasteSeletivo.add(arvore);
-      }
-      // As árvores da linha sistemática (arvore.linha % linhaSistematica == 0) são simplesmente ignoradas,
-      // pois serão removidas por completo.
+  TalhaoAnalysisResult simularDesbaste({
+    required Talhao talhao,
+    required List<Parcela> parcelasOriginais,
+    required List<Arvore> todasAsArvores,
+    required double porcentagemRemocaoSeletiva,
+    required bool sistematicoAtivo,
+    required int? linhaSistematica,
+  }) {
+    if (parcelasOriginais.isEmpty) {
+      return getTalhaoInsights(talhao, parcelasOriginais, todasAsArvores);
     }
-    
-    // 2. Aplica o desbaste SELETIVO (por CAP) APENAS nas linhas remanescentes.
-    arvoresParaDesbasteSeletivo.sort((a, b) => a.cap.compareTo(b.cap));
-    final int quantidadeRemoverSeletivo = (arvoresParaDesbasteSeletivo.length * (porcentagemRemocaoSeletiva / 100)).floor();
-    
-    arvoresRemanescentes = arvoresParaDesbasteSeletivo.sublist(quantidadeRemoverSeletivo);
 
-  } else {
-    // Lógica antiga (apenas desbaste seletivo)
-    arvoresVivas.sort((a, b) => a.cap.compareTo(b.cap));
-    final int quantidadeRemover = (arvoresVivas.length * (porcentagemRemocaoSeletiva / 100)).floor();
-    arvoresRemanescentes = arvoresVivas.sublist(quantidadeRemover);
-  }
-  // --- FIM DA NOVA LÓGICA ---
+    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
+    final List<Arvore> arvoresVivas = todasAsArvores.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
+    if (arvoresVivas.isEmpty) {
+      return getTalhaoInsights(talhao, parcelasOriginais, todasAsArvores);
+    }
 
-  final double areaTotalAmostradaM2 = parcelasOriginais.map((p) => p.areaMetrosQuadrados).fold(0.0, (a, b) => a + b);
-  final double areaTotalAmostradaHa = areaTotalAmostradaM2 / 10000;
-  
-  // A análise final é feita com base nas árvores que sobraram após AMBOS os desbastes.
-  final codeAnalysisRemanescente = getTreeCodeAnalysis(arvoresRemanescentes);
-  return _analisarListaDeArvores(talhao, arvoresRemanescentes, areaTotalAmostradaHa, parcelasOriginais.length, codeAnalysisRemanescente);
-}  
+    List<Arvore> arvoresRemanescentes;
+
+    if (sistematicoAtivo && linhaSistematica != null && linhaSistematica > 0) {
+      final arvoresParaDesbasteSeletivo = <Arvore>[];
+      for (var arvore in arvoresVivas) {
+        if (arvore.linha % linhaSistematica != 0) {
+          arvoresParaDesbasteSeletivo.add(arvore);
+        }
+      }
+      
+      arvoresParaDesbasteSeletivo.sort((a, b) => a.cap.compareTo(b.cap));
+      final int quantidadeRemoverSeletivo = (arvoresParaDesbasteSeletivo.length * (porcentagemRemocaoSeletiva / 100)).floor();
+      
+      arvoresRemanescentes = arvoresParaDesbasteSeletivo.sublist(quantidadeRemoverSeletivo);
+
+    } else {
+      arvoresVivas.sort((a, b) => a.cap.compareTo(b.cap));
+      final int quantidadeRemover = (arvoresVivas.length * (porcentagemRemocaoSeletiva / 100)).floor();
+      arvoresRemanescentes = arvoresVivas.sublist(quantidadeRemover);
+    }
+
+    final double areaTotalAmostradaM2 = parcelasOriginais.map((p) => p.areaMetrosQuadrados).fold(0.0, (a, b) => a + b);
+    final double areaTotalAmostradaHa = areaTotalAmostradaM2 / 10000;
+    
+    final codeAnalysisRemanescente = getTreeCodeAnalysis(arvoresRemanescentes);
+    return _analisarListaDeArvores(talhao, arvoresRemanescentes, areaTotalAmostradaHa, parcelasOriginais.length, codeAnalysisRemanescente);
+  }  
   
   Map<String, int> gerarPlanoDeCubagem({
     required Map<double, int> distribuicaoAmostrada,
     required int totalArvoresAmostradas,
     required int totalArvoresParaCubar,
     required MetricaDistribuicao metrica,
+    double? larguraClasseManual,
   }) {
-    final double larguraClasse = (metrica == MetricaDistribuicao.cap) ? 15.0 : 5.0;
+    final double larguraClasse = larguraClasseManual ?? ((metrica == MetricaDistribuicao.cap) ? 15.0 : 5.0);
 
     if (totalArvoresAmostradas == 0 || totalArvoresParaCubar == 0 || distribuicaoAmostrada.isEmpty) return {};
     
@@ -506,10 +498,11 @@ class AnalysisService {
   Map<double, int> getDistribuicaoPorMetrica({
     required List<Arvore> arvores,
     required MetricaDistribuicao metrica,
+    double? larguraClasseManual,
   }) {
-    final int larguraClasse = (metrica == MetricaDistribuicao.cap) ? 15 : 5;
+    final double larguraClasse = larguraClasseManual ?? ((metrica == MetricaDistribuicao.cap) ? 15.0 : 5.0);
 
-    if (arvores.isEmpty) return {};
+    if (arvores.isEmpty || larguraClasse <= 0) return {};
     
     final Map<int, int> contagemPorClasse = {};
     
@@ -525,7 +518,7 @@ class AnalysisService {
             break;
         }
         
-        final int classeBase = (valor / larguraClasse).floor() * larguraClasse;
+        final int classeBase = (valor / larguraClasse).floor() * larguraClasse.toInt();
         contagemPorClasse.update(classeBase, (value) => value + 1, ifAbsent: () => 1);
       }
     }
@@ -587,12 +580,15 @@ class AnalysisService {
     return sqrt(variance);
   }
 
+  // ✅ FUNÇÃO PRINCIPAL QUE FOI ALTERADA
   Future<Map<Talhao, Map<String, int>>> criarMultiplasAtividadesDeCubagem({
     required List<Talhao> talhoes,
     required MetodoDistribuicaoCubagem metodo,
     required int quantidade,
     required String metodoCubagem,
     required MetricaDistribuicao metrica,
+    bool isIntervaloManual = false,
+    double? intervaloManual,
   }) async {
     final Map<int, int> quantidadesPorTalhao = {};
     final Map<Talhao, Map<String, int>> planosGerados = {};
@@ -626,6 +622,8 @@ class AnalysisService {
       }
     }
 
+    final Map<Talhao, List<CubagemArvore>> planosCompletos = {};
+
     for (final talhao in talhoes) {
       if (talhao.id == null) continue;
       final totalArvoresParaCubar = quantidadesPorTalhao[talhao.id!] ?? 0;
@@ -637,19 +635,19 @@ class AnalysisService {
       if (parcelas.isEmpty || arvores.isEmpty) continue;
 
       final analiseResult = getTalhaoInsights(talhao, parcelas, arvores);
-      final projeto = await _projetoRepository.getProjetoPelaAtividade(talhao.fazendaAtividadeId);
-      if (projeto == null) {
-        debugPrint("Aviso: Não foi possível encontrar o projeto pai para o talhão ${talhao.nome}. Pulando.");
-        continue;
-      }
       
-      final distribuicao = getDistribuicaoPorMetrica(arvores: arvores, metrica: metrica);
+      final distribuicao = getDistribuicaoPorMetrica(
+        arvores: arvores, 
+        metrica: metrica,
+        larguraClasseManual: isIntervaloManual ? intervaloManual : null,
+      );
 
       final plano = gerarPlanoDeCubagem(
         distribuicaoAmostrada: distribuicao,
         totalArvoresAmostradas: analiseResult.totalArvoresAmostradas,
         totalArvoresParaCubar: totalArvoresParaCubar,
         metrica: metrica,
+        larguraClasseManual: isIntervaloManual ? intervaloManual : null,
       );
 
       if (plano.isEmpty) {
@@ -658,28 +656,40 @@ class AnalysisService {
       }
 
       planosGerados[talhao] = plano;
-
-      final novaAtividade = Atividade(
-        projetoId: projeto.id!,
-        tipo: 'Cubagem - $metodoCubagem',
-        descricao: 'Plano para o talhão ${talhao.nome} com $totalArvoresParaCubar árvores.',
-        dataCriacao: DateTime.now(),
-        metodoCubagem: metodoCubagem,
-      );
-
+      
       final List<CubagemArvore> placeholders = [];
-      plano.forEach((classe, quantidade) {
-        for (int i = 1; i <= quantidade; i++) {
+      plano.forEach((classe, qtd) {
+        for (int i = 1; i <= qtd; i++) {
           final classeSanitizada = classe.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '-');
           placeholders.add(CubagemArvore(
-            nomeFazenda: talhao.fazendaNome ?? 'N/A', idFazenda: talhao.fazendaId, nomeTalhao: talhao.nome,
-            classe: classe, identificador: 'PLANO-${classeSanitizada}-${i.toString().padLeft(2, '0')}',
+            nomeFazenda: talhao.fazendaNome ?? 'N/A', 
+            idFazenda: talhao.fazendaId, 
+            nomeTalhao: talhao.nome,
+            classe: classe, 
+            identificador: 'PLANO-${classeSanitizada}-${i.toString().padLeft(2, '0')}',
             alturaTotal: 0, valorCAP: 0, alturaBase: 1.30, tipoMedidaCAP: 'fita',
           ));
         }
       });
-      await _atividadeRepository.criarAtividadeComPlanoDeCubagem(novaAtividade, placeholders);
+      planosCompletos[talhao] = placeholders;
     }
+
+    if (planosCompletos.isNotEmpty) {
+      final primeiroTalhao = planosCompletos.keys.first;
+      final projeto = await _projetoRepository.getProjetoPelaAtividade(primeiroTalhao.fazendaAtividadeId);
+      if (projeto != null) {
+        final novaAtividadeUnica = Atividade(
+          projetoId: projeto.id!,
+          tipo: 'Cubagem - $metodoCubagem',
+          descricao: 'Plano de cubagem para ${planosCompletos.length} talhões.',
+          dataCriacao: DateTime.now(),
+          metodoCubagem: metodoCubagem,
+        );
+
+        await _atividadeRepository.criarAtividadeUnicaComMultiplosPlanos(novaAtividadeUnica, planosCompletos);
+      }
+    }
+    
     return planosGerados;
   }
 }

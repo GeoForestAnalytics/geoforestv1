@@ -1,4 +1,4 @@
-// lib/data/repositories/atividade_repository.dart (VERSÃO REFATORADA)
+// lib/data/repositories/atividade_repository.dart (VERSÃO COMPLETA E AJUSTADA)
 
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -8,6 +8,7 @@ import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:collection/collection.dart'; // Import necessário para o groupBy
 
 class AtividadeRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
@@ -61,6 +62,7 @@ class AtividadeRepository {
     await db.delete(DbAtividades.tableName, where: '${DbAtividades.id} = ?', whereArgs: [id]);
   }
 
+  /// ✅ FUNÇÃO ANTIGA (mantida para compatibilidade, mas não será usada neste fluxo)
   Future<void> criarAtividadeComPlanoDeCubagem(Atividade novaAtividade, List<CubagemArvore> placeholders) async {
     if (placeholders.isEmpty) {
       throw Exception("A lista de árvores para cubagem (placeholders) não pode estar vazia.");
@@ -120,5 +122,76 @@ class AtividadeRepository {
       }
     });
     debugPrint('Atividade de cubagem e ${placeholders.length} placeholders criados com sucesso!');
+  }
+
+  /// ✅ NOVA FUNÇÃO: Cria uma única atividade e, dentro dela, a hierarquia de fazendas e talhões com seus planos.
+  Future<void> criarAtividadeUnicaComMultiplosPlanos(Atividade novaAtividade, Map<Talhao, List<CubagemArvore>> planosPorTalhao) async {
+    final db = await _dbHelper.database;
+    final now = DateTime.now().toIso8601String();
+
+    await db.transaction((txn) async {
+      // 1. Cria a atividade "mãe" única para a cubagem
+      final atividadeMap = novaAtividade.toMap();
+      atividadeMap[DbAtividades.lastModified] = now;
+      final newAtividadeId = await txn.insert(DbAtividades.tableName, atividadeMap);
+      
+      // 2. Agrupa os talhões por sua fazenda de origem
+      final talhoesAgrupadosPorFazenda = groupBy(planosPorTalhao.keys, (Talhao t) => t.fazendaId);
+      
+      // 3. Itera sobre cada fazenda para recriar a hierarquia
+      for (var fazendaIdOrigem in talhoesAgrupadosPorFazenda.keys) {
+        final talhoesDestaFazenda = talhoesAgrupadosPorFazenda[fazendaIdOrigem]!;
+        final primeiroTalhao = talhoesDestaFazenda.first;
+
+        // 4. Cria a Fazenda correspondente dentro da nova atividade
+        final novaFazenda = Fazenda(
+          id: primeiroTalhao.fazendaId,
+          atividadeId: newAtividadeId,
+          nome: primeiroTalhao.fazendaNome ?? 'Fazenda Desconhecida',
+          municipio: primeiroTalhao.municipio ?? 'N/I',
+          estado: primeiroTalhao.estado ?? 'N/I',
+        );
+        final fazendaMap = novaFazenda.toMap();
+        fazendaMap[DbFazendas.lastModified] = now;
+        await txn.insert(DbFazendas.tableName, fazendaMap, conflictAlgorithm: ConflictAlgorithm.replace);
+
+        // 5. Itera sobre cada talhão desta fazenda para criar os planos
+        for (final talhaoOriginal in talhoesDestaFazenda) {
+          final placeholders = planosPorTalhao[talhaoOriginal]!;
+          if (placeholders.isEmpty) continue;
+
+          // 6. Cria o Talhão correspondente dentro da nova fazenda/atividade
+          final novoTalhao = Talhao(
+            fazendaId: novaFazenda.id,
+            fazendaAtividadeId: newAtividadeId,
+            nome: talhaoOriginal.nome,
+            projetoId: novaAtividade.projetoId,
+            // Copia os outros dados do talhão original
+            areaHa: talhaoOriginal.areaHa,
+            especie: talhaoOriginal.especie,
+            espacamento: talhaoOriginal.espacamento,
+            idadeAnos: talhaoOriginal.idadeAnos,
+            bloco: talhaoOriginal.bloco,
+            up: talhaoOriginal.up,
+            materialGenetico: talhaoOriginal.materialGenetico,
+            dataPlantio: talhaoOriginal.dataPlantio,
+          );
+
+          final talhaoMap = novoTalhao.toMap();
+          talhaoMap[DbTalhoes.lastModified] = now;
+          final newTalhaoId = await txn.insert(DbTalhoes.tableName, talhaoMap);
+
+          // 7. Insere os placeholders (árvores de cubagem) vinculados ao novo talhão
+          for (final placeholder in placeholders) {
+            final map = placeholder.toMap();
+            map[DbCubagensArvores.talhaoId] = newTalhaoId;
+            map.remove(DbCubagensArvores.id);
+            map[DbCubagensArvores.lastModified] = now;
+            await txn.insert(DbCubagensArvores.tableName, map);
+          }
+        }
+      }
+    });
+    debugPrint("Atividade de cubagem única criada com sucesso com múltiplos planos.");
   }
 }

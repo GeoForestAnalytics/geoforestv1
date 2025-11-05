@@ -1,4 +1,4 @@
-// lib/services/validation_service.dart (VERSÃO COM A CLASSE FALTANTE REINSERIDA)
+// lib/services/validation_service.dart (VERSÃO COMPLETA E CORRIGIDA)
 
 import 'dart:math';
 import 'package:collection/collection.dart';
@@ -8,25 +8,19 @@ import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 
-// =========================================================================
-// MODELOS PARA ESTRUTURAR O RELATÓRIO DE CONSISTÊNCIA
-// =========================================================================
-
-// ✅ CLASSE QUE ESTAVA FALTANDO, AGORA ADICIONADA NOVAMENTE
 class ValidationResult {
   final bool isValid;
   final List<String> warnings;
   ValidationResult({this.isValid = true, this.warnings = const []});
 }
 
-/// Representa um único problema de consistência encontrado nos dados.
 class ValidationIssue {
-  final String tipo; // Ex: "Outlier de CAP", "Sequência Quebrada", "Afilamento Incorreto"
-  final String mensagem; // Ex: "CAP de 250cm é um outlier."
-  final int? parcelaId; // ID da parcela (se for erro de inventário)
-  final int? cubagemId; // ID da cubagem (se for erro de cubagem)
-  final int? arvoreId; // ID da árvore específica (se aplicável)
-  final String identificador; // Ex: "Parcela P05 (Talhão T2)" ou "Cubagem CUB-01"
+  final String tipo;
+  final String mensagem;
+  final int? parcelaId;
+  final int? cubagemId;
+  final int? arvoreId;
+  final String identificador;
 
   ValidationIssue({
     required this.tipo,
@@ -38,7 +32,6 @@ class ValidationIssue {
   });
 }
 
-/// Contém o resultado completo da verificação de consistência.
 class FullValidationReport {
   final List<ValidationIssue> issues;
   final int parcelasVerificadas;
@@ -52,18 +45,11 @@ class FullValidationReport {
     required this.cubagensVerificadas,
   });
 
-  /// Retorna `true` se nenhum problema foi encontrado.
   bool get isConsistent => issues.isEmpty;
 }
 
-
-// =========================================================================
-// SERVIÇO DE VALIDAÇÃO
-// =========================================================================
-
 class ValidationService {
   
-  // Nenhuma alteração aqui, mas agora ele encontrará a classe `ValidationResult`.
   ValidationResult validateSingleTree(Arvore arvore) {
     final List<String> warnings = [];
     if (arvore.codigo != Codigo.Falha && arvore.codigo != Codigo.Caida) {
@@ -80,10 +66,13 @@ class ValidationService {
     if (arvore.altura != null && arvore.cap > 150 && arvore.altura! < 10) {
       warnings.add("Relação CAP/Altura incomum: ${arvore.cap} cm de CAP com apenas ${arvore.altura}m de altura.");
     }
+    // ✅ NOVO CHECK: Valida a relação entre altura e altura do dano
+    if (arvore.altura != null && arvore.alturaDano != null && arvore.altura! > 0 && arvore.alturaDano! >= arvore.altura!) {
+      warnings.add("Altura do Dano (${arvore.alturaDano}m) não pode ser maior ou igual à Altura Total (${arvore.altura}m).");
+    }
     return ValidationResult(isValid: warnings.isEmpty, warnings: warnings);
   }
 
-  // Nenhuma alteração aqui, mas agora ele encontrará a classe `ValidationResult`.
   ValidationResult validateParcela(List<Arvore> arvores) {
     final arvoresValidasParaAnalise = arvores.where((a) => a.codigo != Codigo.Falha && a.codigo != Codigo.Caida).toList();
     if (arvoresValidasParaAnalise.length < 10) return ValidationResult();
@@ -101,7 +90,6 @@ class ValidationService {
     return ValidationResult(isValid: warnings.isEmpty, warnings: warnings);
   }
 
-  // O resto do arquivo permanece o mesmo...
   Future<FullValidationReport> performFullConsistencyCheck({
     required List<Parcela> parcelas,
     required List<CubagemArvore> cubagens,
@@ -110,15 +98,14 @@ class ValidationService {
   }) async {
     final List<ValidationIssue> allIssues = [];
 
-    // --- VERIFICAÇÃO DE INVENTÁRIO ---
     int arvoresVerificadas = 0;
     for (final parcela in parcelas) {
       final arvores = await parcelaRepo.getArvoresDaParcela(parcela.dbId!);
       arvoresVerificadas += arvores.length;
       allIssues.addAll(_checkParcelaStructure(parcela, arvores));
     }
-
-    // --- VERIFICAÇÃO DE CUBAGEM ---
+    
+    // ✅ CORREÇÃO: Agora a verificação de cubagem roda para todas as cubagens, não só as "concluídas"
     for (final cubagem in cubagens) {
       allIssues.addAll(await _checkCubagemIntegrity(cubagem, cubagemRepo));
     }
@@ -137,14 +124,15 @@ class ValidationService {
 
     if (arvores.isEmpty) return issues;
 
-    // CHECK 1: Início da parcela
     final primeiraArvore = arvores.first;
     if (primeiraArvore.linha != 1 || primeiraArvore.posicaoNaLinha != 1) {
       issues.add(ValidationIssue(tipo: 'Início Inválido', mensagem: 'A primeira árvore não é Linha 1 / Posição 1. Começa em L:${primeiraArvore.linha} P:${primeiraArvore.posicaoNaLinha}.', parcelaId: parcela.dbId!, identificador: identificador));
     }
 
-    // CHECK 2: Sequência de linhas
-    final linhasUnicas = arvores.map((a) => a.linha).toSet().toList()..sort();
+    // Agrupa as árvores por linha para verificar sequências internas
+    final arvoresPorLinha = groupBy(arvores, (Arvore a) => a.linha);
+    final linhasUnicas = arvoresPorLinha.keys.toList()..sort();
+
     for (int i = 0; i < linhasUnicas.length - 1; i++) {
       if (linhasUnicas[i+1] != linhasUnicas[i] + 1) {
         issues.add(ValidationIssue(tipo: 'Sequência de Linha', mensagem: 'Sequência de linha quebrada. Pulou de ${linhasUnicas[i]} para ${linhasUnicas[i+1]}.', parcelaId: parcela.dbId!, identificador: identificador));
@@ -152,7 +140,23 @@ class ValidationService {
       }
     }
 
-    // CHECK 3: Duplicatas e códigos
+    arvoresPorLinha.forEach((linha, arvoresDaLinha) {
+      arvoresDaLinha.sort((a, b) => a.posicaoNaLinha.compareTo(b.posicaoNaLinha));
+
+      // ✅ NOVO CHECK: Verifica a sequência de posições dentro de cada linha
+      for (int i = 0; i < arvoresDaLinha.length - 1; i++) {
+        if (arvoresDaLinha[i+1].posicaoNaLinha != arvoresDaLinha[i].posicaoNaLinha + 1) {
+          final posFaltando = arvoresDaLinha[i].posicaoNaLinha + 1;
+          issues.add(ValidationIssue(tipo: 'Sequência de Posição', mensagem: 'Na Linha $linha, a sequência pulou da Posição ${arvoresDaLinha[i].posicaoNaLinha} para ${arvoresDaLinha[i+1].posicaoNaLinha} (faltando P$posFaltando).', parcelaId: parcela.dbId!, identificador: identificador));
+        }
+      }
+      
+      // ✅ NOVO CHECK: Verifica a flag "fimDeLinha"
+      if (arvoresDaLinha.isNotEmpty && !arvoresDaLinha.last.fimDeLinha) {
+        issues.add(ValidationIssue(tipo: 'Fim de Linha Ausente', mensagem: 'A última árvore da Linha $linha (Posição ${arvoresDaLinha.last.posicaoNaLinha}) não está marcada como "Fim de Linha".', parcelaId: parcela.dbId!, arvoreId: arvoresDaLinha.last.id, identificador: identificador));
+      }
+    });
+
     final posicoesAgrupadas = groupBy(arvores, (Arvore a) => '${a.linha}-${a.posicaoNaLinha}');
     posicoesAgrupadas.forEach((pos, arvoresNaPosicao) {
       if (arvoresNaPosicao.length > 1) {
@@ -165,7 +169,6 @@ class ValidationService {
       }
     });
 
-    // CHECK 4: Outliers e inconsistências individuais
     for (final arvore in arvores) {
       final singleValidation = validateSingleTree(arvore);
       if (!singleValidation.isValid) {
@@ -182,7 +185,6 @@ class ValidationService {
     final List<ValidationIssue> issues = [];
     final identificador = "${cubagem.identificador} (Talhão: ${cubagem.nomeTalhao})";
     
-    // CHECK 1: Afilamento Incorreto
     final secoes = await cubagemRepo.getSecoesPorArvoreId(cubagem.id!);
     if (secoes.length >= 2) {
       secoes.sort((a, b) => a.alturaMedicao.compareTo(b.alturaMedicao));
@@ -195,7 +197,6 @@ class ValidationService {
       }
     }
 
-    // CHECK 2: Árvore fora da classe
     if (cubagem.classe != null && cubagem.classe!.isNotEmpty && cubagem.valorCAP > 0) {
       final dap = cubagem.valorCAP / pi;
       final numerosNaClasse = RegExp(r'(\d+\.?\d*)').allMatches(cubagem.classe!).map((m) => double.tryParse(m.group(1) ?? '0')).whereType<double>().toList();
