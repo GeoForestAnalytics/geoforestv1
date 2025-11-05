@@ -40,7 +40,6 @@ class SyncService {
 
   final List<SyncConflict> conflicts = [];
 
-  // <<< FUNÇÃO PRINCIPAL CORRIGIDA PARA PASSAR OS DADOS CORRETAMENTE >>>
   Future<void> sincronizarDados() async {
     conflicts.clear();
     final user = _auth.currentUser;
@@ -59,7 +58,6 @@ class SyncService {
       
       _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, mensagem: "Preparando sincronização..."));
 
-      // 1. UPLOAD (sem alterações)
       if (licenseIdDoUsuarioLogado != null) {
         final cargo = (licenseDoc!.data()!['usuariosPermitidos'] as Map<String, dynamic>?)?[user.uid]?['cargo'] ?? 'equipe';
         if (cargo == 'gerente') {
@@ -71,12 +69,13 @@ class SyncService {
 
       _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, processados: totalGeral, mensagem: "Baixando dados da nuvem..."));
       
-      // 2. DOWNLOAD (com as alterações)
       if (licenseIdDoUsuarioLogado != null) {
         debugPrint("--- SyncService: Baixando dados da licença PRÓPRIA: $licenseIdDoUsuarioLogado");
-        // Captura os IDs retornados
+        
+        // <<< CORREÇÃO 1: Capturar a lista de IDs de talhões retornada >>>
         final idsHierarquiaLocal = await _downloadHierarquiaCompleta(licenseIdDoUsuarioLogado);
-        // Passa a lista de IDs diretamente
+        
+        // <<< CORREÇÃO 2: Passar a lista de IDs para a função de download de coletas >>>
         await _downloadColetas(licenseIdDoUsuarioLogado, talhaoIdsParaBaixar: idsHierarquiaLocal);
       }
       
@@ -86,9 +85,8 @@ class SyncService {
         final projetosParaBaixar = entry.value;
         debugPrint("--- SyncService: Baixando dados delegados da licença do CLIENTE: $licenseIdDoCliente para os projetos $projetosParaBaixar");
         
-        // Captura os IDs retornados
+        // <<< CORREÇÃO 3: Fazer o mesmo para projetos delegados >>>
         final idsHierarquiaDelegada = await _downloadHierarquiaCompleta(licenseIdDoCliente, projetosParaBaixar: projetosParaBaixar);
-        // Passa a lista de IDs diretamente
         await _downloadColetas(licenseIdDoCliente, talhaoIdsParaBaixar: idsHierarquiaDelegada);
       }
 
@@ -134,7 +132,6 @@ class SyncService {
       final projetosParaEsteDestino = entry.value;
       final batch = _firestore.batch();
       
-      // Determina se estamos enviando para a nossa própria licença ou para a de um cliente.
       final bool isUploadingToSelf = licenseIdDeDestino == licenseId;
 
       debugPrint("SyncService: Enviando hierarquia para a licença: $licenseIdDeDestino. É a própria licença? $isUploadingToSelf");
@@ -142,41 +139,21 @@ class SyncService {
       final projetosIds = projetosParaEsteDestino.map((p) => p.id!).toList();
       if (projetosIds.isEmpty) continue;
 
-      // 1. SINCRONIZAÇÃO DE PROJETOS
       for (var projeto in projetosParaEsteDestino) {
         final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('projetos').doc(projeto.id.toString());
         final map = projeto.toMap();
         map['lastModified'] = firestore.FieldValue.serverTimestamp();
-        // Apenas atualiza o projeto se for próprio. Projetos delegados são somente leitura.
         if (isUploadingToSelf) {
           batch.set(docRef, map, firestore.SetOptions(merge: true));
         }
       }
 
-      // 2. SINCRONIZAÇÃO DE ATIVIDADES, FAZENDAS E TALHÕES
       final atividades = await db.query('atividades', where: 'projetoId IN (${projetosIds.join(',')})');
       for (var a in atividades) {
         final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('atividades').doc(a['id'].toString());
         final map = Map<String, dynamic>.from(a);
         map['lastModified'] = firestore.FieldValue.serverTimestamp();
-        
-        // Se estiver enviando para um cliente, só cria se não existir.
-        if (isUploadingToSelf) {
-          batch.set(docRef, map, firestore.SetOptions(merge: true));
-        } else {
-          batch.set(docRef, map); // Usa 'set' sem merge, que falhará se o doc já existir, mas em batch não podemos checar antes. A alternativa é criar se não existe.
-                                 // Uma abordagem segura é checar e depois adicionar ao batch, mas por simplicidade vamos assumir que o contratado só adiciona.
-                                 // A melhor abordagem é usar um set com merge: false, mas isso não existe.
-                                 // A lógica segura é: não permitir que o contratado altere a hierarquia. Ele só envia coletas.
-                                 // Mas para permitir que ele crie um talhão novo, precisamos fazer o upload.
-                                 // A solução aqui é usar merge: true, mas apenas para os campos que o contratado pode criar.
-                                 // Como isso é complexo, vamos adotar a regra: A CONTRATADA NÃO ALTERA A HIERARQUIA.
-                                 // Para tal, a melhor abordagem é não reenviar a hierarquia de projetos delegados.
-                                 // No entanto, para permitir a criação de novos talhões, vamos manter o envio mas com consciência do risco.
-                                 // A lógica de upload de coletas já garante que o destino está correto.
-                                 // A CORREÇÃO REAL é não sobrescrever os dados MESTRES.
-          batch.set(docRef, map, firestore.SetOptions(merge: true));
-        }
+        batch.set(docRef, map, firestore.SetOptions(merge: true));
       }
       
       final atividadeIds = atividades.map((a) => a['id'] as int).toList();
@@ -199,23 +176,9 @@ class SyncService {
           for (var t in talhoesParaEnviar) {
               final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('talhoes').doc(t['id'].toString());
               final talhaoObj = Talhao.fromMap(t);
-
-              if (isUploadingToSelf) {
-                // Se sou o dono, posso atualizar tudo.
-                final map = talhaoObj.toFirestoreMap();
-                map['lastModified'] = firestore.FieldValue.serverTimestamp();
-                batch.set(docRef, map, firestore.SetOptions(merge: true));
-              } else {
-                // Se estou enviando para um cliente (sou a contratada),
-                // só posso criar o talhão. Não posso atualizar um existente para não apagar a área do cliente.
-                // A operação `create` só funciona em Cloud Functions, então usamos uma transação para simular.
-                // Mas dentro de um batch, não podemos fazer transação.
-                // A solução mais simples é não reenviar a hierarquia, mas isso impede a criação de novos talhões.
-                // Vamos manter o `set` com `merge: true` mas a longo prazo o ideal é uma Cloud Function.
-                final map = talhaoObj.toFirestoreMap();
-                map['lastModified'] = firestore.FieldValue.serverTimestamp();
-                batch.set(docRef, map, firestore.SetOptions(merge: true));
-              }
+              final map = talhaoObj.toFirestoreMap();
+              map['lastModified'] = firestore.FieldValue.serverTimestamp();
+              batch.set(docRef, map, firestore.SetOptions(merge: true));
           }
       }
       
@@ -364,9 +327,10 @@ class SyncService {
       }
   }
 
-  // <<< FUNÇÃO CORRIGIDA para retornar os IDs dos talhões que foram baixados >>>
+  // <<< CORREÇÃO 4: Mudar a assinatura da função para retornar Future<List<int>> >>>
   Future<List<int>> _downloadHierarquiaCompleta(String licenseId, {List<int>? projetosParaBaixar}) async {
     final db = await _dbHelper.database;
+    // <<< CORREÇÃO 5: Criar a lista que será retornada >>>
     final List<int> downloadedTalhaoIds = [];
 
     firestore.Query projetosQuery = _firestore.collection('clientes').doc(licenseId).collection('projetos');
@@ -375,6 +339,7 @@ class SyncService {
       for (var chunk in projetosParaBaixar.slices(10)) {
         final snap = await projetosQuery.where(firestore.FieldPath.documentId, whereIn: chunk.map((id) => id.toString()).toList()).get();
         for (var projDoc in snap.docs) {
+          // <<< CORREÇÃO 6: Capturar o retorno e adicionar à lista >>>
           final talhaoIds = await _processarProjetoDaNuvem(projDoc, licenseId, db);
           downloadedTalhaoIds.addAll(talhaoIds);
         }
@@ -382,14 +347,16 @@ class SyncService {
     } else {
        final snap = await projetosQuery.get();
         for (var projDoc in snap.docs) {
+          // <<< CORREÇÃO 7: Capturar o retorno e adicionar à lista >>>
           final talhaoIds = await _processarProjetoDaNuvem(projDoc, licenseId, db);
           downloadedTalhaoIds.addAll(talhaoIds);
         }
     }
+    // <<< CORREÇÃO 8: Retornar a lista preenchida >>>
     return downloadedTalhaoIds;
   }
 
-  // <<< FUNÇÃO CORRIGIDA para retornar os IDs dos talhões do projeto processado >>>
+  // <<< CORREÇÃO 9: Mudar a assinatura da função para retornar Future<List<int>> >>>
   Future<List<int>> _processarProjetoDaNuvem(firestore.QueryDocumentSnapshot projDoc, String licenseId, Database db) async {
     final projetoData = projDoc.data() as Map<String, dynamic>; 
     final user = _auth.currentUser!;
@@ -401,20 +368,26 @@ class SyncService {
     await db.transaction((txn) async {
         await _upsert(txn, 'projetos', projeto.toMap(), 'id');
     });
+    // <<< CORREÇÃO 10: Retornar o resultado da função chamada >>>
     return await _downloadFilhosDeProjeto(licenseId, projeto.id!);
   }
   
-  // <<< FUNÇÃO CORRIGIDA para receber a lista de talhões e não fazer uma nova busca >>>
+  // <<< CORREÇÃO 11: Mudar a assinatura para aceitar a lista de IDs de talhões >>>
   Future<void> _downloadColetas(String licenseId, {required List<int> talhaoIdsParaBaixar}) async {
-    if (talhaoIdsParaBaixar.isEmpty) return;
+    // <<< CORREÇÃO 12: Verificar se a lista de IDs está vazia >>>
+    if (talhaoIdsParaBaixar.isEmpty) {
+      debugPrint("--- SyncService: Nenhum talhão encontrado para baixar coletas. Pulando etapa.");
+      return;
+    }
 
     await _downloadParcelasDaNuvem(licenseId, talhaoIdsParaBaixar);
     await _downloadCubagensDaNuvem(licenseId, talhaoIdsParaBaixar);
   }
   
-  // <<< FUNÇÃO CORRIGIDA para retornar os IDs dos talhões que ela salvou >>>
+  // <<< CORREÇÃO 13: Mudar a assinatura da função para retornar Future<List<int>> >>>
   Future<List<int>> _downloadFilhosDeProjeto(String licenseId, int projetoId) async {
     final db = await _dbHelper.database;
+    // <<< CORREÇÃO 14: Criar a lista que será retornada >>>
     final List<int> downloadedTalhaoIds = [];
 
     final atividadesSnap = await _firestore.collection('clientes').doc(licenseId).collection('atividades').where('projetoId', isEqualTo: projetoId).get();
@@ -433,11 +406,13 @@ class SyncService {
           final talhao = Talhao.fromMap(data);
           await db.transaction((txn) async { await _upsert(txn, 'talhoes', talhao.toMap(), 'id'); });
           if (talhao.id != null) {
+            // <<< CORREÇÃO 15: Adicionar o ID do talhão à lista >>>
             downloadedTalhaoIds.add(talhao.id!);
           }
         }
       }
     }
+    // <<< CORREÇÃO 16: Retornar a lista preenchida >>>
     return downloadedTalhaoIds;
   }
   
@@ -448,41 +423,34 @@ class SyncService {
         if (querySnapshot.docs.isEmpty) continue;
         
         final db = await _dbHelper.database;
-for (final docSnapshot in querySnapshot.docs) {
-  final dadosDaNuvem = docSnapshot.data();
-  final parcelaDaNuvem = Parcela.fromMap(dadosDaNuvem);
-  
-  await db.transaction((txn) async {
-    try {
-      // ✅ ETAPA 1: VERIFICA A VERSÃO LOCAL PRIMEIRO
-      final parcelaLocalResult = await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1);
+        for (final docSnapshot in querySnapshot.docs) {
+          final dadosDaNuvem = docSnapshot.data();
+          final parcelaDaNuvem = Parcela.fromMap(dadosDaNuvem);
+          
+          await db.transaction((txn) async {
+            try {
+              final parcelaLocalResult = await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1);
 
-      // Só continua se a versão local NÃO estiver marcada como "não sincronizada".
-      // Se ela estiver como "não sincronizada", significa que você tem alterações locais que precisam ser enviadas primeiro.
-      if (parcelaLocalResult.isNotEmpty && parcelaLocalResult.first['isSynced'] == 0) {
-        debugPrint("PULANDO DOWNLOAD da parcela ${parcelaDaNuvem.idParcela} pois existem alterações locais não sincronizadas.");
-        return; // Pula para a próxima amostra
-      }
-      
-      // Se não há alterações locais pendentes, ele pode baixar e substituir com segurança.
-      final pMap = parcelaDaNuvem.toMap();
-      pMap['isSynced'] = 1; // Marca como sincronizado
-      await _upsert(txn, 'parcelas', pMap, 'uuid');
-      
-      // Pega o ID local da amostra que acabamos de salvar/atualizar
-      final idLocal = (await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1)).map((map) => Parcela.fromMap(map)).first.dbId!;
-      
-      // Apaga as árvores antigas (agora é seguro fazer isso)
-      await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [idLocal]);
-      
-      // Baixa as novas árvores
-      await _sincronizarArvores(txn, docSnapshot, idLocal);
+              if (parcelaLocalResult.isNotEmpty && parcelaLocalResult.first['isSynced'] == 0) {
+                debugPrint("PULANDO DOWNLOAD da parcela ${parcelaDaNuvem.idParcela} pois existem alterações locais não sincronizadas.");
+                return;
+              }
+              
+              final pMap = parcelaDaNuvem.toMap();
+              pMap['isSynced'] = 1;
+              await _upsert(txn, 'parcelas', pMap, 'uuid');
+              
+              final idLocal = (await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1)).map((map) => Parcela.fromMap(map)).first.dbId!;
+              
+              await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [idLocal]);
+              
+              await _sincronizarArvores(txn, docSnapshot, idLocal);
 
-    } catch (e, s) {
-      debugPrint("Erro CRÍTICO ao sincronizar parcela ${parcelaDaNuvem.uuid}: $e\n$s");
-    }
-  });
-}
+            } catch (e, s) {
+              debugPrint("Erro CRÍTICO ao sincronizar parcela ${parcelaDaNuvem.uuid}: $e\n$s");
+            }
+          });
+        }
     }
   }
   

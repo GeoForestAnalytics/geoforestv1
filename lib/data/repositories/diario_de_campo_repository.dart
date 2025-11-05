@@ -2,9 +2,8 @@
 
 // Adicione estes imports no início do arquivo
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-// -------------------------------------------
 
+// -------------------------------------------
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/data/datasources/local/database_constants.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
