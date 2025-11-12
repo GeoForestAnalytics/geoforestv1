@@ -1,4 +1,4 @@
-// lib/widgets/arvore_dialog.dart (VERSÃO CORRIGIDA FINAL)
+// lib/widgets/arvore_dialog.dart (VERSÃO CORRIGIDA E VALIDADA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -12,7 +12,7 @@ class DialogResult {
 
   DialogResult({
     required this.arvore,
-    this.irParaProxima = false,    
+    this.irParaProxima = false,
     this.continuarNaMesmaPosicao = false,
     this.atualizarEProximo = false,
     this.atualizarEAnterior = false,
@@ -133,7 +133,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         linha: linha,
         posicaoNaLinha: posicao,
         codigo: _codigo,
-        codigo2: _codigo2, // ✅ Garante que o código 2 é nulo se o código 1 for Normal
+        codigo2: _codigo == Codigo.Normal ? null : _codigo2, // ✅ Garante que o código 2 é nulo se o código 1 for Normal
         fimDeLinha: _fimDeLinha,
         dominante: widget.arvoreParaEditar?.dominante ?? false,
         capAuditoria: widget.arvoreParaEditar?.capAuditoria,
@@ -294,14 +294,14 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                 spacing: 8.0,
                 runSpacing: 8.0,
                 children: widget.isEditing
-                    ? [ 
+                    ? [
                         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
                         TextButton(onPressed: () => _submit(atualizarEAnterior: true), child: const Text('Anterior')),
                         ElevatedButton(onPressed: () => _submit(), child: const Text('Atualizar')),
                         TextButton(onPressed: () => _submit(atualizarEProximo: true), child: const Text('Próximo')),
                       ]
-                    : _isInMultiplaFlow 
-                      ? [ 
+                    : _isInMultiplaFlow
+                      ? [
                           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
                           ElevatedButton(onPressed: () => _submit(mesmoFuste: true), child: const Text('Adic. Fuste')),
                           ElevatedButton(
@@ -313,7 +313,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                             child: const Text('Salvar e Próximo'),
                           ),
                         ]
-                      : [ 
+                      : [
                           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
                           OutlinedButton(onPressed: () => _submit(mesmoFuste: true), child: const Text('Adic. Fuste')),
                           ElevatedButton(
