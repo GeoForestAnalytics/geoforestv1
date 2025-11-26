@@ -1,15 +1,11 @@
-// lib/controller/login_controller.dart (VERSÃO CORRIGIDA E SEGURA)
-
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geoforestv1/services/auth_service.dart';
-// ✅ 1. IMPORT NECESSÁRIO: Precisamos do DatabaseHelper para poder apagar o banco.
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <-- Adicione este import
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginController with ChangeNotifier {
   final AuthService _authService = AuthService();
-  // ✅ 2. INSTÂNCIA NECESSÁRIA: Criamos uma instância para acessar o método de apagar.
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
   // Propriedades para saber o estado do login
@@ -44,29 +40,32 @@ class LoginController with ChangeNotifier {
     });
   }
 
-  /// ✅ 3. MÉTODO signOut COMPLETAMENTE SUBSTITUÍDO
-  /// Agora ele garante que todos os dados locais sejam apagados ANTES do logout.
   Future<void> signOut() async {
-  try {
-    // ETAPA 1: Limpa o banco de dados local (SQLite)
-    await _dbHelper.deleteDatabaseFile();
-    
-    // ETAPA 2: Limpa o cache offline do Firestore
-    // Isso força o app a buscar dados frescos da nuvem no próximo login.
-    await FirebaseFirestore.instance.clearPersistence();
+    try {
+      // ETAPA 1: Limpa o banco de dados local (SQLite)
+      await _dbHelper.deleteDatabaseFile();
+      
+      // ETAPA 2: Limpa o cache offline do Firestore
+      // Isso força o app a buscar dados frescos da nuvem no próximo login.
+      await FirebaseFirestore.instance.clearPersistence();
 
-    // ETAPA 3: Desloga o usuário do Firebase Auth
-    await _authService.signOut();
+      // ETAPA 3: Desloga o usuário do Firebase Auth
+      await _authService.signOut();
 
-    // Opcional, mas recomendado:
-    // Termina a instância do Firestore para garantir que todas as conexões sejam fechadas.
-    await FirebaseFirestore.instance.terminate();
+      // NÃO USE terminate() AQUI. ISSO TRAVA O APP NO PRÓXIMO LOGIN.
+      
+      _isLoggedIn = false;
+      _user = null;
+      notifyListeners();
 
-  } catch (e) {
-    debugPrint("!!!!!! Erro durante o processo de logout e limpeza: $e !!!!!");
-    // Como medida de segurança, mesmo que a limpeza falhe,
-    // ainda tentamos deslogar o usuário.
-    await _authService.signOut();
+    } catch (e) {
+      debugPrint("!!!!!! Erro durante o processo de logout e limpeza: $e !!!!!");
+      // Como medida de segurança, mesmo que a limpeza falhe,
+      // ainda tentamos deslogar o usuário.
+      await _authService.signOut();
+      _isLoggedIn = false;
+      _user = null;
+      notifyListeners();
+    }
   }
-}
 }

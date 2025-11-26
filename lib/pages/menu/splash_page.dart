@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'login_page.dart';
+import 'package:go_router/go_router.dart'; // ✅ IMPORT NECESSÁRIO
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -22,26 +22,22 @@ class _SplashPageState extends State<SplashPage> {
   Future<void> _iniciarSistema() async {
     try {
       await _audioPlayer.setVolume(0.6);
-      // Toca o som (verifique se intro.mp3 está na pasta assets/sounds)
-      await _audioPlayer.play(AssetSource('sounds/intro.mp3'));
+      // Verifique se o arquivo existe em pubspec.yaml
+      await _audioPlayer.play(AssetSource('sounds/intro.mp3')); 
     } catch (e) {
-      print("Erro ao tocar som: $e");
+      // Apenas printa o erro de som e continua, não trava o app
+      debugPrint("Erro ao tocar som (não fatal): $e");
     }
 
     // Tempo total da animação antes de trocar de tela
     await Future.delayed(const Duration(seconds: 5));
 
     if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          transitionDuration: const Duration(seconds: 2), // Transição lenta e elegante
-          pageBuilder: (_, __, ___) => const LoginPage(),
-          transitionsBuilder: (_, animation, __, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-        ),
-      );
+      // ✅ CORREÇÃO AQUI:
+      // Usamos context.go('/login') em vez de Navigator.pushReplacement.
+      // O AppRouter (redirect) vai decidir se ele realmente vai pro login
+      // ou se já está logado e vai para a home.
+      context.go('/login');
     }
   }
 
@@ -56,10 +52,9 @@ class _SplashPageState extends State<SplashPage> {
     // Cores do seu tema
     final Color azulMarinho = const Color.fromARGB(255, 229, 222, 164);
     final Color azulPreto = const Color.fromARGB(255, 1, 33, 92);
-    final Color brilhoAzul = const Color.fromARGB(223, 247, 245, 227); // Azul Neon para o brilho
+    final Color brilhoAzul = const Color.fromARGB(223, 247, 245, 227); 
 
     return Scaffold(
-      // 1. FUNDO GRADIENTE AZUL MARINHO (Cobre tudo, sem cortes)
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -68,8 +63,8 @@ class _SplashPageState extends State<SplashPage> {
             center: Alignment.center,
             radius: 1.5,
             colors: [
-              azulMarinho, // Centro mais azul
-              azulPreto,   // Bordas pretas (dá profundidade)
+              azulMarinho, 
+              azulPreto,   
             ],
           ),
         ),
@@ -80,33 +75,31 @@ class _SplashPageState extends State<SplashPage> {
 
             // 2. O LOGO COM EFEITO DE ENERGIA/BRILHO NA BORDA
             Container(
-              width: 280, // Tamanho controlado para não ficar gigante
+              width: 280, 
               height: 280,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                // Sombras que criam o efeito de "Glow"
                 boxShadow: [
                   BoxShadow(
                     color: brilhoAzul.withOpacity(0.6),
-                    blurRadius: 40, // Borrão grande para fazer o brilho
+                    blurRadius: 40, 
                     spreadRadius: 0,
                   ),
                 ],
               ),
               child: Image.asset(
-                'assets/images/icon_azul.png', // SEU LOGO TRANSPARENTE
+                'assets/images/icon_azul.png', 
                 fit: BoxFit.contain,
               ),
             )
-            .animate(onPlay: (controller) => controller.repeat(reverse: true)) // Animação em Loop (Vai e Volta)
+            .animate(onPlay: (controller) => controller.repeat(reverse: true)) 
             .scale(
               begin: const Offset(1.0, 1.0), 
-              end: const Offset(1.05, 1.05), // Pulsa de tamanho levemente
+              end: const Offset(1.05, 1.05), 
               duration: 2.seconds,
               curve: Curves.easeInOut,
             )
             .boxShadow(
-              // Anima a intensidade do brilho (Pulsa a luz)
               begin: BoxShadow(color: brilhoAzul.withOpacity(0.5), blurRadius: 90, spreadRadius: 0),
               end: BoxShadow(color: brilhoAzul.withOpacity(0.9), blurRadius: 90, spreadRadius: 0),
               duration: 2.seconds,
@@ -120,20 +113,19 @@ class _SplashPageState extends State<SplashPage> {
                 Text(
                   "INICIANDO SISTEMA...",
                   style: TextStyle(
-                    color: brilhoAzul, // Texto cor de "Holograma"
+                    color: brilhoAzul, 
                     letterSpacing: 4,
                     fontSize: 12,
-                    fontFamily: 'Courier', // Fonte estilo computador/código
+                    fontFamily: 'Courier', 
                     fontWeight: FontWeight.bold
                   ),
                 )
                 .animate()
                 .fadeIn(delay: 500.ms)
-                .shimmer(duration: 2.seconds, color: Colors.white), // Texto brilhando
+                .shimmer(duration: 2.seconds, color: Colors.white), 
                 
                 const SizedBox(height: 20),
                 
-                // Barrinha fina e elegante
                 SizedBox(
                   width: 200,
                   child: LinearProgressIndicator(
@@ -145,7 +137,7 @@ class _SplashPageState extends State<SplashPage> {
               ],
             ),
             
-            const SizedBox(height: 50), // Espaço final
+            const SizedBox(height: 50), 
           ],
         ),
       ),

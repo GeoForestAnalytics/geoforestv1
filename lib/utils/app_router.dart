@@ -1,5 +1,3 @@
-// lib/utils/app_router.dart (VERSÃO FINAL COM HIERARQUIA COMPLETA E CORRETA)
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -22,27 +20,27 @@ import 'package:geoforestv1/pages/atividades/detalhes_atividade_page.dart';
 import 'package:geoforestv1/pages/fazenda/detalhes_fazenda_page.dart';
 import 'package:geoforestv1/pages/talhoes/detalhes_talhao_page.dart';
 import 'package:geoforestv1/providers/team_provider.dart';
-import 'package:geoforestv1/pages/menu/visualizador_relatorio_page.dart'; // ✅ IMPORT ADICIONADO
+import 'package:geoforestv1/pages/menu/visualizador_relatorio_page.dart';
 
 // Imports dos Modelos
-import 'package:geoforestv1/models/diario_de_campo_model.dart'; // ✅ IMPORT ADICIONADO
-import 'package:geoforestv1/models/parcela_model.dart';         // ✅ IMPORT ADICIONADO
+import 'package:geoforestv1/models/diario_de_campo_model.dart';
+import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 
 
 class AppRouter {
   final LoginController loginController;
   final LicenseProvider licenseProvider;
-  final TeamProvider teamProvider; // ✅ 2. ADICIONE A PROPRIEDADE
+  final TeamProvider teamProvider;
 
   AppRouter({
     required this.loginController,
     required this.licenseProvider,
-    required this.teamProvider, // ✅ 3. ADICIONE AO CONSTRUTOR
+    required this.teamProvider,
   });
 
   late final GoRouter router = GoRouter(
-    refreshListenable: Listenable.merge([loginController, licenseProvider, teamProvider]), // ✅ 4. ADICIONE AO REFRESH
+    refreshListenable: Listenable.merge([loginController, licenseProvider, teamProvider]),
     initialLocation: '/splash',
     
     routes: [
@@ -78,12 +76,7 @@ class AppRouter {
       GoRoute(
       path: '/visualizar-relatorio',
       builder: (context, state) {
-        // Recebe os dados passados pelo parâmetro 'extra'
         final data = state.extra as Map<String, dynamic>;
-        // É necessário importar os modelos nesta página para que o Dart entenda os tipos
-        // import 'package:geoforestv1/models/diario_de_campo_model.dart';
-        // import 'package:geoforestv1/models/parcela_model.dart';
-        // import 'package:geoforestv1/models/cubagem_arvore_model.dart';
         return VisualizadorRelatorioPage(
           diario: data['diario'] as DiarioDeCampo,
           parcelas: data['parcelas'] as List<Parcela>,
@@ -98,37 +91,36 @@ class AppRouter {
         builder: (context, state) => const ListaProjetosPage(title: 'Meus Projetos'),
         routes: [
           GoRoute(
-            path: ':projetoId', // Ex: /projetos/123
+            path: ':projetoId',
             builder: (context, state) {
               final projetoId = int.tryParse(state.pathParameters['projetoId'] ?? '') ?? 0;
               return DetalhesProjetoPage(projetoId: projetoId);
             },
             routes: [
               GoRoute(
-                path: 'atividades', // Ex: /projetos/123/atividades  <- ROTA CORRIGIDA (LISTA)
+                path: 'atividades',
                 builder: (context, state) {
                    final projetoId = int.tryParse(state.pathParameters['projetoId'] ?? '') ?? 0;
                    return AtividadesPage(projetoId: projetoId);
                 },
                 routes: [
                   GoRoute(
-                    path: ':atividadeId', // Ex: /projetos/123/atividades/456 <- ROTA DE DETALHES
+                    path: ':atividadeId',
                     builder: (context, state) {
                       final atividadeId = int.tryParse(state.pathParameters['atividadeId'] ?? '') ?? 0;
                       return DetalhesAtividadePage(atividadeId: atividadeId);
                     },
                     routes: [
                         GoRoute(
-                            path: 'fazendas/:fazendaId', // Ex: /projetos/123/atividades/456/fazendas/FAZ01
+                            path: 'fazendas/:fazendaId',
                             builder: (context, state) {
-                                // GoRouter passa todos os parâmetros do path, então não precisamos do projetoId aqui.
                                 final atividadeId = int.tryParse(state.pathParameters['atividadeId'] ?? '') ?? 0;
                                 final fazendaId = state.pathParameters['fazendaId'] ?? '';
                                 return DetalhesFazendaPage(atividadeId: atividadeId, fazendaId: fazendaId);
                             },
                             routes: [
                                 GoRoute(
-                                    path: 'talhoes/:talhaoId', // Ex: /projetos/123/atividades/456/fazendas/FAZ01/talhoes/789
+                                    path: 'talhoes/:talhaoId',
                                     builder: (context, state) {
                                         final atividadeId = int.tryParse(state.pathParameters['atividadeId'] ?? '') ?? 0;
                                         final talhaoId = int.tryParse(state.pathParameters['talhaoId'] ?? '') ?? 0;
@@ -148,52 +140,61 @@ class AppRouter {
     ],
 
     redirect: (BuildContext context, GoRouterState state) {
+      final String currentRoute = state.matchedLocation;
+
+      // 1. Aguarda inicialização do LoginController
       if (!loginController.isInitialized) {
         return '/splash';
       }
       
       final bool isLoggedIn = loginController.isLoggedIn;
-      final String currentRoute = state.matchedLocation;
 
+      // 2. Se NÃO está logado
       if (!isLoggedIn) {
-        return currentRoute == '/login' ? null : '/login';
+        // Se já está no login ou splash, deixa ficar
+        if (currentRoute == '/login' || currentRoute == '/splash') {
+          return null;
+        }
+        // Senão, manda pro login
+        return '/login';
       }
 
+      // 3. Se ESTÁ logado, mas a licença ainda está carregando
       if (licenseProvider.isLoading) {
+        // Manda pro Splash para não ficar travado na tela de Login com spinner infinito
         return '/splash';
       }
       
       final license = licenseProvider.licenseData;
+      
+      // 4. Se carregou mas não achou licença (erro ou usuário sem cadastro)
       if (license == null) {
+        // Manda pro login para tentar outra conta (ou mostrar erro lá)
         return '/login';
       }
       
+      // 5. Verifica status da assinatura
       final bool isLicenseOk = (license.status == 'ativa' || license.status == 'trial');
-
       if (!isLicenseOk) {
         return currentRoute == '/paywall' ? null : '/paywall';
       }
       
-      // ✅ 6. NOVA LÓGICA COMPLETA DE REDIRECIONAMENTO
+      // 6. Lógica de Gerente vs Equipe
       final bool isGerente = license.cargo == 'gerente';
       final bool precisaIdentificarEquipe = !isGerente && (teamProvider.lider == null || teamProvider.lider!.isEmpty);
       
-      // Se precisa ir para a tela de equipe, mas já está lá, não faz nada.
-      if (precisaIdentificarEquipe && currentRoute == '/equipe') {
-        return null;
-      }
-      // Se precisa ir para a tela de equipe, força o redirecionamento.
+      // Se precisa identificar a equipe e ainda não está na tela correta
       if (precisaIdentificarEquipe) {
-        return '/equipe';
+        return currentRoute == '/equipe' ? null : '/equipe';
       }
 
-      // Se o usuário está logado e já passou das telas iniciais, mas tenta voltar para elas...
-      if (currentRoute == '/login' || currentRoute == '/splash' || currentRoute == '/equipe') {
-        // ...manda ele para a home correta.
+      // 7. Redirecionamento final para a Home
+      // Se o usuário está tentando acessar telas de "entrada" (login, splash, equipe) mas já está pronto:
+      if (currentRoute == '/login' || currentRoute == '/splash' || (currentRoute == '/equipe' && !precisaIdentificarEquipe)) {
         return isGerente ? '/gerente_home' : '/home';
       }
       
-      // Se nenhuma das condições acima for atendida, permite a navegação.
+      // Permite a navegação normal para qualquer outra rota
       return null;
     },
     
