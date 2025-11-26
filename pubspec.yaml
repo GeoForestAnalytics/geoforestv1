@@ -57,9 +57,12 @@ dependencies:
   connectivity_plus: ^6.1.4 # Verificar conexão de rede
   flutter_map_line_editor: ^8.0.0 # Edição de linhas no mapa
   flutter_map_dragmarker: ^8.0.3 # Marcadores móveis em mapas 
+  google_fonts: ^6.1.0
+  flutter_animate: ^4.5.0
+  audioplayers: ^6.0.0
   # Pacote para o cálculo matemático do cluster
   
-  fl_chart: ^1.0.0 # Gráficos interativos
+  fl_chart: ^0.69.0 # Gráficos interativos
   flutter_archive: ^6.0.3 # Compactar/descompactar arquivos ZIP
   uuid: ^4.3.3 # Gerar identificadores únicos
   pie_chart: ^5.4.0
@@ -70,8 +73,7 @@ dependencies:
   image: ^4.5.4 # Manipulação de imagens em Dart puro
   cloud_functions: ^6.0.0
   supercluster: ^3.1.0
-  flutter_animate: ^4.5.2
-  audioplayers: ^6.5.1
+  
 
   # Vitrines (comentados)
   # flutter_stripe: ^10.1.1 # Pagamentos com Stripe

@@ -1,4 +1,4 @@
-// Arquivo: lib\pages\dashboard\talhao_dashboard_page.dart (VERSÃO CORRIGIDA)
+// Arquivo: lib/pages/dashboard/talhao_dashboard_page.dart (VERSÃO COMPLETA E CORRIGIDA)
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -16,6 +16,7 @@ import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
 import 'package:geoforestv1/widgets/grafico_dispersao_cap_altura.dart';
 import 'package:pdf/widgets.dart' as pw;
+
 
 class TalhaoDashboardPage extends StatelessWidget {
   final Talhao talhao;
@@ -148,7 +149,6 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
       context,
       MaterialPageRoute(
         builder: (context) => SimulacaoDesbastePage(
-          // <<< CORREÇÃO AQUI >>>
           talhao: widget.talhao,
           parcelas: _parcelasDoTalhao,
           arvores: _arvoresDoTalhao,
@@ -222,14 +222,28 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
                 style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
               ),
               const SizedBox(height: 8),
-              ],
+            ],
           ),
         );
       },
     );
   }
 
+  // ✅ 1. CORREÇÃO DAS CORES DA TABELA (Texto visível no tema escuro)
   Widget _buildCodeAnalysisCard(CodeAnalysisResult codeAnalysis) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Se for Dark, fundo transparente e letra Dourada
+    // Se for Light, fundo cinza claro e letra Azul Marinho
+    final headerBgColor = isDark ? Colors.black26 : Colors.grey.shade200;
+    final headerTextColor = isDark ? const Color(0xFFEBE4AB) : const Color(0xFF023853);
+    
+    final headerTextStyle = TextStyle(
+      color: headerTextColor,
+      fontWeight: FontWeight.bold,
+      fontSize: 13,
+    );
+
     return Card(
       elevation: 2,
       child: Padding(
@@ -253,18 +267,18 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 columnSpacing: 18.0,
-                headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
-                columns: const [
-                  DataColumn(label: Text('Código')),
-                  DataColumn(label: Text('Qtd.'), numeric: true),
-                  DataColumn(label: Text('Média\nCAP'), numeric: true),
-                  DataColumn(label: Text('Mediana\nCAP'), numeric: true),
-                  DataColumn(label: Text('Moda\nCAP'), numeric: true),
-                  DataColumn(label: Text('DP\nCAP'), numeric: true),
-                  DataColumn(label: Text('Média\nAltura'), numeric: true),
-                  DataColumn(label: Text('Mediana\nAltura'), numeric: true),
-                  DataColumn(label: Text('Moda\nAltura'), numeric: true),
-                  DataColumn(label: Text('DP\nAltura'), numeric: true),
+                headingRowColor: MaterialStateProperty.all(headerBgColor), 
+                columns: [
+                  DataColumn(label: Text('Código', style: headerTextStyle)),
+                  DataColumn(label: Text('Qtd.', style: headerTextStyle), numeric: true),
+                  DataColumn(label: Text('Média\nCAP', style: headerTextStyle, textAlign: TextAlign.center), numeric: true),
+                  DataColumn(label: Text('Mediana\nCAP', style: headerTextStyle, textAlign: TextAlign.center), numeric: true),
+                  DataColumn(label: Text('Moda\nCAP', style: headerTextStyle, textAlign: TextAlign.center), numeric: true),
+                  DataColumn(label: Text('DP\nCAP', style: headerTextStyle, textAlign: TextAlign.center), numeric: true),
+                  DataColumn(label: Text('Média\nAltura', style: headerTextStyle, textAlign: TextAlign.center), numeric: true),
+                  DataColumn(label: Text('Mediana\nAltura', style: headerTextStyle, textAlign: TextAlign.center), numeric: true),
+                  DataColumn(label: Text('Moda\nAltura', style: headerTextStyle, textAlign: TextAlign.center), numeric: true),
+                  DataColumn(label: Text('DP\nAltura', style: headerTextStyle, textAlign: TextAlign.center), numeric: true),
                 ],
                 rows: codeAnalysis.estatisticasPorCodigo.entries.map((entry) {
                   final stats = entry.value;
@@ -319,33 +333,74 @@ class _TalhaoDashboardContentState extends State<TalhaoDashboardContent> {
     );
   }
 
+  // ✅ 2. CORREÇÃO DOS CARDS DE INSIGHTS (Contraste no modo escuro)
   Widget _buildInsightsCard(String title, List<String> items, Color color) {
     if (items.isEmpty) return const SizedBox.shrink();
+    
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Ajusta o fundo para não ficar "pastel" demais no modo escuro
+    final backgroundColor = isDark ? color.withOpacity(0.15) : color;
+    // Título colorido no modo escuro para destaque, preto no claro
+    final titleColor = isDark ? color.withOpacity(1.0) : Colors.black87;
+    // Texto branco/cinza no escuro, preto no claro
+    final textColor = isDark ? Colors.white70 : Colors.black87;
+
     return Card(
-      color: color,
+      color: backgroundColor,
       elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isDark ? BorderSide(color: color.withOpacity(0.3)) : BorderSide.none,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(
+              title, 
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: titleColor)
+            ),
             const SizedBox(height: 8),
-            ...items.map((item) => Padding(padding: const EdgeInsets.only(bottom: 4.0), child: Text('- $item'))),
+            ...items.map((item) => Padding(
+              padding: const EdgeInsets.only(bottom: 4.0), 
+              child: Text('- $item', style: TextStyle(color: textColor))
+            )),
           ],
         ),
       ),
     );
   }
 
+  // ✅ 3. CORREÇÃO DO OVERFLOW NO TEXTO (Usa Expanded)
   Widget _buildStatRow(String label, String value) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    final colorLabel = isDark ? Colors.white70 : Colors.grey[700];
+    final colorValue = isDark ? theme.colorScheme.secondary : Colors.black87;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start, // Alinha ao topo se quebrar linha
         children: [
-          Text(label, style: TextStyle(color: Colors.grey[700])),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          // Expanded permite que o texto quebre linha se for longo
+          Expanded(
+            child: Text(label, style: TextStyle(color: colorLabel)),
+          ),
+          const SizedBox(width: 12), // Espaço entre label e valor
+          Text(
+            value, 
+            style: TextStyle(
+              fontWeight: FontWeight.bold, 
+              fontSize: 16,
+              color: colorValue
+            ),
+            textAlign: TextAlign.right,
+          ),
         ],
       ),
     );

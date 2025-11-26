@@ -183,11 +183,13 @@ class _HomePageState extends State<HomePage> {
           childAspectRatio: 1.0,
           children: [
             MenuCard(
+              index: 0, // Adicione o índice
               icon: Icons.folder_copy_outlined,
               label: 'Projetos e Coletas',
-              onTap: () => context.push('/projetos'), // ✅ USANDO O GO_ROUTER
+              onTap: () => context.push('/projetos'),
             ),
             MenuCard(
+              index: 1,
               icon: Icons.map_outlined,
               label: 'Planejamento de Campo',
               onTap: () {

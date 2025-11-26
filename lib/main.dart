@@ -1,5 +1,3 @@
-// lib/main.dart (VERSÃO FINAL COM GO_ROUTER)
-
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +7,7 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
+import 'package:google_fonts/google_fonts.dart'; // Fonte Importada
 
 // Imports do projeto
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -24,8 +23,7 @@ import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
 import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 import 'package:geoforestv1/providers/operacoes_provider.dart';
 import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
-import 'package:geoforestv1/utils/app_router.dart'; // ✅ 1. IMPORTAR O NOVO ROTEADOR
-
+import 'package:geoforestv1/utils/app_router.dart';
 
 void initializeProj4Definitions() {
   void addProjectionIfNotExists(String name, String definition) {
@@ -35,6 +33,7 @@ void initializeProj4Definitions() {
       proj4.Projection.add(name, definition);
     }
   }
+
   addProjectionIfNotExists('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
   proj4Definitions.forEach((epsg, def) {
     addProjectionIfNotExists('EPSG:$epsg', def);
@@ -174,33 +173,21 @@ class MyApp extends StatelessWidget {
           },
         ),
       ],
-      // ✅ 2. O `Consumer` agora envolve a criação do MaterialApp.router
-      // Isso garante que o AppRouter tenha acesso aos providers que ele precisa para o redirecionamento.
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
-          // ✅ A instância do roteador agora lê os providers diretamente do context.
           final appRouter = AppRouter(
             loginController: context.read<LoginController>(),
             licenseProvider: context.read<LicenseProvider>(),
-            teamProvider: context.read<TeamProvider>(), // ✅ 2. ADICIONE ESTA LINHA
+            teamProvider: context.read<TeamProvider>(),
           ).router;
 
-          // ✅ 3. MUDANÇA PARA `MaterialApp.router`
-          // Trocamos o `MaterialApp` padrão pela sua versão que usa um roteador.
           return MaterialApp.router(
-            routerConfig: appRouter, // Passa a configuração do go_router
-            
+            routerConfig: appRouter,
             title: 'Geo Forest Analytics',
             debugShowCheckedModeBanner: false,
             theme: _buildThemeData(Brightness.light),
             darkTheme: _buildThemeData(Brightness.dark),
             themeMode: themeProvider.themeMode,
-
-            // As propriedades `initialRoute` e `routes` são removidas,
-            // pois o go_router agora controla isso.
-            
-            // `navigatorObservers` e `builder` continuam funcionando normalmente.
-            // O go_router internamente usa o Navigator 2.0, então isso é compatível.
             builder: (context, child) {
               ErrorWidget.builder = (FlutterErrorDetails details) {
                 debugPrint('Caught a Flutter error: ${details.exception}');
@@ -221,62 +208,93 @@ class MyApp extends StatelessWidget {
   }
 
   ThemeData _buildThemeData(Brightness brightness) {
-    final baseColor = const Color.fromARGB(255, 13, 58, 89);
+    // PALETA PREMIUM
+    const primaryNavy = Color(0xFF023853);
+    const accentGold = Color(0xFFEBE4AB);
+    
     final isLight = brightness == Brightness.light;
+
+    // Cores de fundo e superfície
+    final bgColor = isLight ? const Color(0xFFF5F7FA) : const Color(0xFF023853);
+    final surfaceColor = isLight ? Colors.white : const Color(0xFF011D2E);
+    final textColor = isLight ? primaryNavy : Colors.white;
 
     return ThemeData(
       useMaterial3: true,
+      brightness: brightness, // Importante para o Flutter calcular contrastes automáticos
+      textTheme: GoogleFonts.montserratTextTheme(
+        isLight ? ThemeData.light().textTheme : ThemeData.dark().textTheme,
+      ).apply(
+        bodyColor: textColor,
+        displayColor: textColor,
+      ),
       colorScheme: ColorScheme.fromSeed(
-        seedColor: baseColor,
+        seedColor: primaryNavy,
         brightness: brightness,
-        surface: isLight ? const Color.fromARGB(255, 255, 255, 255) : Colors.grey[900],
-        background: isLight ? const Color.fromARGB(255, 255, 255, 255) : Colors.black,
+        primary: primaryNavy,
+        onPrimary: accentGold,
+        secondary: accentGold,
+        onSecondary: primaryNavy,
+        surface: surfaceColor,
+        background: bgColor,
+        error: Colors.redAccent,
       ),
+      scaffoldBackgroundColor: bgColor,
       appBarTheme: AppBarTheme(
-        backgroundColor: isLight ? baseColor : Colors.grey[850],
-        foregroundColor: const Color.fromARGB(255, 255, 255, 255),
-        elevation: 0,
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: baseColor,
-          foregroundColor: const Color.fromARGB(255, 255, 255, 255),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
+        backgroundColor: primaryNavy,
+        foregroundColor: accentGold,
+        centerTitle: true,
+        elevation: 4,
+        titleTextStyle: GoogleFonts.montserrat(
+            fontSize: 20, fontWeight: FontWeight.bold, color: accentGold, letterSpacing: 1.2),
       ),
       cardTheme: CardThemeData(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        color: isLight ? const Color.fromARGB(255, 255, 255, 255) : Colors.grey.shade800,
+        elevation: 4,
+        color: surfaceColor, // Card escuro no modo dark
+        shadowColor: Colors.black45,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: isLight ? Colors.transparent : accentGold.withOpacity(0.3), width: 1),
+        ),
       ),
-      textTheme: TextTheme(
-        headlineMedium: TextStyle(color: isLight ? const Color.fromARGB(255, 13, 58, 89) : Colors.white, fontWeight: FontWeight.bold),
-        bodyLarge: TextStyle(color: isLight ? const Color.fromARGB(255, 13, 58, 89) : Colors.grey.shade300),
-        bodyMedium: TextStyle(color: isLight ? const Color.fromARGB(255, 13, 58, 89) : Colors.grey.shade300),
-        titleLarge: TextStyle(color: isLight ? const Color.fromARGB(255, 13, 58, 89) : Colors.white, fontWeight: FontWeight.bold),
+      dataTableTheme: DataTableThemeData(
+        headingRowColor: MaterialStateProperty.all(primaryNavy.withOpacity(0.8)),
+        headingTextStyle: GoogleFonts.montserrat(color: accentGold, fontWeight: FontWeight.bold),
+        dataTextStyle: GoogleFonts.montserrat(color: textColor),
+      ),
+      // ... (Mantenha elevatedButtonTheme e inputDecorationTheme como estavam)
+       elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryNavy,
+          foregroundColor: accentGold,
+          elevation: 5,
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          textStyle: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
       ),
       inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: isLight ? Colors.white : Colors.white.withOpacity(0.05),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: primaryNavy),
         ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: isLight ? primaryNavy.withOpacity(0.3) : accentGold.withOpacity(0.3)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: primaryNavy, width: 2),
+        ),
+        labelStyle: TextStyle(color: isLight ? primaryNavy : accentGold),
+        prefixIconColor: isLight ? primaryNavy : accentGold,
+        hintStyle: TextStyle(color: isLight ? Colors.grey : Colors.grey.shade400),
       ),
     );
   }
 }
-
-// ✅ 4. O WIDGET `AuthCheck` NÃO É MAIS NECESSÁRIO!
-// Toda a sua lógica foi movida para a função `redirect` do AppRouter.
-// Você pode apagar esta classe inteira.
-/*
-class AuthCheck extends StatelessWidget {
-  const AuthCheck({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    // ... toda a lógica antiga ...
-  }
-}
-*/
 
 class ErrorScreen extends StatelessWidget {
   final String message;
@@ -294,15 +312,24 @@ class ErrorScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 60),
+              Icon(Icons.error_outline,
+                  color: Theme.of(context).colorScheme.error, size: 60),
               const SizedBox(height: 20),
-              Text('Erro na Aplicação', style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 24, fontWeight: FontWeight.bold)),
+              Text('Erro na Aplicação',
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold)),
               const SizedBox(height: 15),
-              Text(message, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
+              Text(message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16)),
               const SizedBox(height: 30),
               if (onRetry != null)
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 9, 12, 65), foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color.fromARGB(255, 9, 12, 65),
+                      foregroundColor: Colors.white),
                   onPressed: onRetry,
                   child: const Text('Tentar Novamente'),
                 ),

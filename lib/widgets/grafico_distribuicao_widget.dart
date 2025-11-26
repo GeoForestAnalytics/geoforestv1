@@ -1,25 +1,27 @@
-// lib/widgets/grafico_distribuicao_widget.dart (VERSÃO DEFINITIVA CORRIGIDA)
-
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 class GraficoDistribuicaoWidget extends StatelessWidget {
-  /// O mapa de dados: { Ponto médio da classe (eixo X) : Contagem (eixo Y) }
   final Map<double, int> dadosDistribuicao;
   final Color corDaBarra;
 
   const GraficoDistribuicaoWidget({
     super.key,
     required this.dadosDistribuicao,
-    this.corDaBarra = Colors.green,
+    this.corDaBarra = Colors.green, // Será substituído pela cor do tema
   });
 
   @override
   Widget build(BuildContext context) {
     if (dadosDistribuicao.isEmpty) {
-      return const SizedBox(height: 200, child: Center(child: Text("Dados insuficientes para o gráfico.")));
+      return const SizedBox(height: 200, child: Center(child: Text("Dados insuficientes.")));
     }
 
+    // --- DETECTA O TEMA PARA AJUSTAR CORES ---
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color corTexto = isDark ? Colors.white70 : Colors.black87;
+    final Color corBarraFinal = isDark ? const Color(0xFFEBE4AB) : const Color(0xFF023853); // Dourado no Dark, Azul no Light
+    
     final maxY = dadosDistribuicao.values.reduce((a, b) => a > b ? a : b).toDouble();
 
     final barGroups = List.generate(dadosDistribuicao.length, (index) {
@@ -29,7 +31,7 @@ class GraficoDistribuicaoWidget extends StatelessWidget {
         barRods: [
           BarChartRodData(
             toY: contagem.toDouble(),
-            color: corDaBarra,
+            color: corBarraFinal,
             width: 16,
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(4),
@@ -48,7 +50,7 @@ class GraficoDistribuicaoWidget extends StatelessWidget {
           maxY: maxY * 1.2,
           barTouchData: BarTouchData(
             touchTooltipData: BarTouchTooltipData(
-              getTooltipColor: (_) => Colors.blueGrey,
+              getTooltipColor: (_) => Colors.blueGrey.shade900,
               tooltipMargin: 8,
               getTooltipItem: (group, groupIndex, rod, rodIndex) {
                 final pontoMedio = dadosDistribuicao.keys.elementAt(groupIndex);
@@ -56,10 +58,9 @@ class GraficoDistribuicaoWidget extends StatelessWidget {
                 final inicioClasse = pontoMedio - (larguraClasse / 2);
                 final fimClasse = pontoMedio + (larguraClasse / 2) - 0.1;
                 
-                String label = "Classe: ${inicioClasse.toStringAsFixed(1)}-${fimClasse.toStringAsFixed(1)} cm\n";
-                label += "Contagem: ${rod.toY.round()} árvores";
                 return BarTooltipItem(
-                  label, 
+                  "Classe: ${inicioClasse.toStringAsFixed(1)}-${fimClasse.toStringAsFixed(1)} cm\n"
+                  "Contagem: ${rod.toY.round()}", 
                   const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 );
               },
@@ -80,7 +81,11 @@ class GraficoDistribuicaoWidget extends StatelessWidget {
                     final pontoMedio = dadosDistribuicao.keys.elementAt(index);
                     return Padding(
                       padding: const EdgeInsets.only(top: 4.0),
-                      child: Text(pontoMedio.toStringAsFixed(0), style: const TextStyle(fontSize: 10)),
+                      // AQUI ESTAVA O ERRO: COR DO TEXTO
+                      child: Text(
+                        pontoMedio.toStringAsFixed(0), 
+                        style: TextStyle(fontSize: 10, color: corTexto, fontWeight: FontWeight.bold)
+                      ),
                     );
                   }
                   return const Text('');
@@ -94,7 +99,12 @@ class GraficoDistribuicaoWidget extends StatelessWidget {
                 getTitlesWidget: (value, meta) {
                   if (value == 0) return const Text('');
                   if (value % meta.appliedInterval == 0) {
-                     return Text(value.toInt().toString(), style: const TextStyle(fontSize: 10), textAlign: TextAlign.left);
+                     // AQUI ESTAVA O ERRO: COR DO TEXTO
+                     return Text(
+                       value.toInt().toString(), 
+                       style: TextStyle(fontSize: 10, color: corTexto), 
+                       textAlign: TextAlign.left
+                     );
                   }
                   return const Text('');
                 },
@@ -105,7 +115,7 @@ class GraficoDistribuicaoWidget extends StatelessWidget {
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
-            getDrawingHorizontalLine: (value) => const FlLine(color: Colors.grey, strokeWidth: 0.5),
+            getDrawingHorizontalLine: (value) => FlLine(color: corTexto.withOpacity(0.1), strokeWidth: 0.5),
           ),
           barGroups: barGroups,
         ),

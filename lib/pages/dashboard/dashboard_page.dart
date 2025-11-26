@@ -1,4 +1,4 @@
-// lib/pages/dashboard/dashboard_page.dart (VERSÃO COMPLETA E REFATORADA)
+// lib/pages/dashboard/dashboard_page.dart (VERSÃO COMPLETA E REFATORADA)Text
 
 import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';

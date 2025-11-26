@@ -116,7 +116,7 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
               ElevatedButton.icon(
                 onPressed: () {
                   context.read<DashboardFilterProvider>().clearAllFilters();
-                  context.push('/gerente_map'); // <<-- COMANDO CORRETO PARA GO_ROUTER
+                  context.push('/gerente_map'); 
                 },
                 icon: const Icon(Icons.map_outlined),
                 label: const Text('Mapa Geral'),
@@ -147,8 +147,8 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
             _buildMultiSelectFazendaFilter(context, filterProvider),
             const SizedBox(height: 16),
             Wrap(
-              spacing: 16.0, // Espaçamento horizontal entre os itens
-              runSpacing: 12.0, // Espaçamento vertical quando quebrar a linha
+              spacing: 16.0, 
+              runSpacing: 12.0, 
               children: [
                 _buildPeriodoDropdown(context),
                 _buildLiderDropdown(context),
@@ -612,6 +612,9 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
   Widget _buildColetasPorAtividadeChartCard(
       BuildContext context, Map<String, int> data) {
     final entries = data.entries.toList();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final corTexto = isDark ? Colors.white : Colors.black;
+
     final barGroups = entries.asMap().entries.map((entry) {
       return BarChartGroupData(
         x: entry.key,
@@ -655,21 +658,33 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                             padding: const EdgeInsets.only(top: 4.0),
                             child: Text(
                               entries[value.toInt()].key,
-                              style: const TextStyle(fontSize: 10),
+                              style: TextStyle(fontSize: 10, color: corTexto),
                             ),
                           );
                         },
                       ),
                     ),
-                    leftTitles: const AxisTitles(
+                    leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 28,
+                        getTitlesWidget: (value, meta) {
+                           if (value == 0) return const Text('');
+                           return Text(value.toInt().toString(), style: TextStyle(fontSize: 10, color: corTexto));
+                        }
                       ),
+                    ),
+                  ),
+                  gridData: FlGridData(
+                    show: true,
+                    getDrawingHorizontalLine: (value) => FlLine(
+                      color: isDark ? Colors.white10 : Colors.black12,
+                      strokeWidth: 1,
                     ),
                   ),
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
+                      getTooltipColor: (_) => Colors.blueGrey.shade900,
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final atividade = entries[groupIndex].key;
                         final total = entries[groupIndex].value;
@@ -702,6 +717,10 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
 
   Widget _buildFazendaDataTableCard(BuildContext context,
       List<DesempenhoFazenda> data, DesempenhoFazendaTotais totais) {
+    
+    final headerColor = Theme.of(context).colorScheme.primary.withOpacity(0.8);
+    final rowColorTotal = Theme.of(context).colorScheme.secondary.withOpacity(0.2);
+    
     return Card(
       elevation: 2,
       child: Column(
@@ -716,15 +735,15 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
             scrollDirection: Axis.horizontal,
             child: DataTable(
               columnSpacing: 18.0,
-              headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+              headingRowColor: MaterialStateProperty.all(headerColor),
               columns: const [
-                DataColumn(label: Text('Atividade', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Fazenda', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Atividade')),
+                DataColumn(label: Text('Fazenda')),
                 DataColumn(label: Text('Pendentes'), numeric: true),
                 DataColumn(label: Text('Iniciadas'), numeric: true),
                 DataColumn(label: Text('Concluídas'), numeric: true),
                 DataColumn(label: Text('Exportadas'), numeric: true),
-                DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                DataColumn(label: Text('Total'), numeric: true),
               ],
               rows: [
                 ...data.map((d) => DataRow(cells: [
@@ -739,10 +758,7 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                           style: const TextStyle(fontWeight: FontWeight.w500))),
                     ])),
                 DataRow(
-                    color: MaterialStateProperty.all(Theme.of(context)
-                        .colorScheme
-                        .primaryContainer
-                        .withOpacity(0.3)),
+                    color: MaterialStateProperty.all(rowColorTotal),
                     cells: [
                       const DataCell(Text('TOTAL',
                           style: TextStyle(fontWeight: FontWeight.bold))),
@@ -768,6 +784,10 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
 
   Widget _buildCubagemDataTableCard(BuildContext context,
       List<DesempenhoFazenda> data, DesempenhoFazendaTotais totais) {
+        
+    final headerColor = Theme.of(context).colorScheme.primary.withOpacity(0.8);
+    final rowColorTotal = Theme.of(context).colorScheme.secondary.withOpacity(0.2);
+
     return Card(
       elevation: 2,
       child: Column(
@@ -782,15 +802,15 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
             scrollDirection: Axis.horizontal,
             child: DataTable(
               columnSpacing: 18.0,
-              headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+              headingRowColor: MaterialStateProperty.all(headerColor),
               columns: const [
-                DataColumn(label: Text('Atividade', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Fazenda', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Atividade')),
+                DataColumn(label: Text('Fazenda')),
                 DataColumn(label: Text('Pendentes'), numeric: true),
                 DataColumn(label: Text('Iniciadas'), numeric: true),
                 DataColumn(label: Text('Concluídas'), numeric: true),
                 DataColumn(label: Text('Exportadas'), numeric: true),
-                DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                DataColumn(label: Text('Total'), numeric: true),
               ],
               rows: [
                 ...data.map((d) => DataRow(cells: [
@@ -805,10 +825,7 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                           style: const TextStyle(fontWeight: FontWeight.w500))),
                     ])),
                 DataRow(
-                    color: MaterialStateProperty.all(Theme.of(context)
-                        .colorScheme
-                        .primaryContainer
-                        .withOpacity(0.3)),
+                    color: MaterialStateProperty.all(rowColorTotal),
                     cells: [
                       const DataCell(Text('TOTAL',
                           style: TextStyle(fontWeight: FontWeight.bold))),

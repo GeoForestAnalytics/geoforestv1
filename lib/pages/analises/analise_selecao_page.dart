@@ -235,7 +235,9 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
             heroTag: 'analiseVolumetricaFab',
             label: const Text('Equação de Volume'),
             icon: const Icon(Icons.calculate_outlined),
-            backgroundColor: Theme.of(context).colorScheme.secondary,
+            // Cor Dourada no Fundo, Azul no Texto
+            backgroundColor: const Color(0xFFEBE4AB), 
+            foregroundColor: const Color(0xFF023853),
           ),
           const SizedBox(height: 16),
           FloatingActionButton.extended(
@@ -243,6 +245,9 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
             heroTag: 'analiseComparativaFab',
             label: const Text('Análise Comparativa'),
             icon: const Icon(Icons.analytics_outlined),
+            // Cor Azul no Fundo, Dourada no Texto
+            backgroundColor: const Color(0xFF023853),
+            foregroundColor: const Color(0xFFEBE4AB),
           ),
         ],
       ),
