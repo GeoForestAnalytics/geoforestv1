@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'package:google_fonts/google_fonts.dart'; // Fonte Importada
 
+
 // Imports do projeto
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
@@ -45,9 +46,17 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   initializeProj4Definitions();
 
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
+  // 1. Configuração do Banco de Dados (Protegido para não quebrar na Web)
+  if (!kIsWeb) {
+    // Código que só roda no Celular/Desktop
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
+  } else {
+    // Web não suporta sqflite_ffi direto.
+    // Se for usar banco local na web, precisaria de configuração extra (sqflite_common_ffi_web).
+    // Por enquanto, deixamos vazio para não travar o app.
   }
 
   if (Firebase.apps.isEmpty) {
@@ -56,9 +65,19 @@ Future<void> main() async {
     );
   }
 
-  const androidProvider = kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity;
-  await FirebaseAppCheck.instance.activate(androidProvider: androidProvider);
-  print("Firebase App Check ativado com sucesso no main().");
+  // 2. Configuração do App Check com a sua chave
+  await FirebaseAppCheck.instance.activate(
+    // Android
+    androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+    
+    // iOS
+    appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
+    
+    // WEB: Colei a sua "CHAVE DE SITE" aqui abaixo 👇
+    webProvider: ReCaptchaV3Provider('6LdafxgsAAAAAInBOeFOrNJR3l-4gUCzdry_XELi'), 
+  );
+
+  print("Firebase App Check ativado com sucesso.");
 
   runApp(const AppServicesLoader());
 }
@@ -105,7 +124,8 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             home: ErrorScreen(
-              message: "Falha ao inicializar os serviços do aplicativo:\n${snapshot.error.toString()}",
+              message:
+                  "Falha ao inicializar os serviços do aplicativo:\n${snapshot.error.toString()}",
               onRetry: _retryInitialization,
             ),
           );
@@ -156,7 +176,8 @@ class MyApp extends StatelessWidget {
             return filter;
           },
         ),
-        ChangeNotifierProxyProvider2<GerenteProvider, DashboardFilterProvider, DashboardMetricsProvider>(
+        ChangeNotifierProxyProvider2<GerenteProvider, DashboardFilterProvider,
+            DashboardMetricsProvider>(
           create: (_) => DashboardMetricsProvider(),
           update: (_, gerenteProvider, filterProvider, previousMetrics) {
             final metrics = previousMetrics ?? DashboardMetricsProvider();
@@ -164,7 +185,8 @@ class MyApp extends StatelessWidget {
             return metrics;
           },
         ),
-        ChangeNotifierProxyProvider2<GerenteProvider, OperacoesFilterProvider, OperacoesProvider>(
+        ChangeNotifierProxyProvider2<GerenteProvider, OperacoesFilterProvider,
+            OperacoesProvider>(
           create: (_) => OperacoesProvider(),
           update: (_, gerenteProvider, filterProvider, previousOperacoes) {
             final operacoes = previousOperacoes ?? OperacoesProvider();
@@ -192,7 +214,8 @@ class MyApp extends StatelessWidget {
               ErrorWidget.builder = (FlutterErrorDetails details) {
                 debugPrint('Caught a Flutter error: ${details.exception}');
                 return ErrorScreen(
-                  message: 'Ocorreu um erro inesperado.\nPor favor, reinicie o aplicativo.',
+                  message:
+                      'Ocorreu um erro inesperado.\nPor favor, reinicie o aplicativo.',
                   onRetry: null,
                 );
               };
@@ -211,7 +234,7 @@ class MyApp extends StatelessWidget {
     // PALETA PREMIUM
     const primaryNavy = Color(0xFF023853);
     const accentGold = Color(0xFFEBE4AB);
-    
+
     final isLight = brightness == Brightness.light;
 
     // Cores de fundo e superfície
@@ -221,7 +244,8 @@ class MyApp extends StatelessWidget {
 
     return ThemeData(
       useMaterial3: true,
-      brightness: brightness, // Importante para o Flutter calcular contrastes automáticos
+      brightness:
+          brightness, // Importante para o Flutter calcular contrastes automáticos
       textTheme: GoogleFonts.montserratTextTheme(
         isLight ? ThemeData.light().textTheme : ThemeData.dark().textTheme,
       ).apply(
@@ -246,7 +270,10 @@ class MyApp extends StatelessWidget {
         centerTitle: true,
         elevation: 4,
         titleTextStyle: GoogleFonts.montserrat(
-            fontSize: 20, fontWeight: FontWeight.bold, color: accentGold, letterSpacing: 1.2),
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: accentGold,
+            letterSpacing: 1.2),
       ),
       cardTheme: CardThemeData(
         elevation: 4,
@@ -254,23 +281,28 @@ class MyApp extends StatelessWidget {
         shadowColor: Colors.black45,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: isLight ? Colors.transparent : accentGold.withOpacity(0.3), width: 1),
+          side: BorderSide(
+              color: isLight ? Colors.transparent : accentGold.withOpacity(0.3),
+              width: 1),
         ),
       ),
       dataTableTheme: DataTableThemeData(
-        headingRowColor: MaterialStateProperty.all(primaryNavy.withOpacity(0.8)),
-        headingTextStyle: GoogleFonts.montserrat(color: accentGold, fontWeight: FontWeight.bold),
+        headingRowColor:
+            MaterialStateProperty.all(primaryNavy.withOpacity(0.8)),
+        headingTextStyle: GoogleFonts.montserrat(
+            color: accentGold, fontWeight: FontWeight.bold),
         dataTextStyle: GoogleFonts.montserrat(color: textColor),
       ),
-      // ... (Mantenha elevatedButtonTheme e inputDecorationTheme como estavam)
-       elevatedButtonTheme: ElevatedButtonThemeData(
+      elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryNavy,
           foregroundColor: accentGold,
           elevation: 5,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          textStyle: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 16),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          textStyle:
+              GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 16),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -282,7 +314,10 @@ class MyApp extends StatelessWidget {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: isLight ? primaryNavy.withOpacity(0.3) : accentGold.withOpacity(0.3)),
+          borderSide: BorderSide(
+              color: isLight
+                  ? primaryNavy.withOpacity(0.3)
+                  : accentGold.withOpacity(0.3)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -290,7 +325,8 @@ class MyApp extends StatelessWidget {
         ),
         labelStyle: TextStyle(color: isLight ? primaryNavy : accentGold),
         prefixIconColor: isLight ? primaryNavy : accentGold,
-        hintStyle: TextStyle(color: isLight ? Colors.grey : Colors.grey.shade400),
+        hintStyle:
+            TextStyle(color: isLight ? Colors.grey : Colors.grey.shade400),
       ),
     );
   }
