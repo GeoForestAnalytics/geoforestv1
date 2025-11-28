@@ -48,3 +48,17 @@ app.*.map.json
 lib/firebase_options.dart
 
 /android/app/google-services.json
+
+# Arquivos de Configuração do Firebase iOS (Faltou esse!)
+ios/Runner/GoogleService-Info.plist
+
+# Chaves de Assinatura Android (CRÍTICO para quando for publicar na loja)
+*.jks
+*.keystore
+key.properties
+
+# Arquivos de ambiente (se você usar .env para guardar senhas no futuro)
+.env
+
+# Lixo do Mac (se você ou alguém da equipe usar Mac)
+.DS_Store
