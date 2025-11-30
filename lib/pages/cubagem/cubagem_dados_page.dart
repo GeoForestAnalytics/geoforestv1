@@ -203,6 +203,12 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
       longitude: _posicaoAtualExibicao?.longitude,
       metodoCubagem: widget.arvoreParaEditar?.metodoCubagem,
       rf: _rfController.text.trim().isNotEmpty ? _rfController.text.trim() : null,
+      
+      // --- CORREÇÃO AQUI ---
+      // Antes estava: widget.arvoreParaEditar?.dataColeta
+      // Mude para: DateTime.now() para registrar o momento exato da coleta
+      dataColeta: DateTime.now(), 
+      // --------------------
     );
         
     try {

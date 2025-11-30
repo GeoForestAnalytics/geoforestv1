@@ -37,6 +37,7 @@ class CubagemRepository {
 
       final arvoreParaSalvar = arvore.copyWith(
         isSynced: false,
+        // Garante que a dataColeta seja salva. Se vier nula (não deveria), usa 'now'.
         dataColeta: arvore.dataColeta ?? now,
       );
 
@@ -140,9 +141,10 @@ class CubagemRepository {
   }) async {
     final db = await _dbHelper.database;
 
-    final dataFormatadaParaQuery =
-        DateFormat('yyyy-MM-dd').format(dataSelecionada);
+    // Formata a data para YYYY-MM-DD para comparar com a função DATE do SQL
+    final dataFormatadaParaQuery = DateFormat('yyyy-MM-dd').format(dataSelecionada);
 
+    // A query verifica se a parte da DATA do campo dataColeta (que é ISO8601 com hora) bate com a data selecionada
     String whereClause = '${DbCubagensArvores.nomeLider} = ? AND ${DbCubagensArvores.talhaoId} = ? AND DATE(${DbCubagensArvores.dataColeta}) = ?';
     List<dynamic> whereArgs = [nomeLider, talhaoId, dataFormatadaParaQuery];
 
