@@ -450,50 +450,7 @@ class PdfService {
     await _salvarEAbriPdf(context, pdf, nomeArquivo);
   }
 
-  Future<void> gerarRelatorioRendimentoPdf({
-    required BuildContext context,
-    required String titulo,
-    required List<RendimentoDAP> dados, // Requer o modelo que criamos acima
-  }) async {
-    final pdf = pw.Document();
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        header: (pw.Context ctx) => _buildHeader('Relatório de Rendimento DAP', titulo),
-        footer: (pw.Context ctx) => _buildFooter(),
-        build: (pw.Context ctx) {
-          return [
-            pw.Text(
-              'Distribuição Volumétrica por Classe Diamétrica',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
-              textAlign: pw.TextAlign.center,
-            ),
-            pw.Divider(height: 20),
-            pw.TableHelper.fromTextArray(
-              headers: ['Classe DAP', 'Volume (m³/ha)', '% do Total'],
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
-              data: dados.map((item) => [
-                item.classe,
-                item.volumePorHectare.toStringAsFixed(2),
-                '${item.porcentagemDoTotal.toStringAsFixed(1)}%'
-              ]).toList(),
-              cellAlignment: pw.Alignment.centerLeft,
-              cellAlignments: {
-                1: pw.Alignment.centerRight,
-                2: pw.Alignment.centerRight,
-              },
-            ),
-          ];
-        },
-      ),
-    );
-
-    final nomeArquivo = 'Rendimento_DAP_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf';
-    await _salvarEAbriPdf(context, pdf, nomeArquivo);
-  }
-
+  
   Future<void> gerarRelatorioSimulacaoPdf({
     required BuildContext context,
     required String nomeFazenda,

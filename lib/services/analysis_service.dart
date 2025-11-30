@@ -1,4 +1,4 @@
-// lib/services/analysis_service.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/services/analysis_service.dart (VERSÃO FINAL COM CURTIS)
 
 import 'dart:math';
 import 'package:collection/collection.dart';
@@ -37,7 +37,7 @@ class AnalysisService {
   final _projetoRepository = ProjetoRepository();
   final _atividadeRepository = AtividadeRepository();
 
-  static const double FATOR_DE_FORMA = 0.45;
+  static const double fatorDeForma = 0.45;
 
   final List<SortimentoModel> _sortimentosFixos = [
     SortimentoModel(id: 4, nome: "> 35cm", comprimento: 2.7, diametroMinimo: 35, diametroMaximo: 200),
@@ -81,8 +81,17 @@ class AnalysisService {
       final List<Arvore> arvores = dadosAgregados['arvores'];
       if (parcelas.isEmpty || arvores.isEmpty) continue;
 
-      final arvoresComVolume = aplicarEquacaoDeVolume(arvoresDoInventario: arvores, b0: resultadoRegressao['b0'], b1: resultadoRegressao['b1'], b2: resultadoRegressao['b2']);
+      // Aplica volume usando Curtis para preencher alturas antes de aplicar Schumacher
+      final arvoresComVolume = aplicarEquacaoDeVolume(
+        arvoresDoInventario: arvores, 
+        b0: resultadoRegressao['b0'], 
+        b1: resultadoRegressao['b1'], 
+        b2: resultadoRegressao['b2']
+      );
+      
       todasAsArvoresDoInventarioComVolume.addAll(arvoresComVolume);
+      
+      // Analisa o talhão usando as árvores já com altura corrigida e volume
       final analiseTalhao = getTalhaoInsights(talhao, parcelas, arvoresComVolume);
 
       if (talhao.areaHa != null && talhao.areaHa! > 0) {
@@ -179,16 +188,98 @@ class AnalysisService {
     for (int i = 0; i < secoes.length - 1; i++) {
       final secao1 = secoes[i];
       final secao2 = secoes[i + 1];
-      final diametro1_m = secao1.diametroSemCasca / 100;
-      final diametro2_m = secao2.diametroSemCasca / 100;
-      final area1 = (pi * pow(diametro1_m, 2)) / 4;
-      final area2 = (pi * pow(diametro2_m, 2)) / 4;
+      final diametro1m = secao1.diametroSemCasca / 100;
+      final diametro2m = secao2.diametroSemCasca / 100;
+      final area1 = (pi * pow(diametro1m, 2)) / 4;
+      final area2 = (pi * pow(diametro2m, 2)) / 4;
       final comprimentoTora = secao2.alturaMedicao - secao1.alturaMedicao;
       final volumeTora = ((area1 + area2) / 2) * comprimentoTora;
       volumeTotal += volumeTora;
     }
     return volumeTotal;
   }
+
+  // ===========================================================================
+  // ===================== IMPLEMENTAÇÃO DO MODELO DE CURTIS ===================
+  // ===========================================================================
+
+  /// Ajusta a curva hipsométrica de Curtis: ln(h) = b0 + b1 * (1/DAP)
+  Map<String, double>? _ajustarCurvaHipsometricaCurtis(List<Arvore> arvores) {
+    // 1. Filtra árvores que têm CAP e Altura medidos
+    final amostras = arvores.where((a) => a.cap > 0 && (a.altura ?? 0) > 0).toList();
+
+    // Requer pelo menos 10 árvores medidas para significância
+    if (amostras.length < 10) return null;
+
+    try {
+      final List<Vector> xData = [];
+      final List<double> yData = [];
+
+      for (var a in amostras) {
+        final dap = a.cap / pi;
+        if (dap <= 0) continue;
+        
+        final invDap = 1 / dap; // X do Curtis
+        final lnH = log(a.altura!); // Y do Curtis
+
+        xData.add(Vector.fromList([1.0, invDap])); // [Intercepto, X]
+        yData.add(lnH);
+      }
+
+      final features = Matrix.fromRows(xData);
+      final labels = Vector.fromList(yData);
+      
+      final coefficients = (features.transpose() * features).inverse() * features.transpose() * labels;
+      
+      final b0 = coefficients.expand((e) => e).toList()[0];
+      final b1 = coefficients.expand((e) => e).toList()[1];
+
+      return {'b0': b0, 'b1': b1};
+
+    } catch (e) {
+      debugPrint("Erro ao ajustar Curtis: $e");
+      return null;
+    }
+  }
+
+  /// Preenche alturas de árvores não medidas usando Curtis (preferencial) ou Média.
+  List<Arvore> _preencherAlturasFaltantes(List<Arvore> arvoresOriginais) {
+    // Tenta ajustar a curva com os dados disponíveis
+    final coeficientes = _ajustarCurvaHipsometricaCurtis(arvoresOriginais);
+    
+    // Calcula média para fallback
+    final alturasValidas = arvoresOriginais.where((a) => (a.altura ?? 0) > 0).map((a) => a.altura!).toList();
+    final mediaAltura = alturasValidas.isNotEmpty ? _calculateAverage(alturasValidas) : 0.0;
+
+    return arvoresOriginais.map((a) {
+      // Se já tem altura, mantém
+      if ((a.altura ?? 0) > 0) return a;
+
+      // Se não tem CAP, retorna com altura 0 ou média se possível
+      if (a.cap <= 0) return a.copyWith(altura: mediaAltura > 0 ? mediaAltura : 0);
+
+      // Tenta aplicar Curtis
+      if (coeficientes != null) {
+        final dap = a.cap / pi;
+        final b0 = coeficientes['b0']!;
+        final b1 = coeficientes['b1']!;
+        
+        final lnH = b0 + (b1 * (1 / dap));
+        final alturaEstimada = exp(lnH);
+        
+        // Proteção contra valores absurdos
+        if (alturaEstimada > 0 && alturaEstimada < 100) {
+          return a.copyWith(altura: alturaEstimada);
+        }
+      }
+
+      // Fallback: Usa a média
+      return a.copyWith(altura: mediaAltura);
+    }).toList();
+  }
+
+  // ===========================================================================
+  // ===========================================================================
   
   Future<Map<String, Map<String, dynamic>>> gerarEquacaoSchumacherHall(List<CubagemArvore> arvoresCubadas) async {
     final List<Vector> xData = [];
@@ -221,15 +312,15 @@ class AnalysisService {
       return {'resultados': errorResult, 'diagnostico': {}};
     }
 
-    double _calculateStdDev(List<double> numbers) {
+    double calculateStdDev(List<double> numbers) {
       if (numbers.length < 2) return 0.0;
       final mean = numbers.reduce((a, b) => a + b) / numbers.length;
       final variance = numbers.map((x) => pow(x - mean, 2)).reduce((a, b) => a + b) / (numbers.length - 1);
       return sqrt(variance);
     }
 
-    final double stdDevDap = _calculateStdDev(lnDapList);
-    final double stdDevAltura = _calculateStdDev(lnAlturaList);
+    final double stdDevDap = calculateStdDev(lnDapList);
+    final double stdDevAltura = calculateStdDev(lnAlturaList);
 
     if (stdDevDap < 0.0001 || stdDevAltura < 0.0001) {
       final errorResult = {'error': 'Variação de dados insuficiente. Selecione árvores de cubagem com DAPs e Alturas mais diferentes.'};
@@ -270,22 +361,28 @@ class AnalysisService {
     }
   }
 
+  // --- ATUALIZADO: Agora usa Curtis para preencher alturas antes de aplicar o volume ---
   List<Arvore> aplicarEquacaoDeVolume({required List<Arvore> arvoresDoInventario, required double b0, required double b1, required double b2}) {
+    // 1. Preenche as alturas (Se Curtis falhar, usa média)
+    final arvoresPreparadas = _preencherAlturasFaltantes(arvoresDoInventario);
+    
     final List<Arvore> arvoresComVolume = [];
-    final List<double> alturasValidas = arvoresDoInventario.where((a) => a.altura != null && a.altura! > 0).map((a) => a.altura!).toList();
-    final double mediaAltura = alturasValidas.isNotEmpty ? _calculateAverage(alturasValidas) : 0.0;
     const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
 
-    for (final arvore in arvoresDoInventario) {
+    for (final arvore in arvoresPreparadas) {
       if (arvore.cap <= 0 || codigosSemVolume.contains(arvore.codigo)) {
         arvoresComVolume.add(arvore.copyWith(volume: 0));
         continue;
       }
-      final alturaParaCalculo = (arvore.altura == null || arvore.altura! <= 0) ? mediaAltura : arvore.altura!;
-      if (alturaParaCalculo <= 0) {
+      
+      // Aqui a altura já foi estimada
+      final alturaParaCalculo = (arvore.altura != null && arvore.altura! > 0) ? arvore.altura! : 0.1;
+      
+      if (alturaParaCalculo <= 0.1) {
         arvoresComVolume.add(arvore.copyWith(volume: 0));
         continue;
       }
+
       final dap = arvore.cap / pi;
       final lnVolume = b0 + (b1 * log(dap)) + (b2 * log(alturaParaCalculo));
       final volumeEstimado = exp(lnVolume);
@@ -331,18 +428,29 @@ class AnalysisService {
     return _analisarListaDeArvores(talhao, todasAsArvores, areaTotalAmostradaHa, parcelasDoTalhao.length, codeAnalysis);
   }
   
+  // --- ATUALIZADO: Agora usa Curtis para preencher alturas antes de calcular as médias ---
   TalhaoAnalysisResult _analisarListaDeArvores(Talhao talhao, List<Arvore> arvoresDoConjunto, double areaTotalAmostradaHa, int numeroDeParcelas, CodeAnalysisResult? codeAnalysis) {
     if (arvoresDoConjunto.isEmpty || areaTotalAmostradaHa <= 0) return TalhaoAnalysisResult();
+    
+    // Preenche alturas faltantes para estatísticas mais precisas
+    final List<Arvore> arvoresComAlturaCompleta = _preencherAlturasFaltantes(arvoresDoConjunto);
+
     const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
-    final List<Arvore> arvoresVivas = arvoresDoConjunto.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
+    final List<Arvore> arvoresVivas = arvoresComAlturaCompleta.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
+    
     if (arvoresVivas.isEmpty) return TalhaoAnalysisResult(warnings: ["Nenhuma árvore com potencial de volume encontrada nas amostras para análise."]);
 
     final double mediaCap = _calculateAverage(arvoresVivas.map((a) => a.cap).toList());
-    final List<double> alturasValidas = arvoresVivas.where((a) => a.altura != null && a.altura! > 0).map((a) => a.altura!).toList();
-    final double mediaAltura = alturasValidas.isNotEmpty ? _calculateAverage(alturasValidas) : 0.0;
+    
+    // Média de altura agora reflete as estimativas do Curtis também
+    final double mediaAltura = _calculateAverage(arvoresVivas.map((a) => a.altura!).toList());
+
     final double areaBasalTotalAmostrada = arvoresVivas.map((a) => _areaBasalPorArvore(a.cap)).fold(0.0, (a, b) => a + b);
     final double areaBasalPorHectare = areaBasalTotalAmostrada / areaTotalAmostradaHa;
-    final double volumeTotalAmostrado = arvoresVivas.map((a) => a.volume ?? _estimateVolume(a.cap, a.altura ?? mediaAltura)).fold(0.0, (a, b) => a + b);
+    
+    // Usa a altura estimada (ou média) para estimativa de volume individual
+    final double volumeTotalAmostrado = arvoresVivas.map((a) => a.volume ?? _estimateVolume(a.cap, a.altura!)).fold(0.0, (a, b) => a + b);
+    
     final double volumePorHectare = volumeTotalAmostrado / areaTotalAmostradaHa;
     final int arvoresPorHectare = (arvoresVivas.length / areaTotalAmostradaHa).round();
     final double alturaDominante = _calculateDominantHeight(arvoresVivas);
@@ -377,7 +485,9 @@ class AnalysisService {
     if (arvores.isEmpty) return CodeAnalysisResult();
     final contagemPorCodigo = arvores.groupBy<String>((arvore) => arvore.codigo.name).map((key, value) => MapEntry(key, value.length));
     final covasUnicas = <String>{};
-    for (final arvore in arvores) covasUnicas.add('${arvore.linha}-${arvore.posicaoNaLinha}');
+    for (final arvore in arvores) {
+      covasUnicas.add('${arvore.linha}-${arvore.posicaoNaLinha}');
+    }
     final totalCovasAmostradas = covasUnicas.length;
     final totalCovasOcupadas = arvores.where((a) => a.codigo != Codigo.Falha).map((a) => '${a.linha}-${a.posicaoNaLinha}').toSet().length;
     final Map<String, CodeStatDetails> estatisticas = {};
@@ -546,7 +656,7 @@ class AnalysisService {
   double _estimateVolume(double cap, double altura) {
     if (cap <= 0 || altura <= 0) return 0.0;
     final areaBasal = _areaBasalPorArvore(cap);
-    return areaBasal * altura * FATOR_DE_FORMA;
+    return areaBasal * altura * fatorDeForma;
   }
 
   double _calculateAverage(List<double> numbers) {
@@ -558,14 +668,19 @@ class AnalysisService {
     if (numbers.isEmpty) return 0.0;
     final sortedList = List<double>.from(numbers)..sort();
     final middle = sortedList.length ~/ 2;
-    if (sortedList.length % 2 == 1) return sortedList[middle];
-    else return (sortedList[middle - 1] + sortedList[middle]) / 2.0;
+    if (sortedList.length % 2 == 1) {
+      return sortedList[middle];
+    } else {
+      return (sortedList[middle - 1] + sortedList[middle]) / 2.0;
+    }
   }
 
   List<double> _calculateMode(List<double> numbers) {
     if (numbers.isEmpty) return [];
     final frequencyMap = <double, int>{};
-    for (var number in numbers) frequencyMap[number] = (frequencyMap[number] ?? 0) + 1;
+    for (var number in numbers) {
+      frequencyMap[number] = (frequencyMap[number] ?? 0) + 1;
+    }
     if (frequencyMap.isEmpty) return [];
     final maxFrequency = frequencyMap.values.reduce(max);
     if (maxFrequency <= 1) return []; 

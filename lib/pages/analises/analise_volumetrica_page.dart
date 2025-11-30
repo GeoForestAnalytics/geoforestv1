@@ -1,4 +1,4 @@
-// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO CORRIGIDA)
+// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO FINAL)
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -360,14 +360,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                   talhoesSelecionadosSet: _talhoesInventarioSelecionados,
                 ),
                 if (_analiseResult != null) ...[
-                  // =========================================================================
-                  // ========================== INÍCIO DA CORREÇÃO =========================
-                  // Aqui passamos o segundo argumento que estava faltando
-                  // =========================================================================
                   _buildResultCard(_analiseResult!.resultadoRegressao, _analiseResult!.diagnosticoRegressao),
-                  // =========================================================================
-                  // =========================== FIM DA CORREÇÃO ===========================
-                  // =========================================================================
                   _buildProductionTable(_analiseResult!),
                   _buildProducaoComercialCard(_analiseResult!),
                   _buildVolumePorCodigoCard(_analiseResult!),
@@ -446,66 +439,68 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
-  Widget _buildResultCard(
-    Map<String, dynamic> resultados, Map<String, dynamic> diagnostico) {
-  
-  final skew = diagnostico['skewness'] as double?;
-  final kurt = diagnostico['kurtosis'] as double?;
+  // ✅ VERSÃO CORRIGIDA E ALINHADA COM O PDF SERVICE E ANALYSIS SERVICE
+  Widget _buildResultCard(Map<String, dynamic> resultados, Map<String, dynamic> diagnostico) {
+    
+    // Extrai dados de Syx e Shapiro-Wilk (ao invés de Skewness/Kurtosis)
+    final syx = diagnostico['syx'] as double?;
+    final syxPercent = diagnostico['syx_percent'] as double?;
+    final shapiroPValue = diagnostico['shapiro_wilk_p_value'] as double?;
 
-  String resultadoNormalidade;
-  Color corNormalidade;
+    String resultadoNormalidade;
+    Color corNormalidade;
 
-  if (skew == null || kurt == null) {
-    resultadoNormalidade = "N/A";
-    corNormalidade = Colors.grey;
-  } else if (skew.abs() < 2 && kurt.abs() < 2) {
-    resultadoNormalidade = "Aprovado (Skew: ${skew.toStringAsFixed(2)}, Kurt: ${kurt.toStringAsFixed(2)})";
-    corNormalidade = Colors.green;
-  } else {
-    resultadoNormalidade = "Rejeitado (Skew: ${skew.toStringAsFixed(2)}, Kurt: ${kurt.toStringAsFixed(2)})";
-    corNormalidade = Colors.red;
-  }
+    if (shapiroPValue == null) {
+      resultadoNormalidade = "N/A";
+      corNormalidade = Colors.grey;
+    } else if (shapiroPValue > 0.05) {
+      resultadoNormalidade = "Aprovado (p > 0.05)";
+      corNormalidade = Colors.green;
+    } else {
+      resultadoNormalidade = "Rejeitado (p <= 0.05)";
+      corNormalidade = Colors.red;
+    }
 
-  return Card(
-    elevation: 2,
-    color: Colors.blueGrey.shade50,
-    child: Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Resultados da Regressão',
-              style: Theme.of(context).textTheme.titleLarge),
-          const Divider(),
-          Text('Equação Gerada:',
-              style: Theme.of(context).textTheme.titleMedium),
-          SelectableText(
-            resultados['equacao'],
-            style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-                backgroundColor: Colors.black12),
-          ),
-          const SizedBox(height: 12),
-          _buildStatRow('Coeficiente (R²):',
-              (resultados['R2'] as double).toStringAsFixed(4)),
-          _buildStatRow(
-              'Nº de Amostras Usadas:', '${resultados['n_amostras']}'),
-          const Divider(height: 20),
-          Text('Diagnóstico do Modelo',
-              style: Theme.of(context).textTheme.titleMedium),
-          _buildStatRow('Erro Padrão Residual (Syx):',
-              (diagnostico['syx'] as double).toStringAsFixed(4)),
-          _buildStatRow('Syx (%):',
-              '${(diagnostico['syx_percent'] as double).toStringAsFixed(2)}%'),
-          _buildStatRow('Normalidade dos Resíduos:',
-              resultadoNormalidade,
-              valueColor: corNormalidade),
-        ],
+    return Card(
+      elevation: 2,
+      color: Colors.blueGrey.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Resultados da Regressão',
+                style: Theme.of(context).textTheme.titleLarge),
+            const Divider(),
+            Text('Equação Gerada:',
+                style: Theme.of(context).textTheme.titleMedium),
+            SelectableText(
+              resultados['equacao'],
+              style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  backgroundColor: Colors.black12),
+            ),
+            const SizedBox(height: 12),
+            _buildStatRow('Coeficiente (R²):',
+                (resultados['R2'] as double).toStringAsFixed(4)),
+            _buildStatRow(
+                'Nº de Amostras Usadas:', '${resultados['n_amostras']}'),
+            const Divider(height: 20),
+            Text('Diagnóstico do Modelo',
+                style: Theme.of(context).textTheme.titleMedium),
+            _buildStatRow('Erro Padrão Residual (Syx):',
+                syx?.toStringAsFixed(4) ?? "N/A"),
+            _buildStatRow('Syx (%):',
+                syxPercent != null ? '${syxPercent.toStringAsFixed(2)}%' : "N/A"),
+            _buildStatRow('Normalidade (Shapiro-Wilk):',
+                resultadoNormalidade,
+                valueColor: corNormalidade),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildProductionTable(AnaliseVolumetricaCompletaResult result) {
     final totais = result.totaisInventario;

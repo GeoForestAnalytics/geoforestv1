@@ -88,18 +88,6 @@ class VolumePorCodigo {
   VolumePorCodigo({required this.codigo, required this.volumeTotal, required this.porcentagem});
 }
 
-// <<< CLASSE ADICIONADA PARA CORRIGIR OS ERROS DO RENDIMENTO DAP >>>
-class RendimentoDAP {
-  final String classe;
-  final double volumePorHectare;
-  final double porcentagemDoTotal;
-
-  RendimentoDAP({
-    required this.classe,
-    required this.volumePorHectare,
-    required this.porcentagemDoTotal,
-  });
-}
 
 class AnaliseVolumetricaCompletaResult {
   final Map<String, dynamic> resultadoRegressao;
