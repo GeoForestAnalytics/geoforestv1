@@ -1,4 +1,4 @@
-// lib/providers/dashboard_filter_provider.dart (VERSÃO CORRIGIDA COM MÉTODO DE LIMPEZA)
+// lib/providers/dashboard_filter_provider.dart
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -44,8 +44,32 @@ class DashboardFilterProvider with ChangeNotifier {
   List<String> get lideresDisponiveis => _lideresDisponiveis;
   Set<String> get lideresSelecionados => _lideresSelecionados;
   
-  // <<< MÉTODO NOVO ADICIONADO AQUI >>>
-  /// Limpa todas as seleções de filtro para redefinir o estado.
+  // --- MÉTODOS DE AÇÃO (CORREÇÃO APLICADA AQUI) ---
+
+  /// Alterna a seleção de um projeto individualmente
+  void toggleProjetoSelection(int projetoId) {
+    if (_selectedProjetoIds.contains(projetoId)) {
+      _selectedProjetoIds.remove(projetoId);
+    } else {
+      _selectedProjetoIds.add(projetoId);
+    }
+    // Ao mudar o projeto, limpa filtros dependentes para evitar inconsistências
+    _selectedAtividadeTipos.clear();
+    _selectedFazendaNomes.clear();
+    _lideresSelecionados.clear();
+    notifyListeners();
+  }
+
+  /// Alterna a seleção de uma fazenda individualmente
+  void toggleFazendaSelection(String nomeFazenda) {
+    if (_selectedFazendaNomes.contains(nomeFazenda)) {
+      _selectedFazendaNomes.remove(nomeFazenda);
+    } else {
+      _selectedFazendaNomes.add(nomeFazenda);
+    }
+    notifyListeners();
+  }
+
   void clearAllFilters() {
     _selectedProjetoIds.clear();
     _selectedAtividadeTipos.clear();
@@ -55,9 +79,9 @@ class DashboardFilterProvider with ChangeNotifier {
     _periodoPersonalizado = null;
     notifyListeners();
   }
-  // <<< FIM DA ADIÇÃO >>>
 
-  /// Atualiza o estado dos filtros com base nos dados mais recentes do GerenteProvider.
+  // --- MÉTODOS DE ATUALIZAÇÃO DE DADOS ---
+
   void updateFiltersFrom(GerenteProvider gerenteProvider) {
     _updateProjetosDisponiveis(gerenteProvider.projetos);
 
