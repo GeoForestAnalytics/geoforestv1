@@ -43,7 +43,7 @@ class _RendimentoDapPageState extends State<RendimentoDapPage> {
       ByteData? byteData =
           await image.toByteData(format: ui.ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
-
+// ver isso depois
       final graficoImagem = pw.MemoryImage(pngBytes);
 
       // Agora o método existe no PdfService (adicionado no passo anterior)
