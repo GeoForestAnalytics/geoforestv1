@@ -1,4 +1,4 @@
-// lib/pages/dashboard/relatorio_comparativo_page.dart (VERSÃO FINAL COM OPÇÃO DE INTERVALO)
+// lib/pages/dashboard/relatorio_comparativo_page.dart (CORREÇÃO BOTÃO ESCURO)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
@@ -10,7 +10,7 @@ import 'package:geoforestv1/models/enums.dart';
 import 'package:geoforestv1/services/analysis_service.dart';
 import 'package:geoforestv1/services/export_service.dart';
 
-// ✅ CLASSE ATUALIZADA PARA INCLUIR AS NOVAS OPÇÕES
+// Classe de configuração (Mantida igual)
 class PlanoConfig {
   final MetodoDistribuicaoCubagem metodoDistribuicao;
   final int quantidade;
@@ -63,6 +63,11 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
     setState(() => _talhoesPorFazenda = grouped);
   }
   
+  // (Métodos auxiliares mantidos iguais para brevidade: _verificarAreaEExportarPdf, _mostrarDialogoDeConfiguracaoLote, _gerarPlanosDeCubagemParaSelecionados)
+  // ... Copie os métodos internos do seu código anterior ou mantenha se não mudaram ...
+  // Vou incluir apenas o _mostrarDialogoDeConfiguracaoLote e _gerarPlanosDeCubagemParaSelecionados
+  // para garantir que o arquivo fique funcional se você copiar tudo.
+
   Future<void> _verificarAreaEExportarPdf() async {
     bool dadosIncompletos = _talhoesAtuais.any((t) => t.areaHa == null || t.areaHa! <= 0);
 
@@ -107,22 +112,20 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
     );
   }
 
-  // ✅ FUNÇÃO DO DIÁLOGO COMPLETAMENTE SUBSTITUÍDA
   Future<PlanoConfig?> _mostrarDialogoDeConfiguracaoLote() async {
     final quantidadeController = TextEditingController();
-    final intervaloController = TextEditingController(); // NOVO: Controlador para o intervalo
+    final intervaloController = TextEditingController(); 
     final formKey = GlobalKey<FormState>();
     
     MetodoDistribuicaoCubagem metodoDistribuicao = MetodoDistribuicaoCubagem.fixoPorTalhao;
     String metodoCubagem = 'Fixas';
     MetricaDistribuicao metricaSelecionada = MetricaDistribuicao.dap; 
-    bool isIntervaloManual = false; // NOVO: Estado para controlar o modo do intervalo
+    bool isIntervaloManual = false;
 
     return showDialog<PlanoConfig>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
-        // Usamos StatefulBuilder para que o diálogo possa se redesenhar
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
@@ -134,7 +137,6 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // --- SEÇÃO 1: MÉTRICA BASE ---
                       const Text('1. Métrica Base para Distribuição', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       SegmentedButton<MetricaDistribuicao>(
@@ -148,8 +150,6 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
                         },
                       ),
                       const Divider(height: 24),
-                      
-                      // --- SEÇÃO 2: DISTRIBUIÇÃO ---
                       const Text('2. Como distribuir as árvores?', style: TextStyle(fontWeight: FontWeight.bold)),
                       RadioListTile<MetodoDistribuicaoCubagem>(
                         title: const Text('Quantidade Fixa por Talhão'),
@@ -178,8 +178,6 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
                         validator: (v) => (v == null || v.isEmpty || int.tryParse(v) == null || int.parse(v) <= 0) ? 'Valor inválido' : null,
                       ),
                       const Divider(height: 24),
-
-                      // --- SEÇÃO 3: MÉTODO DE MEDIÇÃO ---
                       const Text('3. Qual o método de medição?', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
@@ -194,8 +192,6 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
                         decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                       ),
                       const Divider(height: 24),
-
-                      // --- NOVA SEÇÃO 4: INTERVALO DAS CLASSES ---
                       const Text('4. Intervalo das Classes', style: TextStyle(fontWeight: FontWeight.bold)),
                       RadioListTile<bool>(
                         title: const Text('Automático (Padrão)'),
@@ -212,7 +208,6 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
                         onChanged: (v) => setDialogState(() => isIntervaloManual = v!),
                         contentPadding: EdgeInsets.zero,
                       ),
-                      // Mostra o campo de texto apenas se o modo manual estiver selecionado
                       if (isIntervaloManual)
                         Padding(
                           padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0),
@@ -225,7 +220,7 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
                               hintText: metricaSelecionada == MetricaDistribuicao.dap ? 'Ex: 2' : 'Ex: 5',
                             ),
                             validator: (v) {
-                              if (!isIntervaloManual) return null; // Só valida se estiver no modo manual
+                              if (!isIntervaloManual) return null; 
                               if (v == null || v.isEmpty) return 'Obrigatório';
                               final val = double.tryParse(v.replaceAll(',', '.'));
                               if (val == null || val <= 0) return 'Valor inválido';
@@ -278,7 +273,6 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
     
     final analysisService = AnalysisService();
     try {
-      // ✅ CHAMADA ATUALIZADA PARA ENVIAR OS NOVOS PARÂMETROS
       final planosGerados = await analysisService.criarMultiplasAtividadesDeCubagem(
         talhoes: _talhoesAtuais,
         metodo: config.metodoDistribuicao,
@@ -370,12 +364,17 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
           );
         },
       ),
+      
+      // >>> CORREÇÃO DO BOTÃO AQUI <<<
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _gerarPlanosDeCubagemParaSelecionados,
         icon: const Icon(Icons.playlist_add_check_outlined),
         label: const Text('Gerar Planos de Cubagem'),
         tooltip: 'Gerar planos de cubagem para os talhões selecionados',
-        backgroundColor: Theme.of(context).colorScheme.secondary,
+        // Fundo Dourado (do tema ou fixo)
+        backgroundColor: Theme.of(context).colorScheme.secondary, 
+        // Força a cor do texto para AZUL ESCURO
+        foregroundColor: const Color(0xFF023853), 
       ),
     );
   }

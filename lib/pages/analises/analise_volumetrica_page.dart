@@ -1,4 +1,4 @@
-// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO FINAL)
+// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO FINAL - ESTILO NEON)
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -362,7 +362,11 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                 if (_analiseResult != null) ...[
                   _buildResultCard(_analiseResult!.resultadoRegressao, _analiseResult!.diagnosticoRegressao),
                   _buildProductionTable(_analiseResult!),
+                  
+                  // GRAFICOS ATUALIZADOS AQUI
+                  const SizedBox(height: 16),
                   _buildProducaoComercialCard(_analiseResult!),
+                  const SizedBox(height: 16),
                   _buildVolumePorCodigoCard(_analiseResult!),
                 ]
               ],
@@ -439,10 +443,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
-  // ✅ VERSÃO CORRIGIDA E ALINHADA COM O PDF SERVICE E ANALYSIS SERVICE
   Widget _buildResultCard(Map<String, dynamic> resultados, Map<String, dynamic> diagnostico) {
-    
-    // Extrai dados de Syx e Shapiro-Wilk (ao invés de Skewness/Kurtosis)
     final syx = diagnostico['syx'] as double?;
     final syxPercent = diagnostico['syx_percent'] as double?;
     final shapiroPValue = diagnostico['shapiro_wilk_p_value'] as double?;
@@ -463,7 +464,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
 
     return Card(
       elevation: 2,
-      color: Colors.blueGrey.shade50,
+      color: const Color.fromARGB(0, 29, 2, 73),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -479,7 +480,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
               style: const TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 12,
-                  backgroundColor: Colors.black12),
+                  backgroundColor: Color.fromARGB(103, 236, 235, 235)),
             ),
             const SizedBox(height: 12),
             _buildStatRow('Coeficiente (R²):',
@@ -528,9 +529,24 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                 ])));
   }
 
+  // >>> GRÁFICO 1: PRODUÇÃO COMERCIAL (ATUALIZADO) <<<
   Widget _buildProducaoComercialCard(AnaliseVolumetricaCompletaResult result) {
     final data = result.producaoPorSortimento;
     if (data.isEmpty) return const SizedBox.shrink();
+
+    // Configuração de Cores para Alto Contraste
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const Color corTexto = Colors.white;
+
+    // Gradiente Ciano -> Azul
+    final LinearGradient gradienteBarras = LinearGradient(
+      colors: [Colors.cyan.shade300, Colors.blue.shade900],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    );
+
+    // Maior valor para definir altura do track
+    final double maxY = data.map((e) => e.volumeHa).reduce((a, b) => a > b ? a : b);
 
     final barGroups = data.asMap().entries.map((entry) {
       return BarChartGroupData(
@@ -538,9 +554,16 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         barRods: [
           BarChartRodData(
               toY: entry.value.volumeHa,
-              color: Colors.blue.shade700,
-              width: 22,
-              borderRadius: BorderRadius.circular(4))
+              gradient: gradienteBarras, // Gradiente aplicado
+              width: 24,
+              borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), topRight: Radius.circular(6)),
+              // Fundo da barra
+              backDrawRodData: BackgroundBarChartRodData(
+                  show: true,
+                  toY: maxY * 1.1,
+                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade200,
+              ),
+          )
         ],
       );
     }).toList();
@@ -556,38 +579,52 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                 style: Theme.of(context).textTheme.titleLarge),
             const Divider(),
             SizedBox(
-              height: 200,
+              height: 220,
               child: BarChart(
                 BarChartData(
                   barGroups: barGroups,
                   titlesData: FlTitlesData(
-                    topTitles:
-                        const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles:
-                        const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        getTitlesWidget: (value, meta) => Text(
-                            data[value.toInt()].nome,
-                            style: const TextStyle(fontSize: 10)),
+                        reservedSize: 40,
+                        getTitlesWidget: (value, meta) {
+                          if (value.toInt() >= data.length) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: SizedBox(
+                              width: 60,
+                              child: Text(
+                                data[value.toInt()].nome,
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: corTexto),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
+                  gridData: const FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
+                      getTooltipColor: (_) => const Color(0xFF1E293B), // Fundo Escuro Fixo
+                      tooltipMargin: 8,
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final item = data[groupIndex];
                         return BarTooltipItem(
                           '${item.nome}\n',
-                          const TextStyle(
-                              color: Colors.white, fontWeight: FontWeight.bold),
+                          const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
                           children: [
                             TextSpan(
-                              text:
-                                  '${item.volumeHa.toStringAsFixed(2)} m³/ha (${item.porcentagem.toStringAsFixed(1)}%)',
-                              style: const TextStyle(
-                                  color: Color.fromARGB(255, 52, 168, 245)),
+                              text: '${item.volumeHa.toStringAsFixed(2)} m³/ha',
+                              style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.w900, fontSize: 16),
                             )
                           ],
                         );
@@ -599,6 +636,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
             ),
             const SizedBox(height: 20),
             _buildDetailedTable(
+              corTexto: const Color.fromARGB(255, 4, 3, 61), // <--- AQUI VOCÊ ESCOLHE A COR AGORA
               headers: ['Sortimento', 'Volume (m³/ha)', '% Total'],
               rows: data
                   .map((item) => [
@@ -614,9 +652,22 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
+  // >>> GRÁFICO 2: VOLUME POR CÓDIGO (ATUALIZADO) <<<
   Widget _buildVolumePorCodigoCard(AnaliseVolumetricaCompletaResult result) {
     final data = result.volumePorCodigo;
     if (data.isEmpty) return const SizedBox.shrink();
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const Color corTexto = Colors.white;
+
+    // Gradiente Teal para diferenciar (mas ainda estilo Neon)
+    final LinearGradient gradienteBarras = LinearGradient(
+      colors: [Colors.teal.shade300, Colors.teal.shade900], 
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    );
+
+    final double maxY = data.map((e) => e.volumeTotal).reduce((a, b) => a > b ? a : b);
 
     final barGroups = data.asMap().entries.map((entry) {
       return BarChartGroupData(
@@ -624,9 +675,15 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         barRods: [
           BarChartRodData(
               toY: entry.value.volumeTotal,
-              color: Colors.teal,
-              width: 20,
-              borderRadius: BorderRadius.circular(4))
+              gradient: gradienteBarras,
+              width: 24,
+              borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), topRight: Radius.circular(6)),
+              backDrawRodData: BackgroundBarChartRodData(
+                  show: true,
+                  toY: maxY * 1.1,
+                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade200,
+              ),
+          )
         ],
       );
     }).toList();
@@ -642,35 +699,46 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                 style: Theme.of(context).textTheme.titleLarge),
             const Divider(),
             SizedBox(
-                height: 200,
+                height: 220,
                 child: BarChart(
                     BarChartData(
                   barGroups: barGroups,
                   titlesData: FlTitlesData(
-                    topTitles:
-                        const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles:
-                        const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     bottomTitles: AxisTitles(
                         sideTitles: SideTitles(
                             showTitles: true,
-                            getTitlesWidget: (value, meta) => Text(
-                                data[value.toInt()].codigo,
-                                style: const TextStyle(fontSize: 10)))),
+                            reservedSize: 30,
+                            getTitlesWidget: (value, meta) {
+                              if (value.toInt() >= data.length) return const SizedBox.shrink();
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(
+                                    data[value.toInt()].codigo,
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: corTexto)
+                                ),
+                              );
+                            }
+                        ),
+                    ),
                   ),
+                  gridData: const FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
+                      getTooltipColor: (_) => const Color(0xFF1E293B), // Fundo Escuro Fixo
+                      tooltipMargin: 8,
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final item = data[groupIndex];
                         return BarTooltipItem(
                           '${item.codigo}\n',
-                          const TextStyle(
-                              color: Colors.white, fontWeight: FontWeight.bold),
+                          const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
                           children: [
                             TextSpan(
-                              text:
-                                  '${item.volumeTotal.toStringAsFixed(2)} m³/ha (${item.porcentagem.toStringAsFixed(1)}%)',
-                              style: const TextStyle(color: Colors.yellow),
+                              text: '${item.volumeTotal.toStringAsFixed(2)} m³',
+                              style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.w900, fontSize: 16),
                             )
                           ],
                         );
@@ -695,25 +763,36 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
-  Widget _buildDetailedTable(
-      {required List<String> headers, required List<List<String>> rows}) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columnSpacing: 24,
-        headingRowHeight: 32,
-        headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
-        columns: headers
-            .map((h) => DataColumn(
-                label: Text(h, style: const TextStyle(fontWeight: FontWeight.bold))))
-            .toList(),
-        rows: rows
-            .map((row) =>
-                DataRow(cells: row.map((cell) => DataCell(Text(cell))).toList()))
-            .toList(),
-      ),
-    );
-  }
+  Widget _buildDetailedTable({
+  required List<String> headers,
+  required List<List<String>> rows,
+  Color corTexto = Colors.white, // Adicionamos a opção de cor (padrão branco)
+}) {
+  return SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: DataTable(
+      columnSpacing: 24,
+      headingRowHeight: 32,
+      // Fundo do cabeçalho cinza claro
+      headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
+      columns: headers
+          .map((h) => DataColumn(
+              label: Text(h,
+                  // Forçamos PRETO no cabeçalho para dar contraste com o fundo cinza claro
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black))))
+          .toList(),
+      rows: rows
+          .map((row) => DataRow(
+              cells: row
+                  .map((cell) => DataCell(
+                        // Aqui aplicamos a cor que você escolher
+                        Text(cell, style: TextStyle(color: corTexto)), 
+                      ))
+                  .toList()))
+          .toList(),
+    ),
+  );
+}
 
   Widget _buildStatRow(String label, String value, {Color? valueColor}) {
     return Padding(

@@ -197,21 +197,33 @@ class _DashboardPageState extends State<DashboardPage> {
     if (_distribuicaoPorCodigo.isEmpty) return const SizedBox.shrink();
     final entries = _distribuicaoPorCodigo.entries.toList();
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color corTexto = isDark ? Colors.white70 : const Color(0xFF023853);
+    
+    // Gradiente Estilo "Sample 3"
+    final LinearGradient gradienteBarras = LinearGradient(
+      colors: [Colors.cyan.shade300, Colors.blue.shade900],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    );
+
     return BarChart(
       BarChartData(
         alignment: BarChartAlignment.spaceAround,
         maxY: (entries.map((e) => e.value).reduce(max)) * 1.2,
         barTouchData: BarTouchData(
+          enabled: true,
           touchTooltipData: BarTouchTooltipData(
-             getTooltipColor: (_) => Colors.blueGrey,
+            getTooltipColor: (_) => const Color(0xFF1E293B), // Fundo escuro fixo
+            tooltipMargin: 8,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               return BarTooltipItem(
                 '${entries[groupIndex].key}\n',
-                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 14),
                 children: <TextSpan>[
                   TextSpan(
-                    text: rod.toY.toInt().toString(),
-                    style: const TextStyle(color: Colors.yellow, fontWeight: FontWeight.w500),
+                    text: '${rod.toY.toInt()}',
+                    style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.w900, fontSize: 18),
                   ),
                 ],
               );
@@ -228,10 +240,10 @@ class _DashboardPageState extends State<DashboardPage> {
                 if (value.toInt() >= entries.length) return const SizedBox.shrink();
                 final String text = entries[value.toInt()].key;
                 return Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
+                  padding: const EdgeInsets.only(top: 8.0),
                   child: Text(
                     text,
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: corTexto),
                   ),
                 );
               },
@@ -249,9 +261,14 @@ class _DashboardPageState extends State<DashboardPage> {
             barRods: [
               BarChartRodData(
                 toY: entries[index].value,
-                color: Theme.of(context).colorScheme.secondary,
+                gradient: gradienteBarras, // Gradiente aplicado
                 width: 22,
-                borderRadius: BorderRadius.zero,
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), topRight: Radius.circular(6)),
+                backDrawRodData: BackgroundBarChartRodData(
+                  show: true,
+                  toY: (entries.map((e) => e.value).reduce(max)) * 1.2,
+                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade200,
+                ),
               )
             ],
           );
@@ -259,7 +276,8 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     );
   }
-  
+
+  // Substitua o método _buildHistogram antigo por este:
   Widget _buildHistogram() {
     final valoresValidos = _dadosCAP
         .where((dado) => 
@@ -269,20 +287,16 @@ class _DashboardPageState extends State<DashboardPage> {
         .map((dado) => dado['cap'] as double)
         .toList();
 
-    if (valoresValidos.isEmpty) return const Center(child: Text("Sem dados de CAP válidos para o histograma."));
+    if (valoresValidos.isEmpty) return const Center(child: Text("Sem dados de CAP válidos."));
 
     final double minVal = valoresValidos.reduce(min);
     double maxVal = valoresValidos.reduce(max);
-
-    if (minVal == maxVal) {
-      maxVal = minVal + 10;
-    }
+    if (minVal == maxVal) maxVal = minVal + 10;
 
     final int numBins = min(10, (maxVal - minVal).floor() + 1);
-    if (numBins <= 0) return const Center(child: Text("Dados insuficientes para o histograma."));
+    if (numBins <= 0) return const Center(child: Text("Dados insuficientes."));
 
     final double binSize = (maxVal - minVal) / numBins;
-
     List<int> bins = List.filled(numBins, 0);
     List<double> binStarts = List.generate(numBins, (i) => minVal + i * binSize);
 
@@ -294,6 +308,15 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     final double maxY = bins.isEmpty ? 1 : (bins.reduce(max).toDouble()) * 1.2;
+    
+    // CORES E ESTILO
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color corTexto = isDark ? Colors.white70 : const Color(0xFF023853);
+    final LinearGradient gradienteBarras = LinearGradient(
+      colors: [Colors.cyan.shade300, Colors.blue.shade900],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    );
 
     return BarChart(
       BarChartData(
@@ -302,17 +325,18 @@ class _DashboardPageState extends State<DashboardPage> {
         barTouchData: BarTouchData(
           enabled: true,
           touchTooltipData: BarTouchTooltipData(
-             getTooltipColor: (_) => Colors.blueGrey,
+            getTooltipColor: (_) => const Color(0xFF1E293B),
+            tooltipMargin: 8,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               final binStart = binStarts[group.x.toInt()];
               final binEnd = binStart + binSize;
               return BarTooltipItem(
-                'CAP: ${binStart.toStringAsFixed(0)}-${binEnd.toStringAsFixed(0)}\n',
-                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                '${binStart.toStringAsFixed(0)}-${binEnd.toStringAsFixed(0)} cm\n',
+                const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
                 children: <TextSpan>[
                   TextSpan(
-                    text: '${rod.toY.toInt()} árvores',
-                    style: const TextStyle(color: Colors.yellow, fontWeight: FontWeight.w500),
+                    text: '${rod.toY.toInt()}',
+                    style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.w900, fontSize: 18),
                   ),
                 ],
               );
@@ -329,8 +353,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 if (value.toInt() >= binStarts.length) return const SizedBox.shrink();
                 final String text = binStarts[value.toInt()].toStringAsFixed(0);
                 return Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Text(text, style: const TextStyle(fontSize: 10)),
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(text, style: TextStyle(fontSize: 10, color: corTexto, fontWeight: FontWeight.bold)),
                 );
               },
             ),
@@ -340,16 +364,21 @@ class _DashboardPageState extends State<DashboardPage> {
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
         gridData: const FlGridData(show: false),
-        borderData: FlBorderData(show: true),
+        borderData: FlBorderData(show: false),
         barGroups: List.generate(numBins, (index) {
           return BarChartGroupData(
             x: index,
             barRods: [
               BarChartRodData(
                 toY: bins[index].toDouble(),
-                color: Theme.of(context).primaryColor,
-                width: 15,
-                borderRadius: BorderRadius.zero,
+                gradient: gradienteBarras, // Gradiente
+                width: 16,
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), topRight: Radius.circular(6)),
+                backDrawRodData: BackgroundBarChartRodData(
+                  show: true,
+                  toY: maxY,
+                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade200,
+                ),
               )
             ],
           );
