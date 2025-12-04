@@ -1,4 +1,4 @@
-// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO FINAL - ESTILO NEON)
+// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO FINAL - CORRIGIDA LÓGICA E VISUAL)
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -132,47 +132,62 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     setState(() => _isLoading = false);
   }
 
+  // >>> LÓGICA RESTAURADA PARA BUSCAR CUBAGEM EM OUTRA ATIVIDADE <<<
   Future<void> _carregarTalhoesParaSelecao() async {
     if (_projetoSelecionado == null ||
         _atividadeSelecionada == null ||
         _fazendaSelecionada == null) return;
 
+    // 1. Busca os talhões de INVENTÁRIO (da atividade selecionada)
     final todosTalhoesDaFazendaInventario =
         await _talhaoRepository.getTalhoesDaFazenda(
             _fazendaSelecionada!.id, _fazendaSelecionada!.atividadeId);
+            
     final talhoesCompletosInvIds = (await _talhaoRepository
             .getTalhoesComParcelasConcluidas())
         .map((t) => t.id)
         .toSet();
+        
     final talhoesInventarioEncontrados = todosTalhoesDaFazendaInventario
         .where((t) => talhoesCompletosInvIds.contains(t.id))
         .toList();
 
+    // 2. Busca os talhões de CUBAGEM (procurando a atividade irmã)
     List<Talhao> talhoesCubagemEncontrados = [];
+    
     final todasAtividadesDoProjeto =
         await _atividadeRepository.getAtividadesDoProjeto(_projetoSelecionado!.id!);
+        
+    // Tenta encontrar uma atividade que contenha "CUB" no nome (ex: "Cubagem Rigorosa")
     final atividadeCub = todasAtividadesDoProjeto
         .cast<Atividade?>()
         .firstWhere((a) => a?.tipo.toUpperCase().contains('CUB') ?? false,
             orElse: () => null);
 
     if (atividadeCub != null) {
+      // Se achou a atividade de cubagem, busca a fazenda CORRESPONDENTE (pelo nome)
       final fazendasDaAtividadeCub =
           await _fazendaRepository.getFazendasDaAtividade(atividadeCub.id!);
+          
       final fazendaCub = fazendasDaAtividadeCub
           .cast<Fazenda?>()
           .firstWhere((f) => f?.nome == _fazendaSelecionada!.nome,
               orElse: () => null);
 
       if (fazendaCub != null) {
+        // Se achou a fazenda na cubagem, pega os talhões dela
         final todosTalhoesDaFazendaCub =
             await _talhaoRepository.getTalhoesDaFazenda(
                 fazendaCub.id, fazendaCub.atividadeId);
+                
         final todasCubagens = await _cubagemRepository.getTodasCubagens();
+        
+        // Filtra talhões que tenham árvores com altura total > 0 (cubagem feita)
         final talhoesCompletosCubIds = todasCubagens
             .where((c) => c.alturaTotal > 0 && c.talhaoId != null)
             .map((c) => c.talhaoId!)
             .toSet();
+            
         talhoesCubagemEncontrados = todosTalhoesDaFazendaCub
             .where((t) => talhoesCompletosCubIds.contains(t.id))
             .toList();
@@ -259,6 +274,10 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
 
   @override
   Widget build(BuildContext context) {
+    // CORES BASE
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color cardColor = isDark ? const Color(0xFF1E293B) : Colors.white; // Azul/Cinza escuro ou Branco
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Análise Volumétrica'),
@@ -283,8 +302,11 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 90),
               children: [
+                // --- CARD DE FILTROS ---
                 Card(
                   elevation: 2,
+                  color: cardColor,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
@@ -301,7 +323,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                               .toList(),
                           onChanged: _onProjetoSelecionado,
                           decoration:
-                              const InputDecoration(border: OutlineInputBorder()),
+                              const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                         ),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<Atividade>(
@@ -320,7 +342,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                               ? null
                               : _onAtividadeSelecionada,
                           decoration:
-                              const InputDecoration(border: OutlineInputBorder()),
+                              const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                         ),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<Fazenda>(
@@ -339,7 +361,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                               ? null
                               : _onFazendaSelecionada,
                           decoration:
-                              const InputDecoration(border: OutlineInputBorder()),
+                              const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                         ),
                       ],
                     ),
@@ -351,6 +373,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                   subtitle: 'Serão usados para gerar a equação de volume.',
                   talhoesDisponiveis: _talhoesComCubagemDisponiveis,
                   talhoesSelecionadosSet: _talhoesCubadosSelecionados,
+                  cardColor: cardColor,
                 ),
                 const SizedBox(height: 16),
                 _buildTalhaoSelectionCard(
@@ -358,19 +381,21 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                   subtitle: 'A equação será aplicada nestes talhões.',
                   talhoesDisponiveis: _talhoesComInventarioDisponiveis,
                   talhoesSelecionadosSet: _talhoesInventarioSelecionados,
+                  cardColor: cardColor,
                 ),
                 if (_analiseResult != null) ...[
-                  _buildResultCard(_analiseResult!.resultadoRegressao, _analiseResult!.diagnosticoRegressao),
-                  _buildProductionTable(_analiseResult!),
-                  
-                  // GRAFICOS ATUALIZADOS AQUI
                   const SizedBox(height: 16),
-                  _buildProducaoComercialCard(_analiseResult!),
+                  _buildResultCard(_analiseResult!.resultadoRegressao, _analiseResult!.diagnosticoRegressao, cardColor),
                   const SizedBox(height: 16),
-                  _buildVolumePorCodigoCard(_analiseResult!),
+                  _buildProductionTable(_analiseResult!, cardColor),
+                  const SizedBox(height: 16),
+                  _buildProducaoComercialCard(_analiseResult!, cardColor),
+                  const SizedBox(height: 16),
+                  _buildVolumePorCodigoCard(_analiseResult!, cardColor),
                 ]
               ],
             ),
+      // --- BOTÃO FLUTUANTE ---
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isAnalyzing ? null : _gerarAnaliseCompleta,
         icon: _isAnalyzing
@@ -378,9 +403,10 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2))
-            : const Icon(Icons.functions),
-        label: Text(_isAnalyzing ? 'Analisando...' : 'Gerar Análise Completa'),
+                    color: Color(0xFF023853), strokeWidth: 2))
+            : const Icon(Icons.functions, color: Color(0xFF023853)),
+        label: Text(_isAnalyzing ? 'Analisando...' : 'Gerar Análise Completa', style: const TextStyle(color: Color(0xFF023853), fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFFEBE4AB), // Dourado
       ),
     );
   }
@@ -390,15 +416,18 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     required String subtitle,
     required List<Talhao> talhoesDisponiveis,
     required Set<int> talhoesSelecionadosSet,
+    required Color cardColor,
   }) {
     return Card(
       elevation: 2,
+      color: cardColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
             Text(subtitle, style: const TextStyle(color: Colors.grey)),
             const Divider(),
             if (_isLoading)
@@ -443,7 +472,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
-  Widget _buildResultCard(Map<String, dynamic> resultados, Map<String, dynamic> diagnostico) {
+  Widget _buildResultCard(Map<String, dynamic> resultados, Map<String, dynamic> diagnostico, Color cardColor) {
     final syx = diagnostico['syx'] as double?;
     final syxPercent = diagnostico['syx_percent'] as double?;
     final shapiroPValue = diagnostico['shapiro_wilk_p_value'] as double?;
@@ -463,31 +492,42 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     }
 
     return Card(
-      elevation: 2,
-      color: const Color.fromARGB(0, 29, 2, 73),
+      elevation: 4,
+      color: cardColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Resultados da Regressão',
-                style: Theme.of(context).textTheme.titleLarge),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
             const Divider(),
             Text('Equação Gerada:',
                 style: Theme.of(context).textTheme.titleMedium),
-            SelectableText(
-              resultados['equacao'],
-              style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                  backgroundColor: Color.fromARGB(103, 236, 235, 235)),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.grey.withOpacity(0.3))
+              ),
+              child: SelectableText(
+                resultados['equacao'],
+                style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             _buildStatRow('Coeficiente (R²):',
                 (resultados['R2'] as double).toStringAsFixed(4)),
             _buildStatRow(
                 'Nº de Amostras Usadas:', '${resultados['n_amostras']}'),
-            const Divider(height: 20),
+            const Divider(height: 24),
             Text('Diagnóstico do Modelo',
                 style: Theme.of(context).textTheme.titleMedium),
             _buildStatRow('Erro Padrão Residual (Syx):',
@@ -503,17 +543,19 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
-  Widget _buildProductionTable(AnaliseVolumetricaCompletaResult result) {
+  Widget _buildProductionTable(AnaliseVolumetricaCompletaResult result, Color cardColor) {
     final totais = result.totaisInventario;
     return Card(
         elevation: 2,
+        color: cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Totais do Inventário',
-                      style: Theme.of(context).textTheme.titleLarge),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                   const Divider(),
                   _buildStatRow('Talhões Aplicados:', '${totais['talhoes']}'),
                   _buildStatRow('Volume por Hectare:',
@@ -529,24 +571,25 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                 ])));
   }
 
-  // >>> GRÁFICO 1: PRODUÇÃO COMERCIAL (ATUALIZADO) <<<
-  Widget _buildProducaoComercialCard(AnaliseVolumetricaCompletaResult result) {
+  Widget _buildProducaoComercialCard(AnaliseVolumetricaCompletaResult result, Color cardColor) {
     final data = result.producaoPorSortimento;
     if (data.isEmpty) return const SizedBox.shrink();
 
-    // Configuração de Cores para Alto Contraste
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const Color corTexto = Colors.white;
+    final Color corTextoEixo = isDark ? Colors.white70 : const Color(0xFF023853);
 
-    // Gradiente Ciano -> Azul
     final LinearGradient gradienteBarras = LinearGradient(
       colors: [Colors.cyan.shade300, Colors.blue.shade900],
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
     );
-
-    // Maior valor para definir altura do track
-    final double maxY = data.map((e) => e.volumeHa).reduce((a, b) => a > b ? a : b);
+    
+    // Calcula o máximo para desenhar o fundo
+    double maxY = 0.0;
+    if (data.isNotEmpty) {
+       maxY = data.map((e) => e.volumeHa).reduce((a, b) => a > b ? a : b);
+    }
+    if (maxY == 0) maxY = 1.0;
 
     final barGroups = data.asMap().entries.map((entry) {
       return BarChartGroupData(
@@ -554,10 +597,9 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         barRods: [
           BarChartRodData(
               toY: entry.value.volumeHa,
-              gradient: gradienteBarras, // Gradiente aplicado
+              gradient: gradienteBarras,
               width: 24,
               borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), topRight: Radius.circular(6)),
-              // Fundo da barra
               backDrawRodData: BackgroundBarChartRodData(
                   show: true,
                   toY: maxY * 1.1,
@@ -570,13 +612,15 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
 
     return Card(
       elevation: 2,
+      color: cardColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Produção Comercial Estimada',
-                style: Theme.of(context).textTheme.titleLarge),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
             const Divider(),
             SizedBox(
               height: 220,
@@ -599,7 +643,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                               width: 60,
                               child: Text(
                                 data[value.toInt()].nome,
-                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: corTexto),
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: corTextoEixo),
                                 textAlign: TextAlign.center,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -614,7 +658,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                   borderData: FlBorderData(show: false),
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
-                      getTooltipColor: (_) => const Color(0xFF1E293B), // Fundo Escuro Fixo
+                      getTooltipColor: (_) => const Color(0xFF1E293B),
                       tooltipMargin: 8,
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final item = data[groupIndex];
@@ -636,7 +680,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
             ),
             const SizedBox(height: 20),
             _buildDetailedTable(
-              corTexto: const Color.fromARGB(255, 4, 3, 61), // <--- AQUI VOCÊ ESCOLHE A COR AGORA
               headers: ['Sortimento', 'Volume (m³/ha)', '% Total'],
               rows: data
                   .map((item) => [
@@ -645,6 +688,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                         '${item.porcentagem.toStringAsFixed(1)}%',
                       ])
                   .toList(),
+              corTexto: isDark ? Colors.white70 : Colors.black87,
             ),
           ],
         ),
@@ -652,22 +696,24 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
-  // >>> GRÁFICO 2: VOLUME POR CÓDIGO (ATUALIZADO) <<<
-  Widget _buildVolumePorCodigoCard(AnaliseVolumetricaCompletaResult result) {
+  Widget _buildVolumePorCodigoCard(AnaliseVolumetricaCompletaResult result, Color cardColor) {
     final data = result.volumePorCodigo;
     if (data.isEmpty) return const SizedBox.shrink();
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const Color corTexto = Colors.white;
+    final Color corTextoEixo = isDark ? Colors.white70 : const Color(0xFF023853);
 
-    // Gradiente Teal para diferenciar (mas ainda estilo Neon)
     final LinearGradient gradienteBarras = LinearGradient(
       colors: [Colors.teal.shade300, Colors.teal.shade900], 
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
     );
 
-    final double maxY = data.map((e) => e.volumeTotal).reduce((a, b) => a > b ? a : b);
+    double maxY = 0.0;
+    if (data.isNotEmpty) {
+      maxY = data.map((e) => e.volumeTotal).reduce((a, b) => a > b ? a : b);
+    }
+    if (maxY == 0) maxY = 1.0;
 
     final barGroups = data.asMap().entries.map((entry) {
       return BarChartGroupData(
@@ -690,13 +736,15 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
 
     return Card(
       elevation: 2,
+      color: cardColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Contribuição Volumétrica por Código',
-                style: Theme.of(context).textTheme.titleLarge),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
             const Divider(),
             SizedBox(
                 height: 220,
@@ -717,7 +765,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                                 padding: const EdgeInsets.only(top: 8.0),
                                 child: Text(
                                     data[value.toInt()].codigo,
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: corTexto)
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: corTextoEixo)
                                 ),
                               );
                             }
@@ -756,6 +804,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                         '${item.porcentagem.toStringAsFixed(1)}%',
                       ])
                   .toList(),
+              corTexto: isDark ? Colors.white70 : Colors.black87,
             ),
           ],
         ),
@@ -764,47 +813,47 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   }
 
   Widget _buildDetailedTable({
-  required List<String> headers,
-  required List<List<String>> rows,
-  Color corTexto = Colors.white, // Adicionamos a opção de cor (padrão branco)
-}) {
-  return SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    child: DataTable(
-      columnSpacing: 24,
-      headingRowHeight: 32,
-      // Fundo do cabeçalho cinza claro
-      headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
-      columns: headers
-          .map((h) => DataColumn(
-              label: Text(h,
-                  // Forçamos PRETO no cabeçalho para dar contraste com o fundo cinza claro
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black))))
-          .toList(),
-      rows: rows
-          .map((row) => DataRow(
-              cells: row
-                  .map((cell) => DataCell(
-                        // Aqui aplicamos a cor que você escolher
-                        Text(cell, style: TextStyle(color: corTexto)), 
-                      ))
-                  .toList()))
-          .toList(),
-    ),
-  );
-}
+    required List<String> headers,
+    required List<List<String>> rows,
+    required Color corTexto,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color headerBg = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
+    final Color headerText = isDark ? Colors.white : Colors.black;
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 24,
+        headingRowHeight: 32,
+        headingRowColor: WidgetStateProperty.all(headerBg),
+        columns: headers
+            .map((h) => DataColumn(
+                label: Text(h, style: TextStyle(fontWeight: FontWeight.bold, color: headerText))))
+            .toList(),
+        rows: rows
+            .map((row) =>
+                DataRow(cells: row.map((cell) => DataCell(Text(cell, style: TextStyle(color: corTexto)))).toList()))
+            .toList(),
+      ),
+    );
+  }
 
   Widget _buildStatRow(String label, String value, {Color? valueColor}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color labelColor = isDark ? Colors.white70 : Colors.black54;
+    final Color valColor = valueColor ?? (isDark ? Colors.white : Colors.black);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
-              child: Text(label, style: const TextStyle(color: Colors.black54))),
+              child: Text(label, style: TextStyle(color: labelColor))),
           Text(value,
               style: TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 15, color: valueColor)),
+                  fontWeight: FontWeight.bold, fontSize: 15, color: valColor)),
         ],
       ),
     );

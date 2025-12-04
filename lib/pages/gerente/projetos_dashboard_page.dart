@@ -1,3 +1,6 @@
+// lib/pages/gerente/projetos_dashboard_page.dart
+
+import 'dart:math'; // Import necessário para o max
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -129,6 +132,8 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
       },
     );
   }
+
+  // --- FILTROS ---
 
   Widget _buildFiltros(BuildContext context) {
     final filterProvider = context.watch<DashboardFilterProvider>();
@@ -430,6 +435,8 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
+  // --- CARDS E WIDGETS AUXILIARES ---
+
   Widget _buildSummaryCard({
     required BuildContext context,
     required String title,
@@ -609,11 +616,27 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
+  // --- GRÁFICO ATUALIZADO (Estilo Neon) ---
   Widget _buildColetasPorAtividadeChartCard(
       BuildContext context, Map<String, int> data) {
     final entries = data.entries.toList();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final corTexto = isDark ? Colors.white : Colors.black;
+    
+    // Texto do Eixo: Branco no modo escuro, Azul Escuro no modo claro
+    final Color corTexto = isDark ? Colors.white70 : const Color(0xFF023853);
+
+    // Gradiente Neon (Ciano -> Azul Escuro)
+    final LinearGradient gradienteBarras = LinearGradient(
+      colors: [Colors.cyan.shade300, Colors.blue.shade900],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    );
+    
+    double maxY = 0.0;
+    if (entries.isNotEmpty) {
+      maxY = entries.map((e) => e.value.toDouble()).reduce(max);
+    }
+    if (maxY == 0) maxY = 1.0;
 
     final barGroups = entries.asMap().entries.map((entry) {
       return BarChartGroupData(
@@ -621,8 +644,19 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
         barRods: [
           BarChartRodData(
               toY: entry.value.value.toDouble(),
-              color: Colors.indigo,
-              borderRadius: BorderRadius.circular(4))
+              gradient: gradienteBarras, // Gradiente
+              width: 18,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(6), 
+                topRight: Radius.circular(6)
+              ),
+              // Fundo da barra (track)
+              backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: maxY * 1.2,
+                color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade200,
+              )
+          )
         ],
       );
     }).toList();
@@ -634,18 +668,22 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
         child: Column(
           children: [
             Text("Coletas Concluídas por Atividade",
-                style: Theme.of(context).textTheme.titleLarge),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 24),
             SizedBox(
               height: 250,
               child: BarChart(
                 BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxY * 1.2,
                   barGroups: barGroups,
                   titlesData: FlTitlesData(
                     topTitles: const AxisTitles(
                         sideTitles: SideTitles(showTitles: false)),
                     rightTitles: const AxisTitles(
                         sideTitles: SideTitles(showTitles: false)),
+                    // Eixo Esquerdo oculto para visual limpo
+                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
@@ -658,47 +696,35 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                             padding: const EdgeInsets.only(top: 4.0),
                             child: Text(
                               entries[value.toInt()].key,
-                              style: TextStyle(fontSize: 10, color: corTexto),
+                              style: TextStyle(fontSize: 10, color: corTexto, fontWeight: FontWeight.bold),
                             ),
                           );
                         },
                       ),
                     ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 28,
-                        getTitlesWidget: (value, meta) {
-                           if (value == 0) return const Text('');
-                           return Text(value.toInt().toString(), style: TextStyle(fontSize: 10, color: corTexto));
-                        }
-                      ),
-                    ),
                   ),
-                  gridData: FlGridData(
-                    show: true,
-                    getDrawingHorizontalLine: (value) => FlLine(
-                      color: isDark ? Colors.white10 : Colors.black12,
-                      strokeWidth: 1,
-                    ),
-                  ),
+                  gridData: const FlGridData(show: false), // Sem grade
+                  borderData: FlBorderData(show: false),   // Sem borda
+                  
+                  // Tooltip Escuro
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
-                      getTooltipColor: (_) => Colors.blueGrey.shade900,
+                      getTooltipColor: (_) => const Color(0xFF1E293B), // Sempre escuro
+                      tooltipMargin: 8,
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final atividade = entries[groupIndex].key;
                         final total = entries[groupIndex].value;
                         return BarTooltipItem(
                           '$atividade\n',
                           const TextStyle(
-                              color: Colors.white, fontWeight: FontWeight.bold),
+                              color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12),
                           children: <TextSpan>[
                             TextSpan(
                               text: total.toString(),
                               style: const TextStyle(
-                                color: Colors.yellow,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
+                                color: Colors.cyanAccent, // Valor Neon
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
                               ),
                             ),
                           ],
@@ -721,6 +747,10 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     final headerColor = Theme.of(context).colorScheme.primary.withOpacity(0.8);
     final rowColorTotal = Theme.of(context).colorScheme.secondary.withOpacity(0.2);
     
+    // Adaptação de cor de texto para os cabeçalhos
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerTextColor = isDark ? Colors.white : Colors.white; // Sempre branco sobre o primaryColor
+
     return Card(
       elevation: 2,
       child: Column(
@@ -737,13 +767,13 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
               columnSpacing: 18.0,
               headingRowColor: MaterialStateProperty.all(headerColor),
               columns: const [
-                DataColumn(label: Text('Atividade')),
-                DataColumn(label: Text('Fazenda')),
-                DataColumn(label: Text('Pendentes'), numeric: true),
-                DataColumn(label: Text('Iniciadas'), numeric: true),
-                DataColumn(label: Text('Concluídas'), numeric: true),
-                DataColumn(label: Text('Exportadas'), numeric: true),
-                DataColumn(label: Text('Total'), numeric: true),
+                DataColumn(label: Text('Atividade', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Fazenda', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Pendentes', style: TextStyle(color: Colors.white)), numeric: true),
+                DataColumn(label: Text('Iniciadas', style: TextStyle(color: Colors.white)), numeric: true),
+                DataColumn(label: Text('Concluídas', style: TextStyle(color: Colors.white)), numeric: true),
+                DataColumn(label: Text('Exportadas', style: TextStyle(color: Colors.white)), numeric: true),
+                DataColumn(label: Text('Total', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), numeric: true),
               ],
               rows: [
                 ...data.map((d) => DataRow(cells: [
@@ -804,13 +834,13 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
               columnSpacing: 18.0,
               headingRowColor: MaterialStateProperty.all(headerColor),
               columns: const [
-                DataColumn(label: Text('Atividade')),
-                DataColumn(label: Text('Fazenda')),
-                DataColumn(label: Text('Pendentes'), numeric: true),
-                DataColumn(label: Text('Iniciadas'), numeric: true),
-                DataColumn(label: Text('Concluídas'), numeric: true),
-                DataColumn(label: Text('Exportadas'), numeric: true),
-                DataColumn(label: Text('Total'), numeric: true),
+                DataColumn(label: Text('Atividade', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Fazenda', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Pendentes', style: TextStyle(color: Colors.white)), numeric: true),
+                DataColumn(label: Text('Iniciadas', style: TextStyle(color: Colors.white)), numeric: true),
+                DataColumn(label: Text('Concluídas', style: TextStyle(color: Colors.white)), numeric: true),
+                DataColumn(label: Text('Exportadas', style: TextStyle(color: Colors.white)), numeric: true),
+                DataColumn(label: Text('Total', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), numeric: true),
               ],
               rows: [
                 ...data.map((d) => DataRow(cells: [

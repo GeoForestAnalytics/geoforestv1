@@ -1,4 +1,4 @@
-// lib/pages/menu/paywall_page.dart (VERSÃO FINAL - MODO WHATSAPP)
+// lib/pages/menu/paywall_page.dart (VERSÃO FINAL - CONTRASTE CORRIGIDO)
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -38,8 +38,8 @@ class _PaywallPageState extends State<PaywallPage> {
     PlanoAssinatura(
       nome: "Básico",
       descricao: "Para equipes pequenas e projetos iniciais.",
-      valorAnual: "R\$ 5.000",
-      valorMensal: "R\$ 600",
+      valorAnual: "", //"R\$ 5.000",
+      valorMensal: "", //"R\$ 600",
       icone: Icons.person_outline,
       cor: Colors.blue,
       features: ["3 Smartphones", "Exportação de dados", "Suporte por e-mail"],
@@ -47,8 +47,8 @@ class _PaywallPageState extends State<PaywallPage> {
     PlanoAssinatura(
       nome: "Profissional",
       descricao: "Ideal para empresas em crescimento.",
-      valorAnual: "R\$ 9.000",
-      valorMensal: "R\$ 850",
+      valorAnual: "", //"R\$ 9.000",
+      valorMensal: "", //"R\$ 850",
       icone: Icons.business_center_outlined,
       cor: Colors.green,
       features: ["7 Smartphones", "Módulo de Análise e Relatórios", "Suporte prioritário"],
@@ -56,8 +56,8 @@ class _PaywallPageState extends State<PaywallPage> {
     PlanoAssinatura(
       nome: "Premium",
       descricao: "A solução completa para grandes operações.",
-      valorAnual: "R\$ 15.000",
-      valorMensal: "R\$ 1.700",
+      valorAnual: "", //"R\$ 15.000",
+      valorMensal: "", //"R\$ 1.700",
       icone: Icons.star_border_outlined,
       cor: Colors.purple,
       features: ["Dispositivos ilimitados", "Todos os Módulos", "Delegação de Projetos", "Gerente de conta dedicado"],
@@ -98,6 +98,10 @@ class _PaywallPageState extends State<PaywallPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Detecta o tema para ajustar as cores do texto de fundo
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color subtitleColor = isDark ? Colors.white70 : Colors.black54;
+
     return Scaffold(
       appBar: AppBar(title: const Text("Escolha seu Plano"), centerTitle: true),
       body: ListView(
@@ -106,16 +110,16 @@ class _PaywallPageState extends State<PaywallPage> {
           const Text(
             "Aproveite o Futuro em Análises e Coletas Florestais",
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color.fromARGB(255, 45, 114, 4)),
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF66BB6A)), // Verde mais claro para contrastar
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             "Escolha um plano para destravar todos os recursos e continuar crescendo.",
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, color: Colors.black54),
+            style: TextStyle(fontSize: 16, color: subtitleColor), // Cor dinâmica
           ),
           const SizedBox(height: 24),
-          // Mapeia os planos para o widget PlanoCard, passando a função de contato
+          // Mapeia os planos para o widget PlanoCard
           ...planos.map((plano) => PlanoCard(
                 plano: plano,
                 onSelecionar: (planoSelecionado, tipoCobranca) => 
@@ -127,7 +131,7 @@ class _PaywallPageState extends State<PaywallPage> {
   }
 }
 
-// Widget do Card, agora recebe a função com os parâmetros corretos.
+// Widget do Card
 class PlanoCard extends StatelessWidget {
   final PlanoAssinatura plano;
   final Function(PlanoAssinatura plano, String tipoCobranca) onSelecionar;
@@ -140,8 +144,17 @@ class PlanoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Detecta o tema dentro do Card
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Cores adaptativas para o conteúdo do card
+    final Color descriptionColor = isDark ? Colors.white60 : Colors.black54;
+    final Color featureTextColor = isDark ? Colors.white70 : Colors.black87;
+    final Color cardBgColor = isDark ? const Color(0xFF1E293B) : Colors.white; // Azul escuro ou Branco
+
     return Card(
       elevation: 4,
+      color: cardBgColor, // Fundo do card explícito
       margin: const EdgeInsets.only(bottom: 20),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
@@ -161,16 +174,21 @@ class PlanoCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               plano.descricao,
-              style: const TextStyle(fontSize: 15, color: Colors.black54),
+              style: TextStyle(fontSize: 15, color: descriptionColor), // Cor corrigida
             ),
             const Divider(height: 32),
             ...plano.features.map((feature) => Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: Row(
                     children: [
-                      Icon(Icons.check_circle_outline, size: 20, color: Colors.green.shade700),
+                      Icon(Icons.check_circle_outline, size: 20, color: Colors.green.shade400),
                       const SizedBox(width: 12),
-                      Expanded(child: Text(feature, style: const TextStyle(fontSize: 16))),
+                      Expanded(
+                        child: Text(
+                          feature, 
+                          style: TextStyle(fontSize: 16, color: featureTextColor), // Cor corrigida
+                        ),
+                      ),
                     ],
                   ),
                 )),
@@ -183,8 +201,10 @@ class PlanoCard extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       side: BorderSide(color: plano.cor),
+                      // Garante que o texto tenha a cor do plano ou branco, para não ficar escuro
+                      foregroundColor: isDark ? Colors.white : plano.cor,
                     ),
-                    child: Text("${plano.valorMensal}/mês"),
+                    child: Text("${plano.valorMensal}Mensal"),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -193,10 +213,10 @@ class PlanoCard extends StatelessWidget {
                     onPressed: () => onSelecionar(plano, "Anual"),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: plano.cor,
-                      foregroundColor: Colors.white,
+                      foregroundColor: Colors.white, // Texto sempre branco no botão cheio
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
-                    child: Text("${plano.valorAnual}/ano"),
+                    child: Text("${plano.valorAnual}Anual"),
                   ),
                 ),
               ],

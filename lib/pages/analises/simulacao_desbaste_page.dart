@@ -211,7 +211,7 @@ class _SimulacaoDesbastePageState extends State<SimulacaoDesbastePage> {
               },
               border: TableBorder(
                 horizontalInside: BorderSide(
-                  color: Colors.grey.shade300,
+                  color: const Color.fromARGB(255, 224, 224, 224),
                   width: 1,
                 ),
               ),
@@ -253,7 +253,7 @@ class _SimulacaoDesbastePageState extends State<SimulacaoDesbastePage> {
   TableRow _buildHeaderRow() {
     return TableRow(
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: const Color.fromARGB(237, 131, 146, 160),
       ),
       children: [
         _buildHeaderCell('Parâmetro'),
