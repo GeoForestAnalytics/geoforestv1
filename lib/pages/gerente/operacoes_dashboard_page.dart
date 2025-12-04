@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import 'package:collection/collection.dart'; // Import necessário para .maxOrNull ou reduce
+import 'package:collection/collection.dart'; 
 
 import 'package:geoforestv1/providers/operacoes_provider.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
@@ -38,7 +38,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
   Widget build(BuildContext context) {
     return Consumer<OperacoesProvider>(
       builder: (context, provider, child) {
-        
         final gerenteProvider = context.watch<GerenteProvider>();
         if (gerenteProvider.isLoading && gerenteProvider.diariosSincronizados.isEmpty) {
            return const Center(child: CircularProgressIndicator());
@@ -46,33 +45,21 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
         
         Widget bodyContent;
         if (provider.diariosFiltrados.isEmpty && gerenteProvider.diariosSincronizados.isNotEmpty) {
-          bodyContent = const Center(
-            child: Text(
-              "Nenhum diário encontrado para os filtros selecionados.",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16),
-            ),
-          );
+          bodyContent = const Center(child: Text("Nenhum diário encontrado para os filtros selecionados.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16)));
         } else if (gerenteProvider.diariosSincronizados.isEmpty) {
-          bodyContent = const Center(
-            child: Text(
-              "Nenhum diário de campo foi sincronizado ainda.",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          );
+          bodyContent = const Center(child: Text("Nenhum diário de campo foi sincronizado ainda.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: Colors.grey)));
         } else {
            bodyContent = ListView(
             padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
             children: [
               _buildKpiCards(context, provider.kpis),
               const SizedBox(height: 24),
-              // Aqui chamamos o widget atualizado
               _buildDespesasChart(context, provider.composicaoDespesas),
               const SizedBox(height: 24),
               _buildCustoVeiculoTable(context, provider.custosPorVeiculo),
               const SizedBox(height: 24),
-              _buildHistoricoDiariosTable(context, provider.diariosFiltrados),
+              // Passa o mapa de produção para a tabela
+              _buildHistoricoDiariosTable(context, provider.diariosFiltrados, provider.producaoPorDiario),
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 icon: const Icon(Icons.download_outlined),
@@ -103,6 +90,8 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
+  // ... (MÉTODOS DE FILTROS - buildFiltros, dropdowns, datepicker - MANTIDOS IGUAIS) ...
+  // Para economizar espaço, estou omitindo aqui, mas você deve manter os que já funcionam.
   Widget _buildFiltros(BuildContext context) {
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -142,7 +131,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
       ),
     );
   }
-
+  
   Widget _buildPeriodoDropdown(BuildContext context) {
     final filterProvider = context.watch<OperacoesFilterProvider>();
     return DropdownButtonFormField<PeriodoFiltro>(
@@ -222,10 +211,8 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
         const SizedBox(height: 16),
         Row(
           children: [
-            // Volta para "Coletas Realizadas" conforme solicitado
             Expanded(child: _buildKpiCard('Coletas Realizadas', kpis.coletasRealizadas.toString(), Icons.checklist, Colors.orange)),
             const SizedBox(width: 16),
-            // Volta para "Custo / Coleta" conforme solicitado
             Expanded(child: _buildKpiCard('Custo / Coleta', _currencyFormat.format(kpis.custoPorColeta), Icons.attach_money, Colors.red)),
           ],
         ),
@@ -267,9 +254,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
-  // =========================================================
-  // =============== GRÁFICO ATUALIZADO (NEON) ===============
-  // =========================================================
   Widget _buildDespesasChart(BuildContext context, Map<String, double> composicaoDespesas) {
     final despesasValidas = Map.fromEntries(
       composicaoDespesas.entries.where((entry) => entry.value > 0)
@@ -286,11 +270,9 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
       );
     }
 
-    // Configuração de Tema e Cores
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final Color corTextoEixo = isDark ? Colors.white70 : const Color(0xFF023853);
 
-    // Gradiente "Neon"
     final LinearGradient gradienteBarras = LinearGradient(
       colors: [Colors.cyan.shade300, Colors.blue.shade900],
       begin: Alignment.topCenter,
@@ -310,13 +292,12 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
         barRods: [
           BarChartRodData(
             toY: entry.value,
-            gradient: gradienteBarras, // Usa o gradiente
+            gradient: gradienteBarras,
             width: 22,
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(6),
               topRight: Radius.circular(6),
             ),
-            // Adiciona o fundo (track)
             backDrawRodData: BackgroundBarChartRodData(
                 show: true,
                 toY: maxY * 1.2,
@@ -451,7 +432,12 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
-  Widget _buildHistoricoDiariosTable(BuildContext context, List<DiarioDeCampo> diarios) {
+  // TABELA ATUALIZADA: Agora mostra a produção por dia
+  Widget _buildHistoricoDiariosTable(
+    BuildContext context, 
+    List<DiarioDeCampo> diarios, 
+    Map<int, int> producaoPorDiario
+  ) {
     if (diarios.isEmpty) return const SizedBox.shrink();
     final kpis = context.watch<OperacoesProvider>().kpis;
     
@@ -468,20 +454,30 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
+                columnSpacing: 20.0,
                 columns: const [
                   DataColumn(label: Text('Data')),
                   DataColumn(label: Text('Líder')),
                   DataColumn(label: Text('Destino')),
+                  DataColumn(label: Text('Qtd'), numeric: true), // NOVA COLUNA
                   DataColumn(label: Text('Custo Total'), numeric: true),
+                  DataColumn(label: Text('R\$/Unid'), numeric: true), // NOVA COLUNA
                 ],
                 rows: [
                   ...diarios.map((d) {
                     final custoTotalDiario = (d.abastecimentoValor ?? 0) + (d.pedagioValor ?? 0) + (d.alimentacaoRefeicaoValor ?? 0) + (d.outrasDespesasValor ?? 0);
+                    
+                    // Pega a produção vinculada a este diário
+                    final qtdProduzida = producaoPorDiario[d.id] ?? 0;
+                    final custoUnitario = qtdProduzida > 0 ? custoTotalDiario / qtdProduzida : 0.0;
+
                     return DataRow(cells: [
                       DataCell(Text(DateFormat('dd/MM/yy').format(DateTime.parse(d.dataRelatorio)))),
                       DataCell(Text(d.nomeLider)),
                       DataCell(Text(d.localizacaoDestino ?? '')),
+                      DataCell(Text(qtdProduzida.toString())), // Mostra a produção
                       DataCell(Text(_currencyFormat.format(custoTotalDiario))),
+                      DataCell(Text(_currencyFormat.format(custoUnitario))), // Mostra o custo unitário
                     ]);
                   }).toList(),
                   DataRow(
@@ -490,7 +486,11 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                       DataCell(Text('${diarios.length} DIAS', style: const TextStyle(fontWeight: FontWeight.bold))),
                       const DataCell(Text('')),
                       const DataCell(Text('TOTAL', style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                      // KPI Global de Coletas Realizadas
+                      DataCell(Text(kpis.coletasRealizadas.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
                       DataCell(Text(_currencyFormat.format(kpis.custoTotalCampo), style: const TextStyle(fontWeight: FontWeight.bold))),
+                      // Custo médio global por coleta
+                      DataCell(Text(_currencyFormat.format(kpis.custoPorColeta), style: const TextStyle(fontWeight: FontWeight.bold))),
                     ]
                   ),
                 ],

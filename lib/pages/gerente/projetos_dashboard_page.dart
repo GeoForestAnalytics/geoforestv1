@@ -1,6 +1,6 @@
 // lib/pages/gerente/projetos_dashboard_page.dart
 
-import 'dart:math'; // Import necessário para o max
+import 'dart:math'; 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -13,6 +13,7 @@ import 'package:geoforestv1/services/export_service.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:geoforestv1/widgets/ranking_detalhado_chart.dart'; // Import do widget do gráfico
 
 class ProjetosDashboardPage extends StatefulWidget {
   const ProjetosDashboardPage({super.key});
@@ -23,7 +24,6 @@ class ProjetosDashboardPage extends StatefulWidget {
 
 class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
   final _exportService = ExportService();
-  // final NumberFormat _volumeFormat = NumberFormat("#,##0.00", "pt_BR"); // Removido pois o volume não é mais usado aqui
 
   @override
   void initState() {
@@ -79,10 +79,11 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
               const SizedBox(height: 24),
               _buildKpiGrid(context, metricsProvider),
               const SizedBox(height: 24),
-              // O antigo RankingCard pode ser mantido ou removido dependendo da sua preferência.
-              // Vou mantê-lo caso queira ver mais do que o Top 3, ou você pode comentar a linha abaixo.
+              
+              // Mantemos o ranking textual caso queira ver mais detalhes rápidos
               if (metricsProvider.progressoPorEquipe.isNotEmpty)
                 _buildRankingCard(context, metricsProvider.progressoPorEquipe),
+              
               const SizedBox(height: 24),
               if (metricsProvider.coletasPorAtividade.isNotEmpty)
                 _buildColetasPorAtividadeChartCard(
@@ -480,14 +481,15 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
+  // Grade de KPIs (2x2)
   Widget _buildKpiGrid(BuildContext context, DashboardMetricsProvider metrics) {
     return Column(
       children: [
         Row(
           children: [
-            // <<< CORREÇÃO: SUBSTITUI O VOLUME POR TOP 3 EQUIPES >>>
+            // --- MUDANÇA: CARD TOP 3 CLICÁVEL ---
             Expanded(
-              child: _buildTop3KpiCard(metrics.progressoPorEquipe, Colors.teal),
+              child: _buildTop3KpiCard(context, metrics, Colors.teal),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -526,58 +528,75 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
-  // --- NOVO WIDGET: Card Compacto de Top 3 Equipes ---
-  Widget _buildTop3KpiCard(Map<String, int> progressoPorEquipe, Color color) {
-    // Pega os top 3 do Map (já está ordenado no provider)
+  // --- NOVO WIDGET: Card Compacto de Top 3 Equipes (CLICÁVEL) ---
+  Widget _buildTop3KpiCard(BuildContext context, DashboardMetricsProvider metrics, Color color) {
+    final progressoPorEquipe = metrics.progressoPorEquipe;
     final top3 = progressoPorEquipe.entries.take(3).toList();
 
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Ícone de Liderança
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: color.withOpacity(0.15),
-              child: Icon(Icons.military_tech, color: color, size: 24),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          // Abre o gráfico passando os DADOS REAIS E COMPLETOS
+          showDialog(
+            context: context,
+            builder: (ctx) => RankingDetalhadoChart(
+              parcelas: metrics.parcelasFiltradas,
+              cubagens: metrics.cubagensFiltradasRaw, // <<< CORRIGIDO: Usa a lista RAW
             ),
-            const SizedBox(height: 8),
-            
-            // Título
-            Text('Top 3 Equipes',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14)),
-            
-            const SizedBox(height: 8),
-            
-            // Lista dos Top 3 (Compacta)
-            if (top3.isEmpty)
-              const Text("-", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))
-            else
-              Column(
-                children: top3.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final item = entry.value;
-                  final nome = item.key.split(' ').first; // Pega só o primeiro nome
-                  return Text(
-                    '${index + 1}. $nome (${item.value})',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: index == 0 ? FontWeight.bold : FontWeight.normal,
-                      color: index == 0 ? Colors.black87 : Colors.grey[700]
-                    ),
-                  );
-                }).toList(),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: color.withOpacity(0.15),
+                child: Icon(Icons.military_tech, color: color, size: 24),
               ),
-          ],
+              const SizedBox(height: 8),
+              
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Top 3 Equipes',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.bar_chart, size: 16, color: Colors.grey),
+                ],
+              ),
+              
+              const SizedBox(height: 8),
+              
+              if (top3.isEmpty)
+                const Text("-", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))
+              else
+                Column(
+                  children: top3.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final item = entry.value;
+                    final nome = item.key.split(' ').first; 
+                    return Text(
+                      '${index + 1}. $nome (${item.value})',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: index == 0 ? FontWeight.bold : FontWeight.normal,
+                        color: index == 0 ? Colors.black87 : Colors.grey[700]
+                      ),
+                    );
+                  }).toList(),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -677,10 +696,8 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     final entries = data.entries.toList();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    // Texto do Eixo: Branco no modo escuro, Azul Escuro no modo claro
     final Color corTexto = isDark ? Colors.white70 : const Color(0xFF023853);
 
-    // Gradiente Neon (Ciano -> Azul Escuro)
     final LinearGradient gradienteBarras = LinearGradient(
       colors: [Colors.cyan.shade300, Colors.blue.shade900],
       begin: Alignment.topCenter,
@@ -699,13 +716,12 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
         barRods: [
           BarChartRodData(
               toY: entry.value.value.toDouble(),
-              gradient: gradienteBarras, // Gradiente
+              gradient: gradienteBarras, 
               width: 18,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(6), 
                 topRight: Radius.circular(6)
               ),
-              // Fundo da barra (track)
               backDrawRodData: BackgroundBarChartRodData(
                 show: true,
                 toY: maxY * 1.2,
@@ -737,7 +753,6 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                         sideTitles: SideTitles(showTitles: false)),
                     rightTitles: const AxisTitles(
                         sideTitles: SideTitles(showTitles: false)),
-                    // Eixo Esquerdo oculto para visual limpo
                     leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
@@ -758,13 +773,12 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                       ),
                     ),
                   ),
-                  gridData: const FlGridData(show: false), // Sem grade
-                  borderData: FlBorderData(show: false),   // Sem borda
+                  gridData: const FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
                   
-                  // Tooltip Escuro
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
-                      getTooltipColor: (_) => const Color(0xFF1E293B), // Sempre escuro
+                      getTooltipColor: (_) => const Color(0xFF1E293B),
                       tooltipMargin: 8,
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final atividade = entries[groupIndex].key;
@@ -777,7 +791,7 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                             TextSpan(
                               text: total.toString(),
                               style: const TextStyle(
-                                color: Colors.cyanAccent, // Valor Neon
+                                color: Colors.cyanAccent,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w900,
                               ),
@@ -801,7 +815,7 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     
     final headerColor = Theme.of(context).colorScheme.primary.withOpacity(0.8);
     final rowColorTotal = Theme.of(context).colorScheme.secondary.withOpacity(0.2);
-    
+
     return Card(
       elevation: 2,
       child: Column(

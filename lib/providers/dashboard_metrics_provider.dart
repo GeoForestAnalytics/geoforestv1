@@ -1,4 +1,4 @@
-// lib/providers/dashboard_metrics_provider.dart (VERSÃO COMPLETA E OTIMIZADA)
+// lib/providers/dashboard_metrics_provider.dart
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
@@ -61,8 +61,11 @@ class DesempenhoFazendaTotais {
 }
 
 class DashboardMetricsProvider with ChangeNotifier {
+  // --- ESTADO INTERNO ---
   List<Parcela> _parcelasFiltradas = [];
-  List<CubagemArvore> _cubagensFiltradas = [];
+  
+  // CORREÇÃO: A variável _cubagensFiltradas estava faltando aqui
+  List<CubagemArvore> _cubagensFiltradas = []; 
 
   List<DesempenhoFazenda> _desempenhoPorCubagem = [];
   Map<String, int> _progressoPorEquipe = {};
@@ -78,7 +81,12 @@ class DashboardMetricsProvider with ChangeNotifier {
   int _totalCubagensConcluidas = 0;
   double _mediaDiariaColetas = 0.0;
 
+  // --- GETTERS PÚBLICOS ---
   List<Parcela> get parcelasFiltradas => _parcelasFiltradas;
+  
+  // Getter novo que você pediu para o gráfico
+  List<CubagemArvore> get cubagensFiltradasRaw => _cubagensFiltradas;
+
   List<DesempenhoFazenda> get desempenhoPorCubagem => _desempenhoPorCubagem;
   Map<String, int> get progressoPorEquipe => _progressoPorEquipe;
   Map<String, int> get coletasPorAtividade => _coletasPorAtividade;
@@ -95,38 +103,28 @@ class DashboardMetricsProvider with ChangeNotifier {
   final AnalysisService _analysisService = AnalysisService();
   final ParcelaRepository _parcelaRepository = ParcelaRepository();
 
-  // ✅ 1. ADICIONAR VARIÁVEIS DE CACHE
-  // Guardam o estado da última execução para comparação.
+  // Variáveis de cache para otimização
   List<Parcela> _lastUsedParcelas = [];
   List<CubagemArvore> _lastUsedCubagens = [];
   DashboardFilterProvider? _lastUsedFilterProvider;
 
-
-  /// ✅ PONTO DE ENTRADA PÚBLICO: Chamado pelo ProxyProvider para recalcular todas as métricas.
+  /// Ponto de entrada público
   Future<void> update(GerenteProvider gerenteProvider, DashboardFilterProvider filterProvider) async {
-    // ✅ 2. VERIFICAÇÃO DE MUDANÇAS (MEMOIZATION)
-    // Compara os dados e filtros atuais com os da última execução.
+    // Verificação de mudanças (Memoization)
     final bool hasDataChanged = !listEquals(gerenteProvider.parcelasSincronizadas, _lastUsedParcelas) ||
                                 !listEquals(gerenteProvider.cubagensSincronizadas, _lastUsedCubagens);
     
-    // A comparação de filtros precisa ser mais detalhada.
     final bool hasFilterChanged = _haveFiltersChanged(filterProvider);
 
-    // Se nem os dados brutos nem os filtros mudaram, não fazemos NADA.
     if (!hasDataChanged && !hasFilterChanged) {
-      debugPrint("METRICS PROVIDER UPDATE: Nenhum dado ou filtro mudou. Pulando recálculos.");
       return;
     }
     
-    debugPrint("METRICS PROVIDER UPDATE: Dados ou filtros mudaram. Recalculando métricas...");
-
-    // ✅ 3. ATUALIZAÇÃO DO CACHE
-    // Se houve mudança, atualizamos nosso cache com os novos dados e filtros.
+    // Atualiza cache
     _lastUsedParcelas = List.from(gerenteProvider.parcelasSincronizadas);
     _lastUsedCubagens = List.from(gerenteProvider.cubagensSincronizadas);
-    _lastUsedFilterProvider = filterProvider.clone(); // Usamos um clone para evitar problemas de referência
+    _lastUsedFilterProvider = filterProvider.clone();
 
-    // O restante da lógica de cálculo permanece exatamente a mesma.
     final lideres = {
       ...gerenteProvider.parcelasSincronizadas.map((p) => p.nomeLider),
       ...gerenteProvider.cubagensSincronizadas.map((c) => c.nomeLider),
@@ -144,6 +142,7 @@ class DashboardMetricsProvider with ChangeNotifier {
       gerenteProvider,
     );
 
+    // CORREÇÃO: Agora a variável _cubagensFiltradas existe e pode receber valor
     _cubagensFiltradas = _filtrarCubagens(
       gerenteProvider.cubagensSincronizadas,
       gerenteProvider.talhaoToProjetoMap,
@@ -164,9 +163,8 @@ class DashboardMetricsProvider with ChangeNotifier {
     notifyListeners();
   }
   
-  // ✅ 4. MÉTODO AUXILIAR PARA COMPARAÇÃO DETALHADA DOS FILTROS
   bool _haveFiltersChanged(DashboardFilterProvider newFilter) {
-    if (_lastUsedFilterProvider == null) return true; // Se é a primeira vez, sempre recalcula
+    if (_lastUsedFilterProvider == null) return true;
 
     final oldFilter = _lastUsedFilterProvider!;
     
@@ -177,9 +175,6 @@ class DashboardMetricsProvider with ChangeNotifier {
            newFilter.periodoPersonalizado != oldFilter.periodoPersonalizado ||
            !setEquals(newFilter.lideresSelecionados, oldFilter.lideresSelecionados);
   }
-
-
-  // MÉTODOS DE CÁLCULO (agora privados)
 
   void _recalcularParcelasFiltradas(
     List<Parcela> todasAsParcelas,
@@ -263,6 +258,8 @@ class DashboardMetricsProvider with ChangeNotifier {
         .toList();
 
     _totalAmostrasConcluidas = parcelasConcluidas.length;
+    
+    // CORREÇÃO: Uso da variável _cubagensFiltradas
     _totalCubagensConcluidas = _cubagensFiltradas.where((c) => c.alturaTotal > 0).length;
 
     if (parcelasConcluidas.isEmpty) {
@@ -308,6 +305,8 @@ class DashboardMetricsProvider with ChangeNotifier {
   void _recalcularMediaDiariaColetas(DashboardFilterProvider filter) {
     final List<DateTime> datasColetas = [
       ..._parcelasFiltradas.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada).map((p) => p.dataColeta),
+      
+      // CORREÇÃO: Uso da variável _cubagensFiltradas
       ..._cubagensFiltradas.where((c) => c.alturaTotal > 0).map((c) => c.dataColeta),
     ].whereType<DateTime>().toList();
 
@@ -342,6 +341,8 @@ class DashboardMetricsProvider with ChangeNotifier {
   void _recalcularColetasPorAtividade(GerenteProvider gerenteProvider) {
     final List<dynamic> todasAsColetasConcluidas = [
       ..._parcelasFiltradas.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada), 
+      
+      // CORREÇÃO: Uso da variável _cubagensFiltradas
       ..._cubagensFiltradas.where((c) => c.alturaTotal > 0)
     ];
     
@@ -397,6 +398,7 @@ class DashboardMetricsProvider with ChangeNotifier {
     Map<int, int> talhaoToAtividadeMap,
     Map<int, String> atividadeIdToTipoMap,
   ) {
+    // CORREÇÃO: Uso da variável _cubagensFiltradas
     if (_cubagensFiltradas.isEmpty) {
       _desempenhoPorCubagem = [];
       _desempenhoCubagemTotais = DesempenhoFazendaTotais();
@@ -441,6 +443,7 @@ class DashboardMetricsProvider with ChangeNotifier {
   void _recalcularProgressoPorEquipe() {
     final List<dynamic> todasColetasExportadas = [
       ..._parcelasFiltradas.where((p) => p.exportada == true),
+      // CORREÇÃO: Uso da variável _cubagensFiltradas
       ..._cubagensFiltradas.where((c) => c.exportada == true),
     ];
 
@@ -469,6 +472,7 @@ class DashboardMetricsProvider with ChangeNotifier {
   void _recalcularColetasPorMes() {
     final List<DateTime?> todasAsDatas = [
       ..._parcelasFiltradas.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada).map((p) => p.dataColeta),
+      // CORREÇÃO: Uso da variável _cubagensFiltradas
       ..._cubagensFiltradas.where((c) => c.alturaTotal > 0).map((c) => c.dataColeta),
     ];
 

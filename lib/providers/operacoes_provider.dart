@@ -8,6 +8,7 @@ import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
 import 'package:geoforestv1/models/parcela_model.dart'; 
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
+import 'package:intl/intl.dart'; // Importante para datas
 
 class KpiData {
   final int coletasRealizadas;
@@ -47,63 +48,108 @@ class OperacoesProvider with ChangeNotifier {
   Map<String, int> _coletasPorEquipe = {};
   List<CustoPorVeiculo> _custosPorVeiculo = [];
   List<DiarioDeCampo> _diariosFiltrados = [];
+  
+  // Mapa que vincula ID do Diário -> Quantidade Produzida naquele dia
+  Map<int, int> _producaoPorDiario = {};
 
   KpiData get kpis => _kpis;
   Map<String, double> get composicaoDespesas => _composicaoDespesas;
   Map<String, int> get coletasPorEquipe => _coletasPorEquipe;
   List<CustoPorVeiculo> get custosPorVeiculo => _custosPorVeiculo;
   List<DiarioDeCampo> get diariosFiltrados => _diariosFiltrados;
+  Map<int, int> get producaoPorDiario => _producaoPorDiario;
 
-  /// Atualiza os dados com base nos filtros e dados do GerenteProvider
   void update(GerenteProvider gerenteProvider, OperacoesFilterProvider filterProvider) {
     final todosOsDiarios = gerenteProvider.diariosSincronizados;
     final todasAsParcelas = gerenteProvider.parcelasSincronizadas;
     final todasAsCubagens = gerenteProvider.cubagensSincronizadas;
 
-    // 1. Filtra os diários
+    // 1. Filtra os diários (Base Financeira)
     _diariosFiltrados = _filtrarDiarios(todosOsDiarios, filterProvider);
     
-    // 2. Filtra Parcelas REALIZADAS (Status Concluída/Exportada)
-    final parcelasRealizadasList = todasAsParcelas.where((p) {
-      if (p.dataColeta == null) return false;
-      if (!_filtroDeData(p.dataColeta, filterProvider)) return false;
+    // 2. Prepara listas de tudo que foi REALIZADO (Concluído/Exportado) e tem data
+    final parcelasCandidatas = todasAsParcelas.where((p) => 
+      p.dataColeta != null && 
+      (p.status == StatusParcela.concluida || p.status == StatusParcela.exportada)
+    ).toList();
 
-      final liderMatch = filterProvider.lideresSelecionados.isEmpty ||
-                         (p.nomeLider != null && filterProvider.lideresSelecionados.contains(p.nomeLider!));
-      if (!liderMatch) return false;
+    final cubagensCandidatas = todasAsCubagens.where((c) => 
+      c.dataColeta != null && c.alturaTotal > 0
+    ).toList();
 
-      // REGRA DE OURO: Apenas Concluída ou Exportada
-      return p.status == StatusParcela.concluida || p.status == StatusParcela.exportada;
-    }).toList();
+    // 3. REALIZA O "CASAMENTO" (JOIN) DE DADOS
+    _producaoPorDiario = {};
+    int totalProducaoVinculada = 0;
 
-    // 3. Filtra Cubagens REALIZADAS (Altura > 0)
-    final cubagensRealizadasList = todasAsCubagens.where((c) {
-      if (c.dataColeta == null) return false;
-      if (!_filtroDeData(c.dataColeta, filterProvider)) return false;
+    for (var diario in _diariosFiltrados) {
+      if (diario.id == null) continue;
 
-      final liderMatch = filterProvider.lideresSelecionados.isEmpty ||
-                         (c.nomeLider != null && filterProvider.lideresSelecionados.contains(c.nomeLider!));
-      if (!liderMatch) return false;
+      // Normaliza dados do DIÁRIO para comparação segura
+      // Data vem como String 'YYYY-MM-DD'
+      DateTime? dataDiario;
+      try {
+        dataDiario = DateTime.parse(diario.dataRelatorio);
+      } catch (_) { continue; }
 
-      // REGRA DE OURO: Apenas se tiver altura (foi medida)
-      return c.alturaTotal > 0;
-    }).toList();
-    
-    // SOMA: Ex: 15 parcelas + 6 cubagens = 21
-    final int totalColetasRealizadas = parcelasRealizadasList.length + cubagensRealizadasList.length;
+      final nomeLiderDiario = diario.nomeLider.trim().toLowerCase(); 
 
-    if (_diariosFiltrados.isEmpty && totalColetasRealizadas == 0) {
+      // Conta Parcelas que batem com este diário
+      final qtdParcelas = parcelasCandidatas.where((p) {
+        final pData = p.dataColeta!;
+        
+        // Compara apenas ANO, MÊS e DIA
+        final bool dataBate = pData.year == dataDiario!.year && 
+                              pData.month == dataDiario.month && 
+                              pData.day == dataDiario.day;
+        
+        if (!dataBate) return false;
+
+        // Compara Nome (insensível a maiúsculas/espaços)
+        final pLider = (p.nomeLider ?? '').trim().toLowerCase();
+        // Se a parcela não tiver líder (importação antiga), assume que é do dono do diário
+        if (pLider.isEmpty) return true; 
+
+        return pLider == nomeLiderDiario;
+      }).length;
+
+      // Conta Cubagens que batem com este diário
+      final qtdCubagens = cubagensCandidatas.where((c) {
+        final cData = c.dataColeta!;
+        
+        final bool dataBate = cData.year == dataDiario!.year && 
+                              cData.month == dataDiario.month && 
+                              cData.day == dataDiario.day;
+
+        if (!dataBate) return false;
+
+        final cLider = (c.nomeLider ?? '').trim().toLowerCase();
+        if (cLider.isEmpty) return true;
+
+        return cLider == nomeLiderDiario;
+      }).length;
+
+      final producaoTotalDia = qtdParcelas + qtdCubagens;
+      
+      // Salva no mapa para a tabela
+      _producaoPorDiario[diario.id!] = producaoTotalDia;
+      
+      // Soma ao total geral
+      totalProducaoVinculada += producaoTotalDia;
+    }
+
+    if (_diariosFiltrados.isEmpty) {
       _limparDados();
       notifyListeners();
       return;
     }
     
-    // 5. Passa a SOMA (21) para os KPIs
-    _calcularKPIs(_diariosFiltrados, totalColetasRealizadas);
+    // 4. Calcula KPIs usando a produção que conseguimos vincular
+    _calcularKPIs(_diariosFiltrados, totalProducaoVinculada);
     _calcularComposicaoDespesas(_diariosFiltrados);
     
-    // Calcula produção por equipe usando as listas de itens, não de diários
-    _calcularColetasPorEquipe(parcelasRealizadasList, cubagensRealizadasList); 
+    // Para o gráfico de pizza, usamos a lista total de itens realizados no período
+    // (mesmo que por algum motivo não tenha casado com o diário, a produção existiu)
+    _calcularColetasPorEquipe(parcelasCandidatas, cubagensCandidatas); 
     
     _calcularCustosPorVeiculo(_diariosFiltrados);
     
@@ -121,36 +167,34 @@ class OperacoesProvider with ChangeNotifier {
         filtradosPorData = todos;
         break;
       case PeriodoFiltro.hoje:
-        final hoje = DateTime(agora.year, agora.month, agora.day);
-        filtradosPorData = todos.where((d) => DateTime.parse(d.dataRelatorio).isAtSameMomentAs(hoje)).toList();
+        final hojeStr = DateFormat('yyyy-MM-dd').format(agora);
+        filtradosPorData = todos.where((d) => d.dataRelatorio == hojeStr).toList();
         break;
       case PeriodoFiltro.ultimos7Dias:
         final seteDiasAtras = agora.subtract(const Duration(days: 6));
-        final inicioDoDia = DateTime(seteDiasAtras.year, seteDiasAtras.month, seteDiasAtras.day);
-        filtradosPorData = todos.where((d) => !DateTime.parse(d.dataRelatorio).isBefore(inicioDoDia)).toList();
+        final dataCorte = DateFormat('yyyy-MM-dd').format(seteDiasAtras);
+        filtradosPorData = todos.where((d) => d.dataRelatorio.compareTo(dataCorte) >= 0).toList();
         break;
       case PeriodoFiltro.esteMes:
         filtradosPorData = todos.where((d) {
-          final dataDiario = DateTime.parse(d.dataRelatorio);
-          return dataDiario.year == agora.year && dataDiario.month == agora.month;
+          final dt = DateTime.parse(d.dataRelatorio);
+          return dt.year == agora.year && dt.month == agora.month;
         }).toList();
         break;
       case PeriodoFiltro.mesPassado:
-        final primeiroDiaDoMesAtual = DateTime(agora.year, agora.month, 1);
-        final ultimoDiaMesPassado = primeiroDiaDoMesAtual.subtract(const Duration(days: 1));
-        final primeiroDiaMesPassado = DateTime(ultimoDiaMesPassado.year, ultimoDiaMesPassado.month, 1);
+        final dataMesPassado = DateTime(agora.year, agora.month - 1, 1);
         filtradosPorData = todos.where((d) {
-          final dataDiario = DateTime.parse(d.dataRelatorio);
-          return dataDiario.year == primeiroDiaMesPassado.year && dataDiario.month == primeiroDiaMesPassado.month;
+           final dt = DateTime.parse(d.dataRelatorio);
+           return dt.year == dataMesPassado.year && dt.month == dataMesPassado.month;
         }).toList();
         break;
       case PeriodoFiltro.personalizado:
         if (filterProvider.periodoPersonalizado != null) {
-          final dataFim = filterProvider.periodoPersonalizado!.end.add(const Duration(days: 1));
+          final inicio = filterProvider.periodoPersonalizado!.start;
+          final fim = filterProvider.periodoPersonalizado!.end.add(const Duration(days: 1));
           filtradosPorData = todos.where((d) {
-            final dataDiario = DateTime.parse(d.dataRelatorio);
-            return dataDiario.isAfter(filterProvider.periodoPersonalizado!.start.subtract(const Duration(days: 1))) &&
-                   dataDiario.isBefore(dataFim);
+            final dt = DateTime.parse(d.dataRelatorio);
+            return dt.isAfter(inicio.subtract(const Duration(seconds: 1))) && dt.isBefore(fim);
           }).toList();
         } else {
           filtradosPorData = todos;
@@ -164,41 +208,8 @@ class OperacoesProvider with ChangeNotifier {
       return filtradosPorData.where((d) => filterProvider.lideresSelecionados.contains(d.nomeLider)).toList();
     }
   }
-  
-  bool _filtroDeData(DateTime? dataColeta, OperacoesFilterProvider filter) {
-    if (dataColeta == null) return filter.periodo == PeriodoFiltro.todos;
-    if (filter.periodo == PeriodoFiltro.todos) return true;
 
-    final agora = DateTime.now();
-    final dataColetaLocal = dataColeta.toLocal(); 
-    
-    switch (filter.periodo) {
-      case PeriodoFiltro.hoje:
-        return dataColetaLocal.year == agora.year &&
-            dataColetaLocal.month == agora.month &&
-            dataColetaLocal.day == agora.day;
-      case PeriodoFiltro.ultimos7Dias:
-        return dataColetaLocal.isAfter(agora.subtract(const Duration(days: 7)));
-      case PeriodoFiltro.esteMes:
-        return dataColetaLocal.year == agora.year && dataColetaLocal.month == agora.month;
-      case PeriodoFiltro.mesPassado:
-        final primeiroDiaMesAtual = DateTime(agora.year, agora.month, 1);
-        final ultimoDiaMesPassado = primeiroDiaMesAtual.subtract(const Duration(days: 1));
-        return dataColetaLocal.year == ultimoDiaMesPassado.year &&
-            dataColetaLocal.month == ultimoDiaMesPassado.month;
-      case PeriodoFiltro.personalizado:
-        if (filter.periodoPersonalizado != null) {
-          final dataFim = filter.periodoPersonalizado!.end.add(const Duration(days: 1));
-          return dataColetaLocal.isAfter(filter.periodoPersonalizado!.start.subtract(const Duration(days: 1))) &&
-              dataColetaLocal.isBefore(dataFim);
-        }
-        return true;
-      default:
-        return true;
-    }
-  }
-
-  void _calcularKPIs(List<DiarioDeCampo> diarios, int totalColetas) {
+  void _calcularKPIs(List<DiarioDeCampo> diarios, int totalColetasVinculadas) {
     double custoTotal = 0;
     double custoAbastecimentoTotal = 0;
     double kmTotal = 0;
@@ -206,7 +217,6 @@ class OperacoesProvider with ChangeNotifier {
     for (final d in diarios) {
       final abastecimento = d.abastecimentoValor ?? 0;
       custoAbastecimentoTotal += abastecimento;
-      
       custoTotal += abastecimento + (d.pedagioValor ?? 0) + (d.alimentacaoRefeicaoValor ?? 0) + (d.outrasDespesasValor ?? 0);
 
       if (d.kmFinal != null && d.kmInicial != null && d.kmFinal! > d.kmInicial!) {
@@ -215,11 +225,11 @@ class OperacoesProvider with ChangeNotifier {
     }
 
     _kpis = KpiData(
-      coletasRealizadas: totalColetas, // Exibe o valor 21 (soma de parcelas+cubagens)
+      coletasRealizadas: totalColetasVinculadas, // Agora exibe a SOMA DA PRODUÇÃO
       custoTotalCampo: custoTotal,
       kmRodados: kmTotal,
-      // Calcula Custo por Unidade Produzida
-      custoPorColeta: totalColetas > 0 ? custoTotal / totalColetas : 0.0,
+      // Custo Médio por Amostra
+      custoPorColeta: totalColetasVinculadas > 0 ? custoTotal / totalColetasVinculadas : 0.0,
       custoTotalAbastecimento: custoAbastecimentoTotal,
       custoMedioKmGeral: kmTotal > 0 ? custoAbastecimentoTotal / kmTotal : 0.0,
     );
@@ -239,7 +249,6 @@ class OperacoesProvider with ChangeNotifier {
     };
   }
   
-  // Agora usa a lista de itens reais (parcelas/cubagens) para calcular a produtividade da equipe
   void _calcularColetasPorEquipe(List<Parcela> parcelas, List<CubagemArvore> cubagens) {
     final List<Map<String, String?>> allItems = [
       ...parcelas.map((p) => {'lider': p.nomeLider}),
@@ -259,14 +268,12 @@ class OperacoesProvider with ChangeNotifier {
     _custosPorVeiculo = grupoPorPlaca.entries.map((entry) {
       final placa = entry.key;
       final diariosDoVeiculo = entry.value;
-      
       final kmTotal = diariosDoVeiculo.fold(0.0, (prev, d) {
         if (d.kmFinal != null && d.kmInicial != null && d.kmFinal! > d.kmInicial!) {
           return prev + (d.kmFinal! - d.kmInicial!);
         }
         return prev;
       });
-      
       final custoTotalAbastecimento = diariosDoVeiculo.fold(0.0, (prev, d) => prev + (d.abastecimentoValor ?? 0));
 
       return CustoPorVeiculo(
@@ -282,6 +289,7 @@ class OperacoesProvider with ChangeNotifier {
     _kpis = KpiData();
     _composicaoDespesas = {};
     _coletasPorEquipe = {};
+    _producaoPorDiario = {};
     _custosPorVeiculo = [];
     _diariosFiltrados = [];
   }
