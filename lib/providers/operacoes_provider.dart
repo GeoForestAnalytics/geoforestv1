@@ -1,4 +1,4 @@
-// lib/providers/operacoes_provider.dart (VERSÃO FINAL CORRIGIDA)
+// lib/providers/operacoes_provider.dart
 
 import 'package:flutter/foundation.dart';
 import 'package:collection/collection.dart';
@@ -6,12 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
-
-
-// <<< IMPORT ADICIONADO AQUI >>>
-import 'package:geoforestv1/models/parcela_model.dart';
-// <<< FIM DO IMPORT >>>
-
+import 'package:geoforestv1/models/parcela_model.dart'; 
+import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 
 class KpiData {
   final int coletasRealizadas;
@@ -58,41 +54,43 @@ class OperacoesProvider with ChangeNotifier {
   List<CustoPorVeiculo> get custosPorVeiculo => _custosPorVeiculo;
   List<DiarioDeCampo> get diariosFiltrados => _diariosFiltrados;
 
-  /// PONTO DE ENTRADA PÚBLICO: Chamado pelo ProxyProvider para recalcular todas as métricas.
+  /// Atualiza os dados com base nos filtros e dados do GerenteProvider
   void update(GerenteProvider gerenteProvider, OperacoesFilterProvider filterProvider) {
     final todosOsDiarios = gerenteProvider.diariosSincronizados;
     final todasAsParcelas = gerenteProvider.parcelasSincronizadas;
     final todasAsCubagens = gerenteProvider.cubagensSincronizadas;
 
-    // 1. Filtra os diários pelo período e líder
+    // 1. Filtra os diários
     _diariosFiltrados = _filtrarDiarios(todosOsDiarios, filterProvider);
     
-    // 2. Filtra as parcelas pelo mesmo período e líder
-    final parcelasNoPeriodo = todasAsParcelas.where((p) {
+    // 2. Filtra Parcelas REALIZADAS (Status Concluída/Exportada)
+    final parcelasRealizadasList = todasAsParcelas.where((p) {
       if (p.dataColeta == null) return false;
+      if (!_filtroDeData(p.dataColeta, filterProvider)) return false;
+
       final liderMatch = filterProvider.lideresSelecionados.isEmpty ||
                          (p.nomeLider != null && filterProvider.lideresSelecionados.contains(p.nomeLider!));
-      return _filtroDeData(p.dataColeta, filterProvider) && liderMatch;
+      if (!liderMatch) return false;
+
+      // REGRA DE OURO: Apenas Concluída ou Exportada
+      return p.status == StatusParcela.concluida || p.status == StatusParcela.exportada;
     }).toList();
 
-    // 3. Filtra as cubagens pelo mesmo período e líder
-    final cubagensNoPeriodo = todasAsCubagens.where((c) {
+    // 3. Filtra Cubagens REALIZADAS (Altura > 0)
+    final cubagensRealizadasList = todasAsCubagens.where((c) {
       if (c.dataColeta == null) return false;
+      if (!_filtroDeData(c.dataColeta, filterProvider)) return false;
+
       final liderMatch = filterProvider.lideresSelecionados.isEmpty ||
                          (c.nomeLider != null && filterProvider.lideresSelecionados.contains(c.nomeLider!));
-      return _filtroDeData(c.dataColeta, filterProvider) && liderMatch;
+      if (!liderMatch) return false;
+
+      // REGRA DE OURO: Apenas se tiver altura (foi medida)
+      return c.alturaTotal > 0;
     }).toList();
     
-    // 4. Calcula o total de coletas REALIZADAS (concluídas) DENTRO do período filtrado
-    final int parcelasRealizadas = parcelasNoPeriodo
-        .where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada)
-        .length;
-        
-    final int cubagensRealizadas = cubagensNoPeriodo
-        .where((c) => c.alturaTotal > 0)
-        .length;
-
-    final totalColetasRealizadas = parcelasRealizadas + cubagensRealizadas;
+    // SOMA: Ex: 15 parcelas + 6 cubagens = 21
+    final int totalColetasRealizadas = parcelasRealizadasList.length + cubagensRealizadasList.length;
 
     if (_diariosFiltrados.isEmpty && totalColetasRealizadas == 0) {
       _limparDados();
@@ -100,18 +98,20 @@ class OperacoesProvider with ChangeNotifier {
       return;
     }
     
-    // 5. Calcula os KPIs usando o número correto de coletas realizadas
+    // 5. Passa a SOMA (21) para os KPIs
     _calcularKPIs(_diariosFiltrados, totalColetasRealizadas);
     _calcularComposicaoDespesas(_diariosFiltrados);
-    _calcularColetasPorEquipe(_diariosFiltrados);
+    
+    // Calcula produção por equipe usando as listas de itens, não de diários
+    _calcularColetasPorEquipe(parcelasRealizadasList, cubagensRealizadasList); 
+    
     _calcularCustosPorVeiculo(_diariosFiltrados);
+    
     _diariosFiltrados.sort((a, b) => b.dataRelatorio.compareTo(a.dataRelatorio));
 
     notifyListeners();
   }
   
-  // MÉTODOS DE CÁLCULO (agora privados)
-
   List<DiarioDeCampo> _filtrarDiarios(List<DiarioDeCampo> todos, OperacoesFilterProvider filterProvider) {
     List<DiarioDeCampo> filtradosPorData;
     final agora = DateTime.now();
@@ -165,13 +165,12 @@ class OperacoesProvider with ChangeNotifier {
     }
   }
   
-  // <<< FUNÇÃO _filtroDeData ADICIONADA AQUI >>>
   bool _filtroDeData(DateTime? dataColeta, OperacoesFilterProvider filter) {
     if (dataColeta == null) return filter.periodo == PeriodoFiltro.todos;
     if (filter.periodo == PeriodoFiltro.todos) return true;
 
     final agora = DateTime.now();
-    final dataColetaLocal = dataColeta.toLocal(); // Garante comparação na mesma timezone
+    final dataColetaLocal = dataColeta.toLocal(); 
     
     switch (filter.periodo) {
       case PeriodoFiltro.hoje:
@@ -198,7 +197,6 @@ class OperacoesProvider with ChangeNotifier {
         return true;
     }
   }
-  // <<< FIM DA FUNÇÃO ADICIONADA >>>
 
   void _calcularKPIs(List<DiarioDeCampo> diarios, int totalColetas) {
     double custoTotal = 0;
@@ -208,6 +206,7 @@ class OperacoesProvider with ChangeNotifier {
     for (final d in diarios) {
       final abastecimento = d.abastecimentoValor ?? 0;
       custoAbastecimentoTotal += abastecimento;
+      
       custoTotal += abastecimento + (d.pedagioValor ?? 0) + (d.alimentacaoRefeicaoValor ?? 0) + (d.outrasDespesasValor ?? 0);
 
       if (d.kmFinal != null && d.kmInicial != null && d.kmFinal! > d.kmInicial!) {
@@ -216,9 +215,10 @@ class OperacoesProvider with ChangeNotifier {
     }
 
     _kpis = KpiData(
-      coletasRealizadas: totalColetas,
+      coletasRealizadas: totalColetas, // Exibe o valor 21 (soma de parcelas+cubagens)
       custoTotalCampo: custoTotal,
       kmRodados: kmTotal,
+      // Calcula Custo por Unidade Produzida
       custoPorColeta: totalColetas > 0 ? custoTotal / totalColetas : 0.0,
       custoTotalAbastecimento: custoAbastecimentoTotal,
       custoMedioKmGeral: kmTotal > 0 ? custoAbastecimentoTotal / kmTotal : 0.0,
@@ -239,9 +239,15 @@ class OperacoesProvider with ChangeNotifier {
     };
   }
   
-  void _calcularColetasPorEquipe(List<DiarioDeCampo> diarios) {
-    final grupo = groupBy(diarios, (DiarioDeCampo d) => d.nomeLider);
-    _coletasPorEquipe = grupo.map((lider, listaDiarios) => MapEntry(lider, listaDiarios.length));
+  // Agora usa a lista de itens reais (parcelas/cubagens) para calcular a produtividade da equipe
+  void _calcularColetasPorEquipe(List<Parcela> parcelas, List<CubagemArvore> cubagens) {
+    final List<Map<String, String?>> allItems = [
+      ...parcelas.map((p) => {'lider': p.nomeLider}),
+      ...cubagens.map((c) => {'lider': c.nomeLider}),
+    ];
+
+    final grupo = groupBy(allItems, (item) => item['lider'] ?? 'Gerente');
+    _coletasPorEquipe = grupo.map((lider, items) => MapEntry(lider, items.length));
   }
 
   void _calcularCustosPorVeiculo(List<DiarioDeCampo> diarios) {

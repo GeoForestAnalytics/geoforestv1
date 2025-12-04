@@ -23,7 +23,7 @@ class ProjetosDashboardPage extends StatefulWidget {
 
 class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
   final _exportService = ExportService();
-  final NumberFormat _volumeFormat = NumberFormat("#,##0.00", "pt_BR");
+  // final NumberFormat _volumeFormat = NumberFormat("#,##0.00", "pt_BR"); // Removido pois o volume não é mais usado aqui
 
   @override
   void initState() {
@@ -79,6 +79,8 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
               const SizedBox(height: 24),
               _buildKpiGrid(context, metricsProvider),
               const SizedBox(height: 24),
+              // O antigo RankingCard pode ser mantido ou removido dependendo da sua preferência.
+              // Vou mantê-lo caso queira ver mais do que o Top 3, ou você pode comentar a linha abaixo.
               if (metricsProvider.progressoPorEquipe.isNotEmpty)
                 _buildRankingCard(context, metricsProvider.progressoPorEquipe),
               const SizedBox(height: 24),
@@ -483,13 +485,9 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
       children: [
         Row(
           children: [
+            // <<< CORREÇÃO: SUBSTITUI O VOLUME POR TOP 3 EQUIPES >>>
             Expanded(
-              child: _buildKpiCard(
-                'Volume Coletado',
-                '${_volumeFormat.format(metrics.volumeTotalColetado)} m³',
-                Icons.forest,
-                Colors.teal,
-              ),
+              child: _buildTop3KpiCard(metrics.progressoPorEquipe, Colors.teal),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -525,6 +523,63 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
           ],
         ),
       ],
+    );
+  }
+
+  // --- NOVO WIDGET: Card Compacto de Top 3 Equipes ---
+  Widget _buildTop3KpiCard(Map<String, int> progressoPorEquipe, Color color) {
+    // Pega os top 3 do Map (já está ordenado no provider)
+    final top3 = progressoPorEquipe.entries.take(3).toList();
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Ícone de Liderança
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: color.withOpacity(0.15),
+              child: Icon(Icons.military_tech, color: color, size: 24),
+            ),
+            const SizedBox(height: 8),
+            
+            // Título
+            Text('Top 3 Equipes',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14)),
+            
+            const SizedBox(height: 8),
+            
+            // Lista dos Top 3 (Compacta)
+            if (top3.isEmpty)
+              const Text("-", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))
+            else
+              Column(
+                children: top3.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final item = entry.value;
+                  final nome = item.key.split(' ').first; // Pega só o primeiro nome
+                  return Text(
+                    '${index + 1}. $nome (${item.value})',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: index == 0 ? FontWeight.bold : FontWeight.normal,
+                      color: index == 0 ? Colors.black87 : Colors.grey[700]
+                    ),
+                  );
+                }).toList(),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -573,7 +628,7 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Top 3 Equipes", style: Theme.of(context).textTheme.titleLarge),
+            Text("Detalhes do Ranking", style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
             ...entries.asMap().entries.map((entry) {
               final index = entry.key;
@@ -747,10 +802,6 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     final headerColor = Theme.of(context).colorScheme.primary.withOpacity(0.8);
     final rowColorTotal = Theme.of(context).colorScheme.secondary.withOpacity(0.2);
     
-    // Adaptação de cor de texto para os cabeçalhos
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final headerTextColor = isDark ? Colors.white : Colors.white; // Sempre branco sobre o primaryColor
-
     return Card(
       elevation: 2,
       child: Column(

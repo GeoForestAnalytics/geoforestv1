@@ -1,10 +1,10 @@
-// lib/pages/gerente/operacoes_dashboard_page.dart (VERSÃO COM LAYOUT CORRIGIDO)
+// lib/pages/gerente/operacoes_dashboard_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import 'package:collection/collection.dart';
+import 'package:collection/collection.dart'; // Import necessário para .maxOrNull ou reduce
 
 import 'package:geoforestv1/providers/operacoes_provider.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
@@ -67,6 +67,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
             children: [
               _buildKpiCards(context, provider.kpis),
               const SizedBox(height: 24),
+              // Aqui chamamos o widget atualizado
               _buildDespesasChart(context, provider.composicaoDespesas),
               const SizedBox(height: 24),
               _buildCustoVeiculoTable(context, provider.custosPorVeiculo),
@@ -102,8 +103,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
-  // <<< INÍCIO DA CORREÇÃO >>>
-  // O widget _buildFiltros agora usa um LayoutBuilder para ser responsivo.
   Widget _buildFiltros(BuildContext context) {
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -113,7 +112,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
         padding: const EdgeInsets.all(16.0),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // Se a largura for menor que 380 pixels, usa uma coluna.
             if (constraints.maxWidth < 380) {
               return Column(
                 children: [
@@ -124,9 +122,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                     _buildDatePicker(context),
                 ],
               );
-            }
-            // Senão, usa uma linha.
-            else {
+            } else {
               return Column(
                 children: [
                   Row(
@@ -146,7 +142,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
       ),
     );
   }
-  // <<< FIM DA CORREÇÃO >>>
 
   Widget _buildPeriodoDropdown(BuildContext context) {
     final filterProvider = context.watch<OperacoesFilterProvider>();
@@ -165,219 +160,10 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
       },
     );
   }
-  
-  Widget _buildKpiCards(BuildContext context, KpiData kpis) {
-    return Column(
-      children: [
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(child: _buildKpiCard('Custo Total', _currencyFormat.format(kpis.custoTotalCampo), Icons.monetization_on, Colors.green)),
-            const SizedBox(width: 16),
-            Expanded(child: _buildKpiCard('KM Rodados', '${_numberFormat.format(kpis.kmRodados)} km', Icons.directions_car, Colors.blue)),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(child: _buildKpiCard('Coletas Realizadas', kpis.coletasRealizadas.toString(), Icons.checklist, Colors.orange)),
-            const SizedBox(width: 16),
-            Expanded(child: _buildKpiCard('Custo / Coleta', _currencyFormat.format(kpis.custoPorColeta), Icons.attach_money, Colors.red)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildKpiCard(String title, String value, IconData icon, Color color) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: color.withOpacity(0.15),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title, 
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500, fontSize: 14)
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDespesasChart(BuildContext context, Map<String, double> composicaoDespesas) {
-    final despesasValidas = Map.fromEntries(
-      composicaoDespesas.entries.where((entry) => entry.value > 0)
-    );
-
-    if (despesasValidas.isEmpty) {
-      return Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: SizedBox(height: 200, child: Center(child: Text("Nenhuma despesa registrada no período."))),
-        ),
-      );
-    }
-
-    final List<Color> barColors = [
-      Colors.blue.shade400,
-      Colors.green.shade400,
-      Colors.orange.shade400,
-      Colors.red.shade400,
-      Colors.purple.shade400,
-    ];
-
-    int index = 0;
-    final barGroups = despesasValidas.entries.map((entry) {
-      final barData = BarChartGroupData(
-        x: index,
-        barRods: [
-          BarChartRodData(
-            toY: entry.value,
-            color: barColors[index % barColors.length],
-            width: 22,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(6),
-              topRight: Radius.circular(6),
-            ),
-          ),
-        ],
-      );
-      index++;
-      return barData;
-    }).toList();
-    
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              "Composição das Despesas",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              height: 200,
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: (despesasValidas.values.maxOrNull ?? 1) * 1.2,
-                  barTouchData: BarTouchData(
-                    touchTooltipData: BarTouchTooltipData(
-                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                        String key = despesasValidas.keys.elementAt(group.x.toInt());
-                        return BarTooltipItem(
-                          '$key\n',
-                          const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                          children: <TextSpan>[
-                            TextSpan(
-                              text: _currencyFormat.format(rod.toY),
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 12),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (double value, TitleMeta meta) {
-                          if (value.toInt() < despesasValidas.keys.length) {
-                            return Text(_abbreviate(despesasValidas.keys.elementAt(value.toInt())));
-                          }
-                          return const Text('');
-                        },
-                      ),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (double value, TitleMeta meta) {
-                          if (value == 0) return const Text('');
-                          return Text(_numberFormat.format(value));
-                        },
-                        reservedSize: 40,
-                      ),
-                    ),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  gridData: FlGridData(
-                    show: true, 
-                    drawVerticalLine: false,
-                    getDrawingHorizontalLine: (value) => const FlLine(color: Colors.black12, strokeWidth: 1),
-                  ),
-                  barGroups: barGroups,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildLegend(despesasValidas, barColors),
-          ],
-        ),
-      ),
-    );
-  }
-  
-
-  Widget _buildLegend(Map<String, double> data, List<Color> colors) {
-    int index = 0;
-    final legendItems = data.keys.map((key) {
-      final widget = Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 12, height: 12, color: colors[index % colors.length]),
-            const SizedBox(width: 6),
-            Text(key),
-          ],
-        ),
-      );
-      index++;
-      return widget;
-    }).toList();
-
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8.0,
-      runSpacing: 4.0,
-      children: legendItems,
-    );
-  }
 
   Widget _buildLiderDropdown(BuildContext context) {
     final filterProvider = context.watch<OperacoesFilterProvider>();
     final lideresDisponiveis = filterProvider.lideresDisponiveis;
-    
     return DropdownButtonFormField<String>(
       decoration: const InputDecoration(labelText: 'Líder', border: OutlineInputBorder()),
       value: filterProvider.lideresSelecionados.isEmpty ? null : filterProvider.lideresSelecionados.first,
@@ -422,6 +208,201 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
+  Widget _buildKpiCards(BuildContext context, KpiData kpis) {
+    return Column(
+      children: [
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: _buildKpiCard('Custo Total', _currencyFormat.format(kpis.custoTotalCampo), Icons.monetization_on, Colors.green)),
+            const SizedBox(width: 16),
+            Expanded(child: _buildKpiCard('KM Rodados', '${_numberFormat.format(kpis.kmRodados)} km', Icons.directions_car, Colors.blue)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            // Volta para "Coletas Realizadas" conforme solicitado
+            Expanded(child: _buildKpiCard('Coletas Realizadas', kpis.coletasRealizadas.toString(), Icons.checklist, Colors.orange)),
+            const SizedBox(width: 16),
+            // Volta para "Custo / Coleta" conforme solicitado
+            Expanded(child: _buildKpiCard('Custo / Coleta', _currencyFormat.format(kpis.custoPorColeta), Icons.attach_money, Colors.red)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildKpiCard(String title, String value, IconData icon, Color color) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: color.withOpacity(0.15),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title, 
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500, fontSize: 14)
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================================================
+  // =============== GRÁFICO ATUALIZADO (NEON) ===============
+  // =========================================================
+  Widget _buildDespesasChart(BuildContext context, Map<String, double> composicaoDespesas) {
+    final despesasValidas = Map.fromEntries(
+      composicaoDespesas.entries.where((entry) => entry.value > 0)
+    );
+
+    if (despesasValidas.isEmpty) {
+      return Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: const Padding(
+          padding: EdgeInsets.all(16.0),
+          child: SizedBox(height: 200, child: Center(child: Text("Nenhuma despesa registrada no período."))),
+        ),
+      );
+    }
+
+    // Configuração de Tema e Cores
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color corTextoEixo = isDark ? Colors.white70 : const Color(0xFF023853);
+
+    // Gradiente "Neon"
+    final LinearGradient gradienteBarras = LinearGradient(
+      colors: [Colors.cyan.shade300, Colors.blue.shade900],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    );
+
+    double maxY = 0.0;
+    if (despesasValidas.isNotEmpty) {
+      maxY = despesasValidas.values.reduce((a, b) => a > b ? a : b);
+    }
+    if (maxY == 0) maxY = 1.0;
+
+    int index = 0;
+    final barGroups = despesasValidas.entries.map((entry) {
+      final barData = BarChartGroupData(
+        x: index,
+        barRods: [
+          BarChartRodData(
+            toY: entry.value,
+            gradient: gradienteBarras, // Usa o gradiente
+            width: 22,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(6),
+              topRight: Radius.circular(6),
+            ),
+            // Adiciona o fundo (track)
+            backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: maxY * 1.2,
+                color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade200,
+            ),
+          ),
+        ],
+      );
+      index++;
+      return barData;
+    }).toList();
+    
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              "Composição das Despesas",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 250,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxY * 1.2,
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipColor: (_) => const Color(0xFF1E293B),
+                      tooltipMargin: 8,
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        String key = despesasValidas.keys.elementAt(group.x.toInt());
+                        return BarTooltipItem(
+                          '$key\n',
+                          const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 14),
+                          children: <TextSpan>[
+                            TextSpan(
+                              text: _currencyFormat.format(rod.toY),
+                              style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.w900, fontSize: 14),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 30,
+                        getTitlesWidget: (double value, TitleMeta meta) {
+                          if (value.toInt() < despesasValidas.keys.length) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                _abbreviate(despesasValidas.keys.elementAt(value.toInt())),
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: corTextoEixo),
+                              ),
+                            );
+                          }
+                          return const Text('');
+                        },
+                      ),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  gridData: const FlGridData(show: false),
+                  barGroups: barGroups,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
   Widget _buildCustoVeiculoTable(BuildContext context, List<CustoPorVeiculo> custos) {
     if (custos.isEmpty) return const SizedBox.shrink();
     final kpis = context.watch<OperacoesProvider>().kpis;
