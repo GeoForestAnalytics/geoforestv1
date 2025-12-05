@@ -807,4 +807,95 @@ class AnalysisService {
     
     return planosGerados;
   }
+
+  // Em lib/services/analysis_service.dart
+
+  /// Consolida dados de múltiplos talhões como um único Estrato.
+  /// Realiza médias ponderadas pela área para variáveis por hectare.
+  TalhaoAnalysisResult analisarEstratoUnificado({
+    required List<Talhao> talhoes,
+    required Map<int, List<Parcela>> parcelasPorTalhao,
+    required Map<int, List<Arvore>> arvoresPorTalhao,
+  }) {
+    double areaTotalEstrato = 0;
+    List<Parcela> todasParcelas = [];
+    List<Arvore> todasArvores = [];
+    
+    // Variáveis para média ponderada
+    double somaVolumeTotal = 0;
+    double somaAreaBasalTotal = 0;
+    double somaArvoresTotal = 0;
+
+    for (var talhao in talhoes) {
+      if (talhao.id == null) continue;
+      
+      final areaTalhao = talhao.areaHa ?? 0.0;
+      final parcelas = parcelasPorTalhao[talhao.id] ?? [];
+      final arvores = arvoresPorTalhao[talhao.id] ?? [];
+      
+      if (parcelas.isEmpty || arvores.isEmpty) continue;
+
+      // Analisa individualmente para obter as médias por hectare deste talhão
+      final analiseIndividual = getTalhaoInsights(talhao, parcelas, arvores);
+      
+      // Acumula para o Estrato
+      areaTotalEstrato += areaTalhao;
+      todasParcelas.addAll(parcelas);
+      todasArvores.addAll(arvores);
+      
+      // Soma os totais absolutos (Volume/ha * Area = Volume Total do Talhão)
+      if (areaTalhao > 0) {
+        somaVolumeTotal += (analiseIndividual.volumePorHectare * areaTalhao);
+        somaAreaBasalTotal += (analiseIndividual.areaBasalPorHectare * areaTalhao);
+        somaArvoresTotal += (analiseIndividual.arvoresPorHectare * areaTalhao);
+      }
+    }
+
+    if (areaTotalEstrato == 0 || todasArvores.isEmpty) return TalhaoAnalysisResult();
+
+    // Calcula as médias ponderadas do Estrato
+    final volumePorHectareEstrato = somaVolumeTotal / areaTotalEstrato;
+    final areaBasalPorHectareEstrato = somaAreaBasalTotal / areaTotalEstrato;
+    final arvoresPorHectareEstrato = (somaArvoresTotal / areaTotalEstrato).round();
+
+    // Para CAP, Altura e Distribuição, usamos todos os dados juntos (média aritmética da amostra composta)
+    final codeAnalysis = getTreeCodeAnalysis(todasArvores);
+    
+    // Filtra árvores vivas para médias dendrométricas
+    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
+    final arvoresVivas = todasArvores.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
+    
+    final double mediaCap = _calculateAverage(arvoresVivas.map((a) => a.cap).toList());
+    final double mediaAltura = _calculateAverage(arvoresVivas.map((a) => a.altura ?? 0).where((h) => h > 0).toList());
+    final double alturaDominante = _calculateDominantHeight(arvoresVivas);
+    
+    // Índice de Sítio (Usa a idade do primeiro talhão como referência ou média ponderada se as idades variarem muito)
+    // Aqui assumimos que o estrato tem idades próximas, usamos a média.
+    final mediaIdade = talhoes.map((t) => t.idadeAnos ?? 0).reduce((a, b) => a + b) / talhoes.length;
+    final double indiceDeSitio = _calculateSiteIndex(alturaDominante, mediaIdade);
+    
+    final distribuicao = getDistribuicaoDiametrica(arvoresVivas);
+
+    List<String> insights = [];
+    insights.add("Análise consolidada de ${talhoes.length} talhões.");
+    insights.add("Área total do estrato: ${areaTotalEstrato.toStringAsFixed(2)} ha.");
+
+    return TalhaoAnalysisResult(
+      areaTotalAmostradaHa: areaTotalEstrato, // Aqui representamos a área total do estrato
+      totalArvoresAmostradas: todasArvores.length,
+      totalParcelasAmostradas: todasParcelas.length,
+      mediaCap: mediaCap,
+      mediaAltura: mediaAltura,
+      areaBasalPorHectare: areaBasalPorHectareEstrato,
+      volumePorHectare: volumePorHectareEstrato,
+      arvoresPorHectare: arvoresPorHectareEstrato,
+      alturaDominante: alturaDominante,
+      indiceDeSitio: indiceDeSitio,
+      distribuicaoDiametrica: distribuicao,
+      analiseDeCodigos: codeAnalysis,
+      insights: insights,
+      warnings: [], // Pode adicionar lógica de alerta de heterogeneidade aqui se quiser
+      recommendations: ["Considere este resultado para planejamento de colheita ou desbaste do bloco inteiro."],
+    );
+  }
 }

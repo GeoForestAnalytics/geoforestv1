@@ -7,6 +7,7 @@ import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/pages/dashboard/relatorio_comparativo_page.dart';
 import 'package:geoforestv1/pages/analises/analise_volumetrica_page.dart';
+import 'package:geoforestv1/pages/dashboard/estrato_dashboard_page.dart';
 
 // Repositórios
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
@@ -76,6 +77,25 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
         _isLoading = false;
       });
     }
+  }
+  
+  void _gerarAnaliseEstrato() {
+    if (_talhoesSelecionados.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Selecione pelo menos 2 talhões para formar um estrato.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+    
+    final talhoesParaAnalisar = _talhoesDisponiveis.where((t) => _talhoesSelecionados.contains(t.id)).toList();
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EstratoDashboardPage(talhoesSelecionados: talhoesParaAnalisar),
+      ),
+    );
   }
 
   Future<void> _onProjetoSelecionado(Projeto? projeto) async {
