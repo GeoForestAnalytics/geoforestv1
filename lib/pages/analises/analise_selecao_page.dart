@@ -179,7 +179,20 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
   }
 
   void _navegarParaAnaliseVolumetrica() {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const AnaliseVolumetricaPage()));
+    // 1. Coleta os objetos Talhao baseados nos IDs selecionados
+    final talhoesParaEnviar = _talhoesDisponiveis
+        .where((t) => _talhoesSelecionados.contains(t.id))
+        .toList();
+
+    Navigator.push(
+      context, 
+      MaterialPageRoute(
+        builder: (context) => AnaliseVolumetricaPage(
+          // 2. Passa a lista (se estiver vazia, passa null ou lista vazia, a outra tela trata)
+          talhoesPreSelecionados: talhoesParaEnviar.isNotEmpty ? talhoesParaEnviar : null,
+        )
+      )
+    );
   }
 
   @override
@@ -250,22 +263,35 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
         mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          // BOTÃO 1: Equação de Volume
           FloatingActionButton.extended(
             onPressed: _navegarParaAnaliseVolumetrica,
             heroTag: 'analiseVolumetricaFab',
             label: const Text('Equação de Volume'),
             icon: const Icon(Icons.calculate_outlined),
-            // Cor Dourada no Fundo, Azul no Texto
             backgroundColor: const Color(0xFFEBE4AB), 
             foregroundColor: const Color(0xFF023853),
           ),
           const SizedBox(height: 16),
+
+          // BOTÃO 2 (NOVO): Análise de Estrato (Aqui usamos a sua função!)
+          FloatingActionButton.extended(
+            onPressed: _gerarAnaliseEstrato, // <--- Chamando a função que estava parada
+            heroTag: 'analiseEstratoFab',
+            label: const Text('Análise de Estrato'),
+            icon: const Icon(Icons.layers_outlined),
+            // Cor verde para diferenciar (indica consolidação)
+            backgroundColor: Colors.teal.shade700, 
+            foregroundColor: Colors.white,
+          ),
+          const SizedBox(height: 16),
+
+          // BOTÃO 3: Análise Comparativa
           FloatingActionButton.extended(
             onPressed: _gerarRelatorio,
             heroTag: 'analiseComparativaFab',
             label: const Text('Análise Comparativa'),
             icon: const Icon(Icons.analytics_outlined),
-            // Cor Azul no Fundo, Dourada no Texto
             backgroundColor: const Color(0xFF023853),
             foregroundColor: const Color(0xFFEBE4AB),
           ),

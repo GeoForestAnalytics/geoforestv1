@@ -7,7 +7,6 @@ import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
-import 'package:geoforestv1/pages/dashboard/talhao_dashboard_page.dart'; // Para reutilizar widgets
 import 'package:geoforestv1/services/analysis_service.dart';
 import 'package:geoforestv1/services/pdf_service.dart';
 import 'package:geoforestv1/widgets/grafico_dispersao_cap_altura.dart';
@@ -112,8 +111,11 @@ class _EstratoDashboardPageState extends State<EstratoDashboardPage> {
             const SizedBox(height: 10),
             Text(
                 "Área Total Consolidada: ${result.areaTotalAmostradaHa.toStringAsFixed(2)} ha",
-                style:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                style: const TextStyle(
+                    fontSize: 12, 
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black54 // <--- CORRIGIDO: Forçando cor escura (cinza)
+                )),
           ],
         ),
       ),
@@ -124,9 +126,15 @@ class _EstratoDashboardPageState extends State<EstratoDashboardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+        // Rótulo em cinza escuro
+        Text(label, style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+        // Valor em Azul Marinho (sua cor primária) ou Preto para contraste máximo
         Text(value,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, 
+                fontSize: 16,
+                color: Color(0xFF023853) // <--- FORÇANDO COR ESCURA AQUI
+            )),
       ],
     );
   }

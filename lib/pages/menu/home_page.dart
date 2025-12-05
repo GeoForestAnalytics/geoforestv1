@@ -114,7 +114,6 @@ class _HomePageState extends State<HomePage> {
         showDialog(
             context: mainDialogContext,
             builder: (dialogCtx) => AlertDialog(
-                // Ajuste de cores do Alerta também, caso necessário
                 backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
                 title: Text('Tipo de Exportação', style: TextStyle(color: textColor)),
                 content: Text(
@@ -123,6 +122,11 @@ class _HomePageState extends State<HomePage> {
                 ),
                 actions: [
                     TextButton(
+                        // --- CORREÇÃO AQUI: Forçando a cor do texto ---
+                        style: TextButton.styleFrom(
+                          foregroundColor: textColor, // Usa Branco no Dark e Azul no Light
+                        ),
+                        // ----------------------------------------------
                         child: const Text('Apenas Novas'),
                         onPressed: () {
                             Navigator.of(dialogCtx).pop(); 

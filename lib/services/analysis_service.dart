@@ -874,14 +874,23 @@ class AnalysisService {
     final mediaIdade = talhoes.map((t) => t.idadeAnos ?? 0).reduce((a, b) => a + b) / talhoes.length;
     final double indiceDeSitio = _calculateSiteIndex(alturaDominante, mediaIdade);
     
-    final distribuicao = getDistribuicaoDiametrica(arvoresVivas);
+     final distribuicao = getDistribuicaoDiametrica(arvoresVivas);
 
     List<String> insights = [];
+    
+    // --- ALTERAÇÃO AQUI: Listando os nomes ---
+    // Pega os nomes, ordena alfabeticamente para ficar organizado e junta com vírgulas
+    final nomesDosTalhoes = talhoes.map((t) => t.nome).toList()..sort();
+    final listaFormatada = nomesDosTalhoes.join(', ');
+
     insights.add("Análise consolidada de ${talhoes.length} talhões.");
+    insights.add("Composição: $listaFormatada."); // <--- Nova linha com a lista
+    // ------------------------------------------
+
     insights.add("Área total do estrato: ${areaTotalEstrato.toStringAsFixed(2)} ha.");
 
     return TalhaoAnalysisResult(
-      areaTotalAmostradaHa: areaTotalEstrato, // Aqui representamos a área total do estrato
+      areaTotalAmostradaHa: areaTotalEstrato, 
       totalArvoresAmostradas: todasArvores.length,
       totalParcelasAmostradas: todasParcelas.length,
       mediaCap: mediaCap,
@@ -894,7 +903,7 @@ class AnalysisService {
       distribuicaoDiametrica: distribuicao,
       analiseDeCodigos: codeAnalysis,
       insights: insights,
-      warnings: [], // Pode adicionar lógica de alerta de heterogeneidade aqui se quiser
+      warnings: [], 
       recommendations: ["Considere este resultado para planejamento de colheita ou desbaste do bloco inteiro."],
     );
   }

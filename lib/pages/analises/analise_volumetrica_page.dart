@@ -1,7 +1,6 @@
-// lib/pages/analises/analise_volumetrica_page.dart (VERSÃO FINAL - CORRIGIDA LÓGICA E VISUAL)
-
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:collection/collection.dart'; // Importante para firstWhereOrNull se necessário
 import 'package:geoforestv1/models/analise_result_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
@@ -10,6 +9,7 @@ import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/services/analysis_service.dart';
 import 'package:geoforestv1/services/pdf_service.dart';
+
 // Repositórios
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
@@ -18,7 +18,13 @@ import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
 
 class AnaliseVolumetricaPage extends StatefulWidget {
-  const AnaliseVolumetricaPage({super.key});
+  // Parâmetro opcional para receber talhões já selecionados (Estrato)
+  final List<Talhao>? talhoesPreSelecionados;
+
+  const AnaliseVolumetricaPage({
+    super.key,
+    this.talhoesPreSelecionados,
+  });
 
   @override
   State<AnaliseVolumetricaPage> createState() => _AnaliseVolumetricaPageState();
@@ -37,14 +43,17 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   // Estados para filtros
   List<Projeto> _projetosDisponiveis = [];
   Projeto? _projetoSelecionado;
+  
   List<Atividade> _atividadesDisponiveis = [];
   Atividade? _atividadeSelecionada;
+  
   List<Fazenda> _fazendasDisponiveis = [];
   Fazenda? _fazendaSelecionada;
 
   // Listas de Talhões
   List<Talhao> _talhoesComCubagemDisponiveis = [];
   List<Talhao> _talhoesComInventarioDisponiveis = [];
+  
   final Set<int> _talhoesCubadosSelecionados = {};
   final Set<int> _talhoesInventarioSelecionados = {};
 
@@ -58,14 +67,83 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   @override
   void initState() {
     super.initState();
-    _carregarProjetosIniciais();
+    _inicializarPagina();
+  }
+
+  Future<void> _inicializarPagina() async {
+    await _carregarProjetosIniciais();
+    // Se vieram talhões pré-selecionados (do botão de Estrato), processa eles agora
+    _processarPreSelecao();
   }
 
   Future<void> _carregarProjetosIniciais() async {
     setState(() => _isLoading = true);
-    _projetosDisponiveis = await _projetoRepository.getTodosOsProjetosParaGerente();
-    setState(() => _isLoading = false);
+    final projetos = await _projetoRepository.getTodosOsProjetosParaGerente();
+    if (mounted) {
+      setState(() {
+        _projetosDisponiveis = projetos;
+        _isLoading = false;
+      });
+    }
   }
+
+  // --- LÓGICA DE PRÉ-SELEÇÃO (ESTRATO) ---
+  void _processarPreSelecao() {
+    if (widget.talhoesPreSelecionados != null && widget.talhoesPreSelecionados!.isNotEmpty) {
+      setState(() {
+        // 1. Popula a lista de inventário com o que veio da tela anterior
+        _talhoesComInventarioDisponiveis = widget.talhoesPreSelecionados!;
+        
+        // 2. Marca todos como selecionados automaticamente
+        for (var t in widget.talhoesPreSelecionados!) {
+          if (t.id != null) _talhoesInventarioSelecionados.add(t.id!);
+        }
+        
+        // 3. Tenta preencher os dropdowns (Projeto/Atividade/Fazenda) baseado no primeiro talhão
+        // Isso ajuda o usuário a achar os talhões de Cubagem mais rápido.
+        final primeiro = widget.talhoesPreSelecionados!.first;
+        _autoSelecionarFiltros(primeiro);
+      });
+    }
+  }
+
+  Future<void> _autoSelecionarFiltros(Talhao talhaoExemplo) async {
+    try {
+      // Tenta achar e setar o Projeto
+      final projetoId = talhaoExemplo.projetoId;
+      if (projetoId != null) {
+        final projeto = _projetosDisponiveis.firstWhereOrNull((p) => p.id == projetoId);
+        if (projeto != null) {
+          setState(() => _projetoSelecionado = projeto);
+          
+          // Carrega atividades deste projeto
+          final atividades = await _atividadeRepository.getAtividadesDoProjeto(projeto.id!);
+          setState(() => _atividadesDisponiveis = atividades);
+
+          // Tenta achar e setar a Atividade
+          final atividade = atividades.firstWhereOrNull((a) => a.id == talhaoExemplo.fazendaAtividadeId);
+          if (atividade != null) {
+            setState(() => _atividadeSelecionada = atividade);
+            
+            // Carrega fazendas desta atividade
+            final fazendas = await _fazendaRepository.getFazendasDaAtividade(atividade.id!);
+            setState(() => _fazendasDisponiveis = fazendas);
+
+            // Tenta achar e setar a Fazenda
+            final fazenda = fazendas.firstWhereOrNull((f) => f.id == talhaoExemplo.fazendaId);
+            if (fazenda != null) {
+              setState(() => _fazendaSelecionada = fazenda);
+              // Carrega os talhões disponíveis, MAS preservando a lista de inventário que já temos
+              await _carregarTalhoesParaSelecao(preservarInventario: true);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Erro ao auto-selecionar filtros: $e");
+    }
+  }
+  // ---------------------------------------
 
   Future<void> _onProjetoSelecionado(Projeto? projeto) async {
     setState(() {
@@ -79,6 +157,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       _talhoesCubadosSelecionados.clear();
       _talhoesInventarioSelecionados.clear();
       _limparResultados();
+      
       if (projeto == null) {
         _isLoading = false;
         return;
@@ -86,9 +165,13 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       _isLoading = true;
     });
 
-    _atividadesDisponiveis =
-        await _atividadeRepository.getAtividadesDoProjeto(projeto!.id!);
-    setState(() => _isLoading = false);
+    final atividades = await _atividadeRepository.getAtividadesDoProjeto(projeto!.id!);
+    if (mounted) {
+      setState(() {
+        _atividadesDisponiveis = atividades;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _onAtividadeSelecionada(Atividade? atividade) async {
@@ -101,6 +184,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       _talhoesCubadosSelecionados.clear();
       _talhoesInventarioSelecionados.clear();
       _limparResultados();
+      
       if (atividade == null) {
         _isLoading = false;
         return;
@@ -108,19 +192,27 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       _isLoading = true;
     });
 
-    _fazendasDisponiveis =
-        await _fazendaRepository.getFazendasDaAtividade(atividade!.id!);
-    setState(() => _isLoading = false);
+    final fazendas = await _fazendaRepository.getFazendasDaAtividade(atividade!.id!);
+    if (mounted) {
+      setState(() {
+        _fazendasDisponiveis = fazendas;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _onFazendaSelecionada(Fazenda? fazenda) async {
     setState(() {
       _fazendaSelecionada = fazenda;
-      _talhoesComCubagemDisponiveis = [];
-      _talhoesComInventarioDisponiveis = [];
-      _talhoesCubadosSelecionados.clear();
-      _talhoesInventarioSelecionados.clear();
+      // Se não veio de pré-seleção, limpa as listas
+      if (widget.talhoesPreSelecionados == null) {
+        _talhoesComCubagemDisponiveis = [];
+        _talhoesComInventarioDisponiveis = [];
+        _talhoesCubadosSelecionados.clear();
+        _talhoesInventarioSelecionados.clear();
+      }
       _limparResultados();
+      
       if (fazenda == null) {
         _isLoading = false;
         return;
@@ -128,58 +220,55 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       _isLoading = true;
     });
 
-    await _carregarTalhoesParaSelecao();
-    setState(() => _isLoading = false);
+    // Chama o carregamento normal
+    await _carregarTalhoesParaSelecao(preservarInventario: widget.talhoesPreSelecionados != null);
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
-  // >>> LÓGICA RESTAURADA PARA BUSCAR CUBAGEM EM OUTRA ATIVIDADE <<<
-  Future<void> _carregarTalhoesParaSelecao() async {
-    if (_projetoSelecionado == null ||
-        _atividadeSelecionada == null ||
-        _fazendaSelecionada == null) return;
+  /// Carrega talhões de Cubagem e Inventário baseados na seleção atual.
+  /// Se [preservarInventario] for true, não sobrescreve a lista de inventário (útil para Estrato).
+  Future<void> _carregarTalhoesParaSelecao({bool preservarInventario = false}) async {
+    if (_projetoSelecionado == null || _atividadeSelecionada == null || _fazendaSelecionada == null) return;
 
-    // 1. Busca os talhões de INVENTÁRIO (da atividade selecionada)
-    final todosTalhoesDaFazendaInventario =
-        await _talhaoRepository.getTalhoesDaFazenda(
-            _fazendaSelecionada!.id, _fazendaSelecionada!.atividadeId);
-            
-    final talhoesCompletosInvIds = (await _talhaoRepository
-            .getTalhoesComParcelasConcluidas())
-        .map((t) => t.id)
-        .toSet();
-        
-    final talhoesInventarioEncontrados = todosTalhoesDaFazendaInventario
-        .where((t) => talhoesCompletosInvIds.contains(t.id))
-        .toList();
+    List<Talhao> talhoesInventarioEncontrados = [];
+    
+    // 1. Busca os talhões de INVENTÁRIO (da atividade selecionada) se necessário
+    if (!preservarInventario) {
+      final todosTalhoesDaFazendaInventario = await _talhaoRepository.getTalhoesDaFazenda(
+          _fazendaSelecionada!.id, _fazendaSelecionada!.atividadeId);
+      
+      final talhoesCompletosInvIds = (await _talhaoRepository.getTalhoesComParcelasConcluidas())
+          .map((t) => t.id)
+          .toSet();
+      
+      talhoesInventarioEncontrados = todosTalhoesDaFazendaInventario
+          .where((t) => talhoesCompletosInvIds.contains(t.id))
+          .toList();
+    }
 
     // 2. Busca os talhões de CUBAGEM (procurando a atividade irmã)
     List<Talhao> talhoesCubagemEncontrados = [];
     
-    final todasAtividadesDoProjeto =
-        await _atividadeRepository.getAtividadesDoProjeto(_projetoSelecionado!.id!);
-        
-    // Tenta encontrar uma atividade que contenha "CUB" no nome (ex: "Cubagem Rigorosa")
+    final todasAtividadesDoProjeto = await _atividadeRepository.getAtividadesDoProjeto(_projetoSelecionado!.id!);
+    
+    // Tenta encontrar uma atividade que contenha "CUB" no nome
     final atividadeCub = todasAtividadesDoProjeto
-        .cast<Atividade?>()
-        .firstWhere((a) => a?.tipo.toUpperCase().contains('CUB') ?? false,
-            orElse: () => null);
+        .firstWhereOrNull((a) => a.tipo.toUpperCase().contains('CUB'));
 
     if (atividadeCub != null) {
       // Se achou a atividade de cubagem, busca a fazenda CORRESPONDENTE (pelo nome)
-      final fazendasDaAtividadeCub =
-          await _fazendaRepository.getFazendasDaAtividade(atividadeCub.id!);
-          
+      final fazendasDaAtividadeCub = await _fazendaRepository.getFazendasDaAtividade(atividadeCub.id!);
+      
       final fazendaCub = fazendasDaAtividadeCub
-          .cast<Fazenda?>()
-          .firstWhere((f) => f?.nome == _fazendaSelecionada!.nome,
-              orElse: () => null);
+          .firstWhereOrNull((f) => f.nome == _fazendaSelecionada!.nome);
 
       if (fazendaCub != null) {
         // Se achou a fazenda na cubagem, pega os talhões dela
-        final todosTalhoesDaFazendaCub =
-            await _talhaoRepository.getTalhoesDaFazenda(
-                fazendaCub.id, fazendaCub.atividadeId);
-                
+        final todosTalhoesDaFazendaCub = await _talhaoRepository.getTalhoesDaFazenda(fazendaCub.id, fazendaCub.atividadeId);
+        
         final todasCubagens = await _cubagemRepository.getTodasCubagens();
         
         // Filtra talhões que tenham árvores com altura total > 0 (cubagem feita)
@@ -194,10 +283,14 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       }
     }
 
-    setState(() {
-      _talhoesComInventarioDisponiveis = talhoesInventarioEncontrados;
-      _talhoesComCubagemDisponiveis = talhoesCubagemEncontrados;
-    });
+    if (mounted) {
+      setState(() {
+        if (!preservarInventario) {
+          _talhoesComInventarioDisponiveis = talhoesInventarioEncontrados;
+        }
+        _talhoesComCubagemDisponiveis = talhoesCubagemEncontrados;
+      });
+    }
   }
 
   void _limparResultados() {
@@ -207,8 +300,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
   }
 
   Future<void> _gerarAnaliseCompleta() async {
-    if (_talhoesCubadosSelecionados.isEmpty ||
-        _talhoesInventarioSelecionados.isEmpty) {
+    if (_talhoesCubadosSelecionados.isEmpty || _talhoesInventarioSelecionados.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Selecione ao menos um talhão de cubagem E um de inventário.'),
           backgroundColor: Colors.orange));
@@ -223,8 +315,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     try {
       List<CubagemArvore> arvoresParaRegressao = [];
       for (final talhaoId in _talhoesCubadosSelecionados) {
-        arvoresParaRegressao
-            .addAll(await _cubagemRepository.getTodasCubagensDoTalhao(talhaoId));
+        arvoresParaRegressao.addAll(await _cubagemRepository.getTodasCubagensDoTalhao(talhaoId));
       }
 
       List<Talhao> talhoesInventarioAnalisados = [];
@@ -233,8 +324,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
         if (talhao != null) talhoesInventarioAnalisados.add(talhao);
       }
 
-      final resultadoCompleto =
-          await _analysisService.gerarAnaliseVolumetricaCompleta(
+      final resultadoCompleto = await _analysisService.gerarAnaliseVolumetricaCompleta(
         arvoresParaRegressao: arvoresParaRegressao,
         talhoesInventario: talhoesInventarioAnalisados,
       );
@@ -274,9 +364,9 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
 
   @override
   Widget build(BuildContext context) {
-    // CORES BASE
+    // CORES BASE (CONTRASTE)
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color cardColor = isDark ? const Color(0xFF1E293B) : Colors.white; // Azul/Cinza escuro ou Branco
+    final Color cardColor = isDark ? const Color(0xFF1E293B) : Colors.white; 
 
     return Scaffold(
       appBar: AppBar(
@@ -315,59 +405,37 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                           value: _projetoSelecionado,
                           hint: const Text('Selecione um Projeto'),
                           isExpanded: true,
-                          items: _projetosDisponiveis
-                              .map((p) => DropdownMenuItem(
-                                  value: p,
-                                  child: Text(p.nome,
-                                      overflow: TextOverflow.ellipsis)))
-                              .toList(),
+                          items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome, overflow: TextOverflow.ellipsis))).toList(),
                           onChanged: _onProjetoSelecionado,
-                          decoration:
-                              const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                          decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                         ),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<Atividade>(
                           value: _atividadeSelecionada,
                           hint: const Text('Selecione uma Atividade'),
-                          disabledHint:
-                              const Text('Selecione um projeto primeiro'),
+                          disabledHint: const Text('Selecione um projeto primeiro'),
                           isExpanded: true,
-                          items: _atividadesDisponiveis
-                              .map((a) => DropdownMenuItem(
-                                  value: a,
-                                  child: Text(a.tipo,
-                                      overflow: TextOverflow.ellipsis)))
-                              .toList(),
-                          onChanged: _projetoSelecionado == null
-                              ? null
-                              : _onAtividadeSelecionada,
-                          decoration:
-                              const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                          items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo, overflow: TextOverflow.ellipsis))).toList(),
+                          onChanged: _projetoSelecionado == null ? null : _onAtividadeSelecionada,
+                          decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                         ),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<Fazenda>(
                           value: _fazendaSelecionada,
                           hint: const Text('Selecione uma Fazenda'),
-                          disabledHint:
-                              const Text('Selecione uma atividade primeiro'),
+                          disabledHint: const Text('Selecione uma atividade primeiro'),
                           isExpanded: true,
-                          items: _fazendasDisponiveis
-                              .map((f) => DropdownMenuItem(
-                                  value: f,
-                                  child: Text(f.nome,
-                                      overflow: TextOverflow.ellipsis)))
-                              .toList(),
-                          onChanged: _atividadeSelecionada == null
-                              ? null
-                              : _onFazendaSelecionada,
-                          decoration:
-                              const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                          items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome, overflow: TextOverflow.ellipsis))).toList(),
+                          onChanged: _atividadeSelecionada == null ? null : _onFazendaSelecionada,
+                          decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                         ),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
+                
+                // CARD 1: CUBAGEM
                 _buildTalhaoSelectionCard(
                   title: '1. Selecione os Talhões CUBADOS',
                   subtitle: 'Serão usados para gerar a equação de volume.',
@@ -376,6 +444,8 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                   cardColor: cardColor,
                 ),
                 const SizedBox(height: 16),
+                
+                // CARD 2: INVENTÁRIO
                 _buildTalhaoSelectionCard(
                   title: '2. Selecione os Talhões de INVENTÁRIO',
                   subtitle: 'A equação será aplicada nestes talhões.',
@@ -383,6 +453,8 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                   talhoesSelecionadosSet: _talhoesInventarioSelecionados,
                   cardColor: cardColor,
                 ),
+                
+                // RESULTADOS
                 if (_analiseResult != null) ...[
                   const SizedBox(height: 16),
                   _buildResultCard(_analiseResult!.resultadoRegressao, _analiseResult!.diagnosticoRegressao, cardColor),
@@ -395,6 +467,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                 ]
               ],
             ),
+            
       // --- BOTÃO FLUTUANTE ---
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isAnalyzing ? null : _gerarAnaliseCompleta,
@@ -431,19 +504,11 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
             Text(subtitle, style: const TextStyle(color: Colors.grey)),
             const Divider(),
             if (_isLoading)
-              const Center(
-                  child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator()))
-            else if (_fazendaSelecionada == null)
-              const Center(
-                  child: Text(
-                      'Selecione um projeto, atividade e fazenda para ver os talhões.'))
+              const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))
+            else if (_fazendaSelecionada == null && widget.talhoesPreSelecionados == null)
+              const Center(child: Text('Selecione um projeto, atividade e fazenda para ver os talhões.'))
             else if (talhoesDisponiveis.isEmpty)
-              const Center(
-                  child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text('Nenhum talhão com dados encontrado.')))
+              const Center(child: Padding(padding: EdgeInsets.all(8.0), child: Text('Nenhum talhão com dados encontrado.')))
             else
               ListView.builder(
                 shrinkWrap: true,
@@ -571,6 +636,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
                 ])));
   }
 
+  // --- WIDGET DE GRÁFICO (Produção Comercial) ---
   Widget _buildProducaoComercialCard(AnaliseVolumetricaCompletaResult result, Color cardColor) {
     final data = result.producaoPorSortimento;
     if (data.isEmpty) return const SizedBox.shrink();
@@ -584,7 +650,6 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
       end: Alignment.bottomCenter,
     );
     
-    // Calcula o máximo para desenhar o fundo
     double maxY = 0.0;
     if (data.isNotEmpty) {
        maxY = data.map((e) => e.volumeHa).reduce((a, b) => a > b ? a : b);
@@ -696,6 +761,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
+  // --- WIDGET DE GRÁFICO (Volume por Código) ---
   Widget _buildVolumePorCodigoCard(AnaliseVolumetricaCompletaResult result, Color cardColor) {
     final data = result.volumePorCodigo;
     if (data.isEmpty) return const SizedBox.shrink();
@@ -812,6 +878,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
+  // --- WIDGET DE TABELA DETALHADA ---
   Widget _buildDetailedTable({
     required List<String> headers,
     required List<List<String>> rows,
@@ -839,6 +906,7 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
     );
   }
 
+  // --- LINHA DE ESTATÍSTICA SIMPLES ---
   Widget _buildStatRow(String label, String value, {Color? valueColor}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final Color labelColor = isDark ? Colors.white70 : Colors.black54;
