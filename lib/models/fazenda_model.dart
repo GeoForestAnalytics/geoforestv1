@@ -41,9 +41,10 @@ class Fazenda {
     return Fazenda(
       id: map[DbFazendas.id],
       atividadeId: map[DbFazendas.atividadeId],
-      nome: map[DbFazendas.nome],
-      municipio: map[DbFazendas.municipio],
-      estado: map[DbFazendas.estado],
+      // ⬇️ ALTERAÇÃO AQUI: Proteção contra NULL
+      nome: map[DbFazendas.nome] ?? 'Fazenda Sem Nome',
+      municipio: map[DbFazendas.municipio] ?? 'N/I', // N/I = Não Informado
+      estado: map[DbFazendas.estado] ?? 'UF',
       lastModified: parseDate(map[DbFazendas.lastModified]),
     );
   }

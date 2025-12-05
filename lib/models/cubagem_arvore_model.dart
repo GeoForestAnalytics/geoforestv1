@@ -1,4 +1,4 @@
-// lib/models/cubagem_arvore_model.dart (VERSÃO REFATORADA)
+// lib/models/cubagem_arvore_model.dart (VERSÃO CORRIGIDA E ROBUSTA)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geoforestv1/data/datasources/local/database_constants.dart';
@@ -75,7 +75,10 @@ class CubagemArvore {
       DbCubagensArvores.longitude: longitude,
       DbCubagensArvores.metodoCubagem: metodoCubagem,
       DbCubagensArvores.rf: rf,
-      DbCubagensArvores.dataColeta: dataColeta?.toIso8601String(),
+      
+      // >>> CORREÇÃO 1: Se tem altura (foi medida) mas não tem data, insere AGORA <<<
+      DbCubagensArvores.dataColeta: dataColeta?.toIso8601String() ?? (alturaTotal > 0 ? DateTime.now().toIso8601String() : null),
+      
       DbCubagensArvores.exportada: exportada ? 1 : 0,
       DbCubagensArvores.isSynced: isSynced ? 1 : 0,
       DbCubagensArvores.nomeLider: nomeLider,
@@ -107,10 +110,22 @@ class CubagemArvore {
       exportada: map[DbCubagensArvores.exportada] == 1,
       isSynced: map[DbCubagensArvores.isSynced] == 1,
       nomeLider: map[DbCubagensArvores.nomeLider],
-      alturaTotal: (map[DbCubagensArvores.alturaTotal] as num?)?.toDouble() ?? 0,
+      
+      // >>> CORREÇÃO 2: Robustez na leitura de números (String ou Num) <<<
+      alturaTotal: (map[DbCubagensArvores.alturaTotal] is String)
+          ? double.tryParse(map[DbCubagensArvores.alturaTotal].toString().replaceAll(',', '.')) ?? 0.0
+          : (map[DbCubagensArvores.alturaTotal] as num?)?.toDouble() ?? 0.0,
+          
       tipoMedidaCAP: map[DbCubagensArvores.tipoMedidaCAP] ?? 'fita',
-      valorCAP: (map[DbCubagensArvores.valorCAP] as num?)?.toDouble() ?? 0,
-      alturaBase: (map[DbCubagensArvores.alturaBase] as num?)?.toDouble() ?? 0,
+      
+      valorCAP: (map[DbCubagensArvores.valorCAP] is String)
+          ? double.tryParse(map[DbCubagensArvores.valorCAP].toString().replaceAll(',', '.')) ?? 0.0
+          : (map[DbCubagensArvores.valorCAP] as num?)?.toDouble() ?? 0.0,
+          
+      alturaBase: (map[DbCubagensArvores.alturaBase] is String)
+          ? double.tryParse(map[DbCubagensArvores.alturaBase].toString().replaceAll(',', '.')) ?? 0.0
+          : (map[DbCubagensArvores.alturaBase] as num?)?.toDouble() ?? 0.0,
+      
       lastModified: parseDate(map[DbCubagensArvores.lastModified]),
     );
   }

@@ -57,17 +57,17 @@ class Projeto {
     }
 
     final dataCriacao = parseDate(map[DbProjetos.dataCriacao]);
-    if (dataCriacao == null) {
-      throw FormatException("Formato de data inválido para 'dataCriacao' no Projeto ${map[DbProjetos.id]}");
-    }
+    // Removida a exceção para evitar travar o app se a data vier errada
+    final dataFinal = dataCriacao ?? DateTime.now(); 
 
     return Projeto(
       id: map[DbProjetos.id],
       licenseId: map[DbProjetos.licenseId],
-      nome: map[DbProjetos.nome],
-      empresa: map[DbProjetos.empresa],
-      responsavel: map[DbProjetos.responsavel],
-      dataCriacao: dataCriacao,
+      // ⬇️ ALTERAÇÃO AQUI: Adicionado ?? '...' para evitar NULL no banco
+      nome: map[DbProjetos.nome] ?? 'Projeto Sem Nome',
+      empresa: map[DbProjetos.empresa] ?? 'Empresa N/A', 
+      responsavel: map[DbProjetos.responsavel] ?? 'Resp. N/A',
+      dataCriacao: dataFinal,
       status: map[DbProjetos.status] ?? 'ativo',
       delegadoPorLicenseId: map[DbProjetos.delegadoPorLicenseId],
       lastModified: parseDate(map[DbProjetos.lastModified]),

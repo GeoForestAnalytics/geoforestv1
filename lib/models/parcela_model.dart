@@ -1,4 +1,4 @@
-// lib/models/parcela_model.dart (VERSÃO REFATORADA)
+// lib/models/parcela_model.dart (VERSÃO CORRIGIDA PARA SINCRONIZAÇÃO)
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -103,7 +103,11 @@ class Parcela {
       DbParcelas.nomeTalhao: nomeTalhao, DbParcelas.idParcela: idParcela,
       DbParcelas.areaMetrosQuadrados: areaMetrosQuadrados, DbParcelas.observacao: observacao,
       DbParcelas.latitude: latitude, DbParcelas.longitude: longitude, 
-      DbParcelas.altitude: altitude, DbParcelas.dataColeta: dataColeta?.toIso8601String(),
+      DbParcelas.altitude: altitude, 
+      
+      // >>> CORREÇÃO 1: Se estiver concluída mas sem data, insere data de agora <<<
+      DbParcelas.dataColeta: dataColeta?.toIso8601String() ?? (status == StatusParcela.concluida ? DateTime.now().toIso8601String() : null),
+      
       DbParcelas.status: status.name, DbParcelas.exportada: exportada ? 1 : 0, 
       DbParcelas.isSynced: isSynced ? 1 : 0, DbParcelas.nomeLider: nomeLider, 
       DbParcelas.projetoId: projetoId, DbParcelas.municipio: municipio, DbParcelas.estado: estado,
@@ -145,12 +149,18 @@ class Parcela {
       longitude: (map[DbParcelas.longitude] as num?)?.toDouble(),
       altitude: (map[DbParcelas.altitude] as num?)?.toDouble(),
       dataColeta: parseDate(map[DbParcelas.dataColeta]),
-      status: StatusParcela.values.firstWhere((e) => e.name == map[DbParcelas.status], orElse: () => StatusParcela.pendente),
+      
+      // >>> CORREÇÃO 2: Leitura insensível a maiúsculas/minúsculas <<<
+      status: StatusParcela.values.firstWhere(
+        (e) => e.name.toLowerCase() == map[DbParcelas.status]?.toString().toLowerCase(),
+        orElse: () => StatusParcela.pendente
+      ),
+      
       exportada: map[DbParcelas.exportada] == 1,
       isSynced: map[DbParcelas.isSynced] == 1,
       nomeLider: map[DbParcelas.nomeLider],
       projetoId: map[DbParcelas.projetoId],
-      atividadeTipo: map['atividadeTipo'], // Este não é do banco, vem do provider
+      atividadeTipo: map['atividadeTipo'],
       up: map[DbParcelas.up],
       referenciaRf: map[DbParcelas.referenciaRf],
       ciclo: map[DbParcelas.ciclo]?.toString(),

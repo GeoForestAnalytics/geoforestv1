@@ -1,4 +1,4 @@
-// lib/services/sync_service.dart (VERSÃO FINAL COM LOGS DE DEBUG)
+// lib/services/sync_service.dart (VERSÃO CORRIGIDA PARA FORÇAR CONCLUÍDAS)
 
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
@@ -196,7 +196,6 @@ class SyncService {
         try {
           final projetoPai = await _projetoRepository.getProjetoPelaParcela(parcelaLocal);
           
-          // LÓGICA DE ROTEAMENTO EXPLÍCITA
           String? licenseIdDeDestino;
           if (projetoPai?.delegadoPorLicenseId != null) {
              licenseIdDeDestino = projetoPai!.delegadoPorLicenseId;
@@ -215,7 +214,17 @@ class SyncService {
           if (docServer.exists) {
             final serverData = docServer.data()!;
             final serverLastModified = (serverData['lastModified'] as firestore.Timestamp?)?.toDate();
-            if (serverLastModified != null && parcelaLocal.lastModified != null && serverLastModified.isAfter(parcelaLocal.lastModified!)) {
+            
+            // >>> CORREÇÃO 1: LÓGICA DE PRIORIDADE PARA PARCELAS CONCLUÍDAS <<<
+            final String statusServer = (serverData['status'] ?? 'pendente').toString().toLowerCase();
+            
+            if (parcelaLocal.status == StatusParcela.concluida && statusServer != 'concluida') {
+               // Se eu concluí e o servidor não, EU GANHO. (Ignora data)
+               deveEnviar = true;
+               debugPrint("--- [FORCE UPDATE] Parcela concluída localmente. Forçando envio sobre versão pendente do servidor.");
+            } 
+            else if (serverLastModified != null && parcelaLocal.lastModified != null && serverLastModified.isAfter(parcelaLocal.lastModified!)) {
+              // Caso padrão de conflito por data
               deveEnviar = false;
               conflicts.add(SyncConflict(
                 type: ConflictType.parcela,
@@ -225,6 +234,7 @@ class SyncService {
               ));
             }
           }
+          
           if (deveEnviar) {
             await _uploadParcela(docRef, parcelaLocal);
           }
@@ -245,7 +255,6 @@ class SyncService {
          try {
           final projetoPai = await _projetoRepository.getProjetoPelaCubagem(cubagemLocal);
           
-          // LÓGICA DE ROTEAMENTO EXPLÍCITA
           String? licenseIdDeDestino;
           if (projetoPai?.delegadoPorLicenseId != null) {
              licenseIdDeDestino = projetoPai!.delegadoPorLicenseId;
@@ -264,7 +273,16 @@ class SyncService {
           if (docServer.exists) {
             final serverData = docServer.data()!;
             final serverLastModified = (serverData['lastModified'] as firestore.Timestamp?)?.toDate();
-            if (serverLastModified != null && cubagemLocal.lastModified != null && serverLastModified.isAfter(cubagemLocal.lastModified!)) {
+            
+            // >>> CORREÇÃO 2: LÓGICA DE PRIORIDADE PARA CUBAGENS MEDIDAS <<<
+            final double alturaServer = (serverData['alturaTotal'] as num?)?.toDouble() ?? 0.0;
+            
+            if (cubagemLocal.alturaTotal > 0 && alturaServer == 0) {
+               // Se eu medi e o servidor não, EU GANHO. (Ignora data)
+               deveEnviar = true;
+               debugPrint("--- [FORCE UPDATE] Cubagem concluída localmente. Forçando envio.");
+            }
+            else if (serverLastModified != null && cubagemLocal.lastModified != null && serverLastModified.isAfter(cubagemLocal.lastModified!)) {
               deveEnviar = false;
               conflicts.add(SyncConflict(
                 type: ConflictType.cubagem,
@@ -337,7 +355,23 @@ class SyncService {
       if (existing.isNotEmpty) {
           final localLastModified = DateTime.tryParse(existing.first['lastModified']?.toString() ?? '');
           final serverLastModified = DateTime.tryParse(data['lastModified']?.toString() ?? '');
+          
+          bool deveAtualizar = false;
+          
           if (serverLastModified != null && (localLastModified == null || serverLastModified.isAfter(localLastModified))) {
+             deveAtualizar = true;
+          } 
+          // >>> CORREÇÃO 3: LÓGICA DE PRIORIDADE NO DOWNLOAD TAMBÉM <<<
+          // Se o servidor diz que está concluído e eu não, o servidor ganha.
+          else if (table == 'parcelas') {
+             final statusLocal = existing.first['status']?.toString().toLowerCase();
+             final statusServer = data['status']?.toString().toLowerCase();
+             if (statusLocal != 'concluida' && statusServer == 'concluida') {
+                deveAtualizar = true;
+             }
+          }
+
+          if (deveAtualizar) {
             await txn.update(table, data, where: whereClause, whereArgs: whereArgs);
           }
       } else {
@@ -369,30 +403,32 @@ class SyncService {
     return downloadedTalhaoIds;
   }
 
-  // --- LÓGICA DE DOWNLOAD REFINADA ---
   Future<List<int>> _processarProjetoDaNuvem(firestore.QueryDocumentSnapshot projDoc, String licenseIdDeOrigem, Database db) async {
-    final projetoData = projDoc.data() as Map<String, dynamic>; 
-    final user = _auth.currentUser;
-    
-    // Verifica se é um projeto delegado
-    if (user != null) {
-      final licenseInfo = await _licensingService.findLicenseDocumentForUser(user);
-      final meuLicenseId = licenseInfo?.id;
+    try {
+      final projetoData = projDoc.data() as Map<String, dynamic>; 
+      final user = _auth.currentUser;
+      
+      if (user != null) {
+        final licenseInfo = await _licensingService.findLicenseDocumentForUser(user);
+        final meuLicenseId = licenseInfo?.id;
 
-      // Se a licença de origem NÃO for a minha, então é um projeto que me foi delegado.
-      // Preciso marcar isso localmente para saber onde fazer upload depois.
-      if (meuLicenseId != null && licenseIdDeOrigem != meuLicenseId) {
-          debugPrint("--- [SYNC] Marcando projeto ${projetoData['nome']} como DELEGADO de $licenseIdDeOrigem");
-          projetoData['delegado_por_license_id'] = licenseIdDeOrigem;
+        if (meuLicenseId != null && licenseIdDeOrigem != meuLicenseId) {
+            debugPrint("--- [SYNC] Marcando projeto ${projetoData['nome']} como DELEGADO de $licenseIdDeOrigem");
+            projetoData['delegado_por_license_id'] = licenseIdDeOrigem;
+        }
       }
-    }
 
-    final projeto = Projeto.fromMap(projetoData);
-    await db.transaction((txn) async {
-        await _upsert(txn, 'projetos', projeto.toMap(), 'id');
-    });
-    
-    return await _downloadFilhosDeProjeto(licenseIdDeOrigem, projeto.id!);
+      final projeto = Projeto.fromMap(projetoData);
+      await db.transaction((txn) async {
+          await _upsert(txn, 'projetos', projeto.toMap(), 'id');
+      });
+      
+      return await _downloadFilhosDeProjeto(licenseIdDeOrigem, projeto.id!);
+
+    } catch (e) {
+      debugPrint("ERRO CRÍTICO ao processar projeto delegado (${projDoc.id}): $e");
+      return []; 
+    }
   }
   
   Future<void> _downloadColetas(String licenseId, {required List<int> talhaoIdsParaBaixar}) async {
@@ -449,8 +485,16 @@ class SyncService {
               final parcelaLocalResult = await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1);
 
               if (parcelaLocalResult.isNotEmpty && parcelaLocalResult.first['isSynced'] == 0) {
-                debugPrint("PULANDO DOWNLOAD da parcela ${parcelaDaNuvem.idParcela} pois existem alterações locais não sincronizadas.");
-                return;
+                // Aqui podemos adicionar uma lógica similar: se nuvem é "concluída" e local é "pendente", baixa.
+                final statusLocal = parcelaLocalResult.first['status']?.toString().toLowerCase();
+                final statusNuvem = parcelaDaNuvem.status.name.toLowerCase();
+                
+                if (statusLocal != 'concluida' && statusNuvem == 'concluida') {
+                   // Permite o download para atualizar
+                } else {
+                   debugPrint("PULANDO DOWNLOAD da parcela ${parcelaDaNuvem.idParcela} pois existem alterações locais não sincronizadas.");
+                   return;
+                }
               }
               
               final pMap = parcelaDaNuvem.toMap();
@@ -539,5 +583,3 @@ class SyncService {
     await docRef.set(diarioMap, firestore.SetOptions(merge: true));
   }
 }
-
-// Conferir se esse sync service está devidamente integrado com o app e funcionando corretamente.
