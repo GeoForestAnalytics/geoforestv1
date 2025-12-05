@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import 'package:collection/collection.dart'; 
+ 
 
 import 'package:geoforestv1/providers/operacoes_provider.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';

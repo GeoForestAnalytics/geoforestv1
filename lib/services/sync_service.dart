@@ -1,4 +1,4 @@
-// lib/services/sync_service.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/services/sync_service.dart (VERSÃO FINAL COM LOGS DE DEBUG)
 
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
@@ -65,17 +65,15 @@ class SyncService {
           await _uploadHierarquiaCompleta(licenseIdDoUsuarioLogado);
         }
       }
+      
+      // Upload de dados (com lógica corrigida)
       await _uploadColetasNaoSincronizadas(licenseIdDoUsuarioLogado, totalGeral);
 
       _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, processados: totalGeral, mensagem: "Baixando dados da nuvem..."));
       
       if (licenseIdDoUsuarioLogado != null) {
         debugPrint("--- SyncService: Baixando dados da licença PRÓPRIA: $licenseIdDoUsuarioLogado");
-        
-        // <<< CORREÇÃO 1: Capturar a lista de IDs de talhões retornada >>>
         final idsHierarquiaLocal = await _downloadHierarquiaCompleta(licenseIdDoUsuarioLogado);
-        
-        // <<< CORREÇÃO 2: Passar a lista de IDs para a função de download de coletas >>>
         await _downloadColetas(licenseIdDoUsuarioLogado, talhaoIdsParaBaixar: idsHierarquiaLocal);
       }
       
@@ -85,7 +83,6 @@ class SyncService {
         final projetosParaBaixar = entry.value;
         debugPrint("--- SyncService: Baixando dados delegados da licença do CLIENTE: $licenseIdDoCliente para os projetos $projetosParaBaixar");
         
-        // <<< CORREÇÃO 3: Fazer o mesmo para projetos delegados >>>
         final idsHierarquiaDelegada = await _downloadHierarquiaCompleta(licenseIdDoCliente, projetosParaBaixar: projetosParaBaixar);
         await _downloadColetas(licenseIdDoCliente, talhaoIdsParaBaixar: idsHierarquiaDelegada);
       }
@@ -193,12 +190,21 @@ class SyncService {
         _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, processados: processados, mensagem: "Enviando item ${processados + 1} de $totalGeral..."));
       }
 
+      // --- PARCELAS ---
       final parcelaLocal = await _parcelaRepository.getOneUnsyncedParcel();
       if (parcelaLocal != null) {
         try {
           final projetoPai = await _projetoRepository.getProjetoPelaParcela(parcelaLocal);
-          final licenseIdDeDestino = projetoPai?.delegadoPorLicenseId ?? projetoPai?.licenseId ?? licenseIdDoUsuarioLogado;
-          debugPrint(">>> UPLOAD PARCELA ${parcelaLocal.idParcela}: Destino Firestore -> $licenseIdDeDestino");
+          
+          // LÓGICA DE ROTEAMENTO EXPLÍCITA
+          String? licenseIdDeDestino;
+          if (projetoPai?.delegadoPorLicenseId != null) {
+             licenseIdDeDestino = projetoPai!.delegadoPorLicenseId;
+             debugPrint("--- [UPLOAD] Parcela ${parcelaLocal.idParcela} (Proj: ${projetoPai.nome}) é DELEGADA. Enviando para DONO: $licenseIdDeDestino");
+          } else {
+             licenseIdDeDestino = licenseIdDoUsuarioLogado;
+             debugPrint("--- [UPLOAD] Parcela ${parcelaLocal.idParcela} é PRÓPRIA. Enviando para MIM: $licenseIdDeDestino");
+          }
           
           if (licenseIdDeDestino == null) throw Exception("Licença de destino não encontrada para a parcela ${parcelaLocal.idParcela}.");
           
@@ -227,17 +233,28 @@ class SyncService {
           continue;
         } catch (e) {
           final erroMsg = "Falha ao enviar parcela ${parcelaLocal.idParcela}: $e";
+          debugPrint(erroMsg);
           _progressStreamController.add(SyncProgress(erro: erroMsg, concluido: true));
           break;
         }
       }
 
+      // --- CUBAGENS ---
       final cubagemLocal = await _cubagemRepository.getOneUnsyncedCubagem();
       if(cubagemLocal != null){
          try {
           final projetoPai = await _projetoRepository.getProjetoPelaCubagem(cubagemLocal);
-          final licenseIdDeDestino = projetoPai?.delegadoPorLicenseId ?? projetoPai?.licenseId ?? licenseIdDoUsuarioLogado;
-          debugPrint(">>> UPLOAD Cubagem ${cubagemLocal.id}: Destino Firestore -> $licenseIdDeDestino");
+          
+          // LÓGICA DE ROTEAMENTO EXPLÍCITA
+          String? licenseIdDeDestino;
+          if (projetoPai?.delegadoPorLicenseId != null) {
+             licenseIdDeDestino = projetoPai!.delegadoPorLicenseId;
+             debugPrint("--- [UPLOAD] Cubagem ${cubagemLocal.identificador} é DELEGADA. Enviando para DONO: $licenseIdDeDestino");
+          } else {
+             licenseIdDeDestino = licenseIdDoUsuarioLogado;
+             debugPrint("--- [UPLOAD] Cubagem ${cubagemLocal.identificador} é PRÓPRIA. Enviando para MIM: $licenseIdDeDestino");
+          }
+
            if (licenseIdDeDestino == null) throw Exception("Licença de destino não encontrada para a cubagem ${cubagemLocal.id}.");
           
           final docRef = _firestore.collection('clientes').doc(licenseIdDeDestino).collection('dados_cubagem').doc(cubagemLocal.id.toString());
@@ -265,6 +282,7 @@ class SyncService {
           continue;
         } catch (e) {
           final erroMsg = "Falha ao enviar cubagem ${cubagemLocal.id}: $e";
+          debugPrint(erroMsg);
           _progressStreamController.add(SyncProgress(erro: erroMsg, concluido: true));
           break;
         }
@@ -327,10 +345,8 @@ class SyncService {
       }
   }
 
-  // <<< CORREÇÃO 4: Mudar a assinatura da função para retornar Future<List<int>> >>>
   Future<List<int>> _downloadHierarquiaCompleta(String licenseId, {List<int>? projetosParaBaixar}) async {
     final db = await _dbHelper.database;
-    // <<< CORREÇÃO 5: Criar a lista que será retornada >>>
     final List<int> downloadedTalhaoIds = [];
 
     firestore.Query projetosQuery = _firestore.collection('clientes').doc(licenseId).collection('projetos');
@@ -339,7 +355,6 @@ class SyncService {
       for (var chunk in projetosParaBaixar.slices(10)) {
         final snap = await projetosQuery.where(firestore.FieldPath.documentId, whereIn: chunk.map((id) => id.toString()).toList()).get();
         for (var projDoc in snap.docs) {
-          // <<< CORREÇÃO 6: Capturar o retorno e adicionar à lista >>>
           final talhaoIds = await _processarProjetoDaNuvem(projDoc, licenseId, db);
           downloadedTalhaoIds.addAll(talhaoIds);
         }
@@ -347,34 +362,40 @@ class SyncService {
     } else {
        final snap = await projetosQuery.get();
         for (var projDoc in snap.docs) {
-          // <<< CORREÇÃO 7: Capturar o retorno e adicionar à lista >>>
           final talhaoIds = await _processarProjetoDaNuvem(projDoc, licenseId, db);
           downloadedTalhaoIds.addAll(talhaoIds);
         }
     }
-    // <<< CORREÇÃO 8: Retornar a lista preenchida >>>
     return downloadedTalhaoIds;
   }
 
-  // <<< CORREÇÃO 9: Mudar a assinatura da função para retornar Future<List<int>> >>>
-  Future<List<int>> _processarProjetoDaNuvem(firestore.QueryDocumentSnapshot projDoc, String licenseId, Database db) async {
+  // --- LÓGICA DE DOWNLOAD REFINADA ---
+  Future<List<int>> _processarProjetoDaNuvem(firestore.QueryDocumentSnapshot projDoc, String licenseIdDeOrigem, Database db) async {
     final projetoData = projDoc.data() as Map<String, dynamic>; 
-    final user = _auth.currentUser!;
-    final licenseInfo = await _licensingService.findLicenseDocumentForUser(user);
-    if (licenseId != licenseInfo?.id) {
-        projetoData['delegado_por_license_id'] = licenseId;
+    final user = _auth.currentUser;
+    
+    // Verifica se é um projeto delegado
+    if (user != null) {
+      final licenseInfo = await _licensingService.findLicenseDocumentForUser(user);
+      final meuLicenseId = licenseInfo?.id;
+
+      // Se a licença de origem NÃO for a minha, então é um projeto que me foi delegado.
+      // Preciso marcar isso localmente para saber onde fazer upload depois.
+      if (meuLicenseId != null && licenseIdDeOrigem != meuLicenseId) {
+          debugPrint("--- [SYNC] Marcando projeto ${projetoData['nome']} como DELEGADO de $licenseIdDeOrigem");
+          projetoData['delegado_por_license_id'] = licenseIdDeOrigem;
+      }
     }
+
     final projeto = Projeto.fromMap(projetoData);
     await db.transaction((txn) async {
         await _upsert(txn, 'projetos', projeto.toMap(), 'id');
     });
-    // <<< CORREÇÃO 10: Retornar o resultado da função chamada >>>
-    return await _downloadFilhosDeProjeto(licenseId, projeto.id!);
+    
+    return await _downloadFilhosDeProjeto(licenseIdDeOrigem, projeto.id!);
   }
   
-  // <<< CORREÇÃO 11: Mudar a assinatura para aceitar a lista de IDs de talhões >>>
   Future<void> _downloadColetas(String licenseId, {required List<int> talhaoIdsParaBaixar}) async {
-    // <<< CORREÇÃO 12: Verificar se a lista de IDs está vazia >>>
     if (talhaoIdsParaBaixar.isEmpty) {
       debugPrint("--- SyncService: Nenhum talhão encontrado para baixar coletas. Pulando etapa.");
       return;
@@ -384,10 +405,8 @@ class SyncService {
     await _downloadCubagensDaNuvem(licenseId, talhaoIdsParaBaixar);
   }
   
-  // <<< CORREÇÃO 13: Mudar a assinatura da função para retornar Future<List<int>> >>>
   Future<List<int>> _downloadFilhosDeProjeto(String licenseId, int projetoId) async {
     final db = await _dbHelper.database;
-    // <<< CORREÇÃO 14: Criar a lista que será retornada >>>
     final List<int> downloadedTalhaoIds = [];
 
     final atividadesSnap = await _firestore.collection('clientes').doc(licenseId).collection('atividades').where('projetoId', isEqualTo: projetoId).get();
@@ -406,13 +425,11 @@ class SyncService {
           final talhao = Talhao.fromMap(data);
           await db.transaction((txn) async { await _upsert(txn, 'talhoes', talhao.toMap(), 'id'); });
           if (talhao.id != null) {
-            // <<< CORREÇÃO 15: Adicionar o ID do talhão à lista >>>
             downloadedTalhaoIds.add(talhao.id!);
           }
         }
       }
     }
-    // <<< CORREÇÃO 16: Retornar a lista preenchida >>>
     return downloadedTalhaoIds;
   }
   
@@ -508,6 +525,7 @@ class SyncService {
     await projetoRef.update({'status': novoStatus});
   }
 
+
   Future<void> sincronizarDiarioDeCampo(DiarioDeCampo diario) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception("Usuário não está logado.");
@@ -521,3 +539,5 @@ class SyncService {
     await docRef.set(diarioMap, firestore.SetOptions(merge: true));
   }
 }
+
+// Conferir se esse sync service está devidamente integrado com o app e funcionando corretamente.

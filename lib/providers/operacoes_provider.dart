@@ -6,7 +6,7 @@ import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
 import 'package:geoforestv1/models/parcela_model.dart'; 
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
-import 'package:intl/intl.dart';
+
 
 class KpiData {
   final String progressoAmostras; 

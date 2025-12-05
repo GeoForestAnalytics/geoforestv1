@@ -44,7 +44,7 @@ class _MenuCardState extends State<MenuCard> {
     
     // Cores do Tema (mantendo sua identidade visual)
     final Color corDourada = const Color(0xFFEBE4AB); 
-    final Color corAzulEscura = const Color(0xFF023853); 
+     
     
     // Cores do Fundo do Cartão
     final Color corFundoBase = const Color.fromARGB(255, 204, 222, 245); 
