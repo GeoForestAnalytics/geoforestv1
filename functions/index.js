@@ -1,45 +1,45 @@
-// functions/index.js (VERSÃO COMPLETA E CORRIGIDA)
-
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const { v4: uuidv4 } = require("uuid");
+// Removi o uuidv4 pois vamos usar um gerador de código curto manual
 
 admin.initializeApp();
 const auth = admin.auth();
 const db = admin.firestore();
 
 // =========================================================================
-// FUNÇÃO 1: updateUserLicenseClaim (Sem alterações)
+// FUNÇÃO 1: updateUserLicenseClaim (Mantém as permissões em dia)
 // =========================================================================
 exports.updateUserLicenseClaim = functions
     .region("southamerica-east1")
     .firestore
     .document("clientes/{licenseId}")
     .onWrite(async (change, context) => {
-      // ... seu código original aqui, está correto ...
       const licenseId = context.params.licenseId;
       const dataAfter = change.after.exists ? change.after.data() : null;
       const dataBefore = change.before.exists ? change.before.data() : null;
       const usersAfter = dataAfter ? dataAfter.usuariosPermitidos || {} : {};
       const usersBefore = dataBefore ? dataBefore.usuariosPermitidos || {} : {};
+      
       const allUids = new Set([...Object.keys(usersBefore), ...Object.keys(usersAfter)]);
       const promises = [];
+      
       for (const uid of allUids) {
         const userIsMemberAfter = usersAfter[uid] != null;
         const userWasMemberBefore = usersBefore[uid] != null;
+        
         if (userIsMemberAfter) {
           const cargo = usersAfter[uid].cargo;
-          if (!cargo) {
-              console.error(`Cargo não encontrado para o usuário ${uid} na licença ${licenseId}. Pulando.`);
-              continue;
-          }
+          if (!cargo) continue;
+          
+          // Define os claims: licenseId (empresa) e cargo
           const promise = auth.setCustomUserClaims(uid, { licenseId: licenseId, cargo: cargo });
           promises.push(promise);
-          console.log(`Aplicando claims { licenseId: ${licenseId}, cargo: ${cargo} } para ${uid}`);
+          console.log(`Claims atualizados para ${uid}: Empresa ${licenseId}, Cargo ${cargo}`);
         } else if (userWasMemberBefore && !userIsMemberAfter) {
+          // Remove os claims se o usuário foi removido da equipe
           const promise = auth.setCustomUserClaims(uid, { licenseId: null, cargo: null });
           promises.push(promise);
-          console.log(`Removendo claims para ${uid}`);
+          console.log(`Claims revogados para ${uid}`);
         }
       }
       await Promise.all(promises);
@@ -47,36 +47,34 @@ exports.updateUserLicenseClaim = functions
     });
 
 // =========================================================================
-// FUNÇÃO 2: adicionarMembroEquipe (VERSÃO CORRIGIDA)
+// FUNÇÃO 2: adicionarMembroEquipe (Cria usuário e vincula à licença)
 // =========================================================================
 exports.adicionarMembroEquipe = functions
     .region("southamerica-east1")
     .https.onCall(async (data, context) => {
+      // Segurança: Apenas gerentes podem adicionar
       if (!context.auth || !context.auth.token.licenseId || context.auth.token.cargo !== 'gerente') {
         throw new functions.https.HttpsError("permission-denied", "Apenas gerentes autenticados podem adicionar membros.");
       }
       
       const { email, password, name, cargo } = data;
       if (!email || !password || !name || !cargo || password.length < 6) {
-        throw new functions.https.HttpsError("invalid-argument", "Dados inválidos. Forneça email, senha (mín. 6 caracteres), nome e cargo.");
+        throw new functions.https.HttpsError("invalid-argument", "Dados inválidos. Senha deve ter mín. 6 caracteres.");
       }
 
       const managerLicenseId = context.auth.token.licenseId;
 
       try {
-        // Passo 1: Cria o usuário no Firebase Authentication
+        // 1. Cria no Auth
         const userRecord = await admin.auth().createUser({
           email: email,
           password: password,
           displayName: name,
         });
 
-        // <<< INÍCIO DA CORREÇÃO >>>
-
-        // Passo 2: Prepara um "batch" para executar as duas escritas no Firestore
         const batch = db.batch();
 
-        // Passo 3: Adiciona a atualização do documento 'clientes' ao batch
+        // 2. Atualiza documento do CLIENTE (Empresa)
         const clienteDocRef = db.collection("clientes").doc(managerLicenseId);
         batch.update(clienteDocRef, {
             [`usuariosPermitidos.${userRecord.uid}`]: {
@@ -88,161 +86,162 @@ exports.adicionarMembroEquipe = functions
             "uidsPermitidos": admin.firestore.FieldValue.arrayUnion(userRecord.uid),
         });
 
-        // Passo 4: Adiciona a criação do documento 'users' ao batch
+        // 3. Cria documento do USUÁRIO (Link reverso para Login)
         const userDocRef = db.collection("users").doc(userRecord.uid);
         batch.set(userDocRef, {
             email: email,
-            licenseId: managerLicenseId, // Aponta para a licença do gerente
+            licenseId: managerLicenseId, 
         });
 
-        // Passo 5: Executa as duas operações juntas
         await batch.commit();
         
-        // <<< FIM DA CORREÇÃO >>>
-
         return { success: true, message: `Usuário '${name}' adicionado com sucesso!` };
 
       } catch (error) {
-        console.error("Erro ao criar membro da equipe:", error);
+        console.error("Erro ao criar membro:", error);
         if (error.code === 'auth/email-already-exists') {
-            throw new functions.https.HttpsError("already-exists", "Este email já está em uso por outro usuário.");
+            throw new functions.https.HttpsError("already-exists", "Este email já está em uso.");
         }
-        throw new functions.https.HttpsError("internal", "Ocorreu um erro interno ao criar o novo membro.");
+        throw new functions.https.HttpsError("internal", "Erro ao criar membro da equipe.");
       }
     });
 
 // =========================================================================
-// FUNÇÃO 3: deletarProjeto (Sem alterações)
+// FUNÇÃO 3: deletarProjeto (Soft Delete)
 // =========================================================================
 exports.deletarProjeto = functions
     .region("southamerica-east1")
     .https.onCall(async (data, context) => {
-      // ... seu código original aqui, está correto ...
       if (!context.auth || !context.auth.token.licenseId || context.auth.token.cargo !== 'gerente') {
-        throw new functions.https.HttpsError("permission-denied", "Apenas gerentes autenticados podem excluir projetos.");
+        throw new functions.https.HttpsError("permission-denied", "Permissão negada.");
       }
+      
       const { projetoId } = data;
-      if (!projetoId) {
-        throw new functions.https.HttpsError("invalid-argument", "O ID do projeto é obrigatório para a exclusão.");
-      }
       const licenseId = context.auth.token.licenseId;
-      const projetoRef = db.collection("clientes").doc(licenseId).collection('projetos').doc(projetoId.toString());
+      
       try {
-        await projetoRef.update({ status: 'deletado' });
-        console.log(`Projeto ${projetoId} da licença ${licenseId} marcado como 'deletado'.`);
-        return { success: true, message: "Projeto movido para a lixeira com sucesso." };
+        const projetoRef = db.collection("clientes").doc(licenseId).collection('projetos').doc(String(projetoId));
+        await projetoRef.update({ 
+            status: 'deletado',
+            lastModified: admin.firestore.FieldValue.serverTimestamp() 
+        });
+        return { success: true };
       } catch (error) {
-        console.error(`Falha ao marcar projeto ${projetoId} como deletado:`, error);
-        throw new functions.https.HttpsError("internal", "Ocorreu um erro interno ao tentar arquivar o projeto.");
+        throw new functions.https.HttpsError("internal", "Erro ao deletar projeto.");
       }
     });
 
 // =========================================================================
-// FUNÇÃO 4: delegarProjeto (Sem alterações)
+// FUNÇÃO 4: delegarProjeto (Gera chave curta)
 // =========================================================================
 exports.delegarProjeto = functions
     .region("southamerica-east1")
     .https.onCall(async (data, context) => {
-      // ... seu código original aqui, está correto ...
       if (!context.auth || !context.auth.token.licenseId || context.auth.token.cargo !== 'gerente') {
         throw new functions.https.HttpsError("permission-denied", "Apenas gerentes podem delegar projetos.");
       }
+      
       const { projetoId, nomeProjeto } = data;
-      if (!projetoId || !nomeProjeto) {
-        throw new functions.https.HttpsError("invalid-argument", "Os dados do projeto (ID e Nome) são obrigatórios.");
-      }
       const managerLicenseId = context.auth.token.licenseId;
-      const chaveId = uuidv4();
+
+      // --- ALTERAÇÃO AQUI: Gera código curto (ex: A1B2C3) ---
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let chaveId = '';
+      for (let i = 0; i < 6; i++) {
+        chaveId += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      // -----------------------------------------------------
+
+      // Usa a chave gerada como ID do documento para garantir unicidade na busca direta se quisesse,
+      // mas aqui mantemos no corpo para permitir a Query Collection Group.
+      // O ID do documento pode ser a própria chave para facilitar.
       const chaveRef = db.collection("clientes").doc(managerLicenseId).collection("chavesDeDelegacao").doc(chaveId);
+      
       await chaveRef.set({
-        chave: chaveId, status: "pendente", licenseIdConvidada: null, empresaConvidada: "Aguardando Vínculo",
-        dataCriacao: admin.firestore.FieldValue.serverTimestamp(), projetosPermitidos: [projetoId], nomesProjetos: [nomeProjeto],
+        chave: chaveId, 
+        status: "pendente", 
+        licenseIdConvidada: null, 
+        empresaConvidada: "Aguardando Vínculo",
+        dataCriacao: admin.firestore.FieldValue.serverTimestamp(), 
+        projetosPermitidos: [projetoId], 
+        nomesProjetos: [nomeProjeto],
       });
-      console.log(`Chave ${chaveId} gerada para o projeto ${projetoId} pela licença ${managerLicenseId}`);
+
       return { chave: chaveId };
     });
 
 // =========================================================================
-// FUNÇÃO 5: vincularProjetoDelegado (Sem alterações)
+// FUNÇÃO 5: vincularProjetoDelegado (Consome a chave)
 // =========================================================================
 exports.vincularProjetoDelegado = functions
     .region("southamerica-east1")
-    .runWith({ enforceAppCheck: true })
+    .runWith({ enforceAppCheck: false }) // Opcional: Proteção extra
     .https.onCall(async (data, context) => {
-      // Verifica se o usuário está autenticado
       if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "Você precisa estar autenticado para vincular um projeto.");
+        throw new functions.https.HttpsError("unauthenticated", "Login necessário.");
       }
 
-      // Lógica robusta para obter a licenseId
+      // 1. Tenta pegar a licença do token (mais rápido) ou do banco (fallback)
       let contractorLicenseId = context.auth.token.licenseId;
       if (!contractorLicenseId) {
-        console.log(`licenseId não encontrado no token. Buscando em /users...`);
         const userDoc = await db.collection('users').doc(context.auth.uid).get();
         if (userDoc.exists) {
             contractorLicenseId = userDoc.data().licenseId;
         }
       }
       if (!contractorLicenseId) {
-          throw new functions.https.HttpsError("unauthenticated", "Não foi possível identificar sua licença.");
+          throw new functions.https.HttpsError("unauthenticated", "Licença não identificada.");
       }
       
-      const { chave } = data;
-      if (!chave) {
-        throw new functions.https.HttpsError("invalid-argument", "Uma chave de delegação válida é necessária.");
+      // Sanitização da entrada
+      const rawChave = data.chave || "";
+      const chave = rawChave.trim().toUpperCase();
+
+      if (chave.length === 0) {
+        throw new functions.https.HttpsError("invalid-argument", "Chave inválida.");
       }
 
-      // A busca pela chave continua a mesma
-      const query = db.collectionGroup("chavesDeDelegacao").where("chave", "==", chave).limit(1);
+      // 2. Busca a chave globalmente
+      // NOTA: Requer índice 'chave' (Ascending) e 'status' (Ascending) em 'chavesDeDelegacao'
+      const query = db.collectionGroup("chavesDeDelegacao")
+          .where("chave", "==", chave)
+          .where("status", "==", "pendente")
+          .limit(1);
+          
       const snapshot = await query.get();
 
       if (snapshot.empty) {
-        throw new functions.https.HttpsError("not-found", "Chave de delegação inválida ou não encontrada.");
+        throw new functions.https.HttpsError("not-found", "Chave inválida, já usada ou expirada.");
       }
 
       const doc = snapshot.docs[0];
-      const docData = doc.data();
       const managerLicenseId = doc.ref.parent.parent.id;
 
       if (managerLicenseId === contractorLicenseId) {
-        throw new functions.https.HttpsError("invalid-argument", "Você não pode vincular um projeto de sua própria empresa.");
-      }
-      if (docData.status !== "pendente") {
-        throw new functions.https.HttpsError("already-exists", "Esta chave já foi utilizada ou foi revogada.");
+        throw new functions.https.HttpsError("invalid-argument", "Não é possível vincular projeto da própria empresa.");
       }
       
-      // <<< INÍCIO DA CORREÇÃO >>>
-
-      // 1. Busca o documento da licença do contratado para obter o nome
-      let contractorName = "Nome não encontrado"; // Valor padrão
+      // 3. Obtém o nome da empresa/usuário que está vinculando
+      let contractorName = context.auth.token.email || "Usuário Externo";
       try {
-        const contractorLicenseDoc = await db.collection('clientes').doc(contractorLicenseId).get();
-        if (contractorLicenseDoc.exists) {
-            const contractorData = contractorLicenseDoc.data();
-            // Acessa o nome dentro do mapa 'usuariosPermitidos'
-            const contractorUserInfo = contractorData.usuariosPermitidos[context.auth.uid];
-            if (contractorUserInfo && contractorUserInfo.nome) {
-                contractorName = contractorUserInfo.nome;
-            } else {
-                // Fallback para o email se o nome não for encontrado
-                contractorName = context.auth.token.email || "Email não disponível";
+        const contractorDoc = await db.collection('clientes').doc(contractorLicenseId).get();
+        if (contractorDoc.exists) {
+            const users = contractorDoc.data().usuariosPermitidos || {};
+            if (users[context.auth.uid] && users[context.auth.uid].nome) {
+                contractorName = users[context.auth.uid].nome;
             }
         }
-      } catch (error) {
-        console.error("Erro ao buscar nome do contratado:", error);
-        // Usa o email como fallback em caso de erro na busca
-        contractorName = context.auth.token.email || "Email não disponível";
+      } catch (e) {
+          console.error("Erro ao buscar nome:", e);
       }
 
-      // <<< FIM DA CORREÇÃO >>>
-
+      // 4. Efetiva o vínculo
       await doc.ref.update({
         status: "ativa",
         licenseIdConvidada: contractorLicenseId,
-        empresaConvidada: contractorName, // Usa o nome obtido de forma segura
+        empresaConvidada: contractorName,
         dataVinculo: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      console.log(`Chave ${chave} vinculada com sucesso à licença ${contractorLicenseId}.`);
-      return { success: true, message: "Projeto vinculado com sucesso! Sincronize seus dados para começar." };
+      return { success: true, message: "Projeto vinculado com sucesso!" };
     });
