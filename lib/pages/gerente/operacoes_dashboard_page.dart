@@ -58,8 +58,8 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
               const SizedBox(height: 24),
               _buildCustoVeiculoTable(context, provider.custosPorVeiculo),
               const SizedBox(height: 24),
-              // Passa o mapa de produção para a tabela
-              _buildHistoricoDiariosTable(context, provider.diariosFiltrados, provider.producaoPorDiario),
+              // Tabela corrigida (sem Qtd e Unitário)
+              _buildHistoricoDiariosTable(context, provider.diariosFiltrados),
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 icon: const Icon(Icons.download_outlined),
@@ -90,8 +90,6 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
-  // ... (MÉTODOS DE FILTROS - buildFiltros, dropdowns, datepicker - MANTIDOS IGUAIS) ...
-  // Para economizar espaço, estou omitindo aqui, mas você deve manter os que já funcionam.
   Widget _buildFiltros(BuildContext context) {
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -211,11 +209,18 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
         const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: _buildKpiCard('Coletas Realizadas', kpis.coletasRealizadas.toString(), Icons.checklist, Colors.orange)),
+            // Exibe as strings formatadas "150/250"
+            Expanded(child: _buildKpiCard('Amostras (Feito/Total)', kpis.progressoAmostras, Icons.checklist, Colors.orange)),
             const SizedBox(width: 16),
-            Expanded(child: _buildKpiCard('Custo / Coleta', _currencyFormat.format(kpis.custoPorColeta), Icons.attach_money, Colors.red)),
+            Expanded(child: _buildKpiCard('Cubagens (Feito/Total)', kpis.progressoCubagens, Icons.architecture, Colors.teal)),
           ],
         ),
+        const SizedBox(height: 16),
+        Row(
+           children: [
+             Expanded(child: _buildKpiCard('Custo / Coleta Realizada', _currencyFormat.format(kpis.custoPorColeta), Icons.attach_money, Colors.red)),
+           ]
+        )
       ],
     );
   }
@@ -432,11 +437,11 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
     );
   }
 
-  // TABELA ATUALIZADA: Agora mostra a produção por dia
+  // --- TABELA ATUALIZADA: REMOVIDO QTD e UNITÁRIO ---
   Widget _buildHistoricoDiariosTable(
     BuildContext context, 
     List<DiarioDeCampo> diarios, 
-    Map<int, int> producaoPorDiario
+    // Map<int, int> producaoPorDiario // Não precisa mais deste parâmetro aqui se não for usar
   ) {
     if (diarios.isEmpty) return const SizedBox.shrink();
     final kpis = context.watch<OperacoesProvider>().kpis;
@@ -459,38 +464,37 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                   DataColumn(label: Text('Data')),
                   DataColumn(label: Text('Líder')),
                   DataColumn(label: Text('Destino')),
-                  DataColumn(label: Text('Qtd'), numeric: true), // NOVA COLUNA
+                  // REMOVIDO: DataColumn(label: Text('Qtd'), numeric: true),
                   DataColumn(label: Text('Custo Total'), numeric: true),
-                  DataColumn(label: Text('R\$/Unid'), numeric: true), // NOVA COLUNA
+                  // REMOVIDO: DataColumn(label: Text('R\$/Unid'), numeric: true),
                 ],
                 rows: [
                   ...diarios.map((d) {
                     final custoTotalDiario = (d.abastecimentoValor ?? 0) + (d.pedagioValor ?? 0) + (d.alimentacaoRefeicaoValor ?? 0) + (d.outrasDespesasValor ?? 0);
                     
-                    // Pega a produção vinculada a este diário
-                    final qtdProduzida = producaoPorDiario[d.id] ?? 0;
-                    final custoUnitario = qtdProduzida > 0 ? custoTotalDiario / qtdProduzida : 0.0;
-
                     return DataRow(cells: [
                       DataCell(Text(DateFormat('dd/MM/yy').format(DateTime.parse(d.dataRelatorio)))),
                       DataCell(Text(d.nomeLider)),
                       DataCell(Text(d.localizacaoDestino ?? '')),
-                      DataCell(Text(qtdProduzida.toString())), // Mostra a produção
+                      // REMOVIDO: Célula de Qtd
                       DataCell(Text(_currencyFormat.format(custoTotalDiario))),
-                      DataCell(Text(_currencyFormat.format(custoUnitario))), // Mostra o custo unitário
+                      // REMOVIDO: Célula de Custo Unitário
                     ]);
                   }).toList(),
+                  
+                  // LINHA DE TOTAL
                   DataRow(
                     color: MaterialStateProperty.all(Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5)),
                     cells: [
                       DataCell(Text('${diarios.length} DIAS', style: const TextStyle(fontWeight: FontWeight.bold))),
                       const DataCell(Text('')),
                       const DataCell(Text('TOTAL', style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
-                      // KPI Global de Coletas Realizadas
-                      DataCell(Text(kpis.coletasRealizadas.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
+                      
+                      // REMOVIDO: Total de Coletas
+                      
                       DataCell(Text(_currencyFormat.format(kpis.custoTotalCampo), style: const TextStyle(fontWeight: FontWeight.bold))),
-                      // Custo médio global por coleta
-                      DataCell(Text(_currencyFormat.format(kpis.custoPorColeta), style: const TextStyle(fontWeight: FontWeight.bold))),
+                      
+                      // REMOVIDO: Média Geral por Coleta
                     ]
                   ),
                 ],

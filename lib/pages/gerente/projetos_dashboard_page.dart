@@ -448,6 +448,10 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     required double progress,
     required Color color,
   }) {
+    // <<< CORREÇÃO DE COR PARA O MODO ESCURO >>>
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final valueColor = isDark ? Colors.cyanAccent : color;
+
     return Card(
       elevation: 2,
       child: Padding(
@@ -464,7 +468,7 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                   style: Theme.of(context)
                       .textTheme
                       .headlineMedium
-                      ?.copyWith(color: color, fontWeight: FontWeight.bold)),
+                      ?.copyWith(color: valueColor, fontWeight: FontWeight.bold)), // Cor ajustada
             ]),
             const SizedBox(height: 8),
             Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
@@ -483,21 +487,30 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
 
   // Grade de KPIs (2x2)
   Widget _buildKpiGrid(BuildContext context, DashboardMetricsProvider metrics) {
+    // <<< CORREÇÃO DE TAMANHO DOS CARDS >>>
+    // Usamos SizedBox com altura fixa para forçar uniformidade nas linhas
+    const double cardHeight = 160.0;
+
     return Column(
       children: [
         Row(
           children: [
-            // --- MUDANÇA: CARD TOP 3 CLICÁVEL ---
             Expanded(
-              child: _buildTop3KpiCard(context, metrics, Colors.teal),
+              child: SizedBox(
+                height: cardHeight,
+                child: _buildTop3KpiCard(context, metrics, Colors.teal),
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: _buildKpiCard(
-                'Amostras Concluídas',
-                metrics.totalAmostrasConcluidas.toString(),
-                Icons.checklist,
-                Colors.blue,
+              child: SizedBox(
+                height: cardHeight,
+                child: _buildKpiCard(
+                  'Amostras Concluídas',
+                  metrics.totalAmostrasConcluidas.toString(),
+                  Icons.checklist,
+                  Colors.blue,
+                ),
               ),
             ),
           ],
@@ -506,20 +519,26 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
         Row(
           children: [
             Expanded(
-              child: _buildKpiCard(
-                'Cubagens Concluídas',
-                metrics.totalCubagensConcluidas.toString(),
-                Icons.architecture,
-                Colors.orange,
+              child: SizedBox(
+                height: cardHeight,
+                child: _buildKpiCard(
+                  'Cubagens Concluídas',
+                  metrics.totalCubagensConcluidas.toString(),
+                  Icons.architecture,
+                  Colors.orange,
+                ),
               ),
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: _buildKpiCard(
-                'Média Diária',
-                '${metrics.mediaDiariaColetas.toStringAsFixed(1)} coletas',
-                Icons.show_chart,
-                Colors.purple,
+              child: SizedBox(
+                height: cardHeight,
+                child: _buildKpiCard(
+                  'Média Diária',
+                  '${metrics.mediaDiariaColetas.toStringAsFixed(1)} coletas',
+                  Icons.show_chart,
+                  Colors.purple,
+                ),
               ),
             ),
           ],
@@ -528,7 +547,6 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
-  // --- NOVO WIDGET: Card Compacto de Top 3 Equipes (CLICÁVEL) ---
   Widget _buildTop3KpiCard(BuildContext context, DashboardMetricsProvider metrics, Color color) {
     final progressoPorEquipe = metrics.progressoPorEquipe;
     final top3 = progressoPorEquipe.entries.take(3).toList();
@@ -539,12 +557,11 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
-          // Abre o gráfico passando os DADOS REAIS E COMPLETOS
           showDialog(
             context: context,
             builder: (ctx) => RankingDetalhadoChart(
               parcelas: metrics.parcelasFiltradas,
-              cubagens: metrics.cubagensFiltradasRaw, // <<< CORRIGIDO: Usa a lista RAW
+              cubagens: metrics.cubagensFiltradasRaw,
             ),
           );
         },
@@ -580,20 +597,24 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
               if (top3.isEmpty)
                 const Text("-", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))
               else
-                Column(
-                  children: top3.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final item = entry.value;
-                    final nome = item.key.split(' ').first; 
-                    return Text(
-                      '${index + 1}. $nome (${item.value})',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: index == 0 ? FontWeight.bold : FontWeight.normal,
-                        color: index == 0 ? Colors.black87 : Colors.grey[700]
-                      ),
-                    );
-                  }).toList(),
+                Expanded( // Expanded para ocupar o espaço restante uniformemente
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: top3.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final item = entry.value;
+                      final nome = item.key.split(' ').first; 
+                      return Text(
+                        '${index + 1}. $nome (${item.value})',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: index == 0 ? FontWeight.bold : FontWeight.normal,
+                          color: index == 0 ? Colors.black87 : Colors.grey[700]
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      );
+                    }).toList(),
+                  ),
                 ),
             ],
           ),
@@ -690,7 +711,6 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
-  // --- GRÁFICO ATUALIZADO (Estilo Neon) ---
   Widget _buildColetasPorAtividadeChartCard(
       BuildContext context, Map<String, int> data) {
     final entries = data.entries.toList();
