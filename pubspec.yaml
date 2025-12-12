@@ -60,8 +60,10 @@ dependencies:
   google_fonts: ^6.1.0
   flutter_animate: ^4.5.0
   audioplayers: ^6.0.0
-  # Pacote para o cálculo matemático do cluster
-  
+  http: ^1.2.0  # <--- Adicione esta linha
+
+
+  # Pacote para o cálculo matemático do cluster  
   fl_chart: ^0.69.0 # Gráficos interativos
   flutter_archive: ^6.0.3 # Compactar/descompactar arquivos ZIP
   uuid: ^4.3.3 # Gerar identificadores únicos
@@ -91,6 +93,7 @@ flutter:
     - assets/images/
     - assets/icons/ # Boa prática declarar aqui também
     - assets/sounds/
+    - assets/grid/
 
 # Configuração de ícones do app (correta)
 flutter_launcher_icons:
