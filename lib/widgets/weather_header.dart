@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- Importante
 
 class WeatherHeader extends StatefulWidget {
   const WeatherHeader({super.key});
@@ -20,6 +21,9 @@ class _WeatherHeaderState extends State<WeatherHeader> {
   String _descricao = "Aguarde...";
   IconData _iconeClima = Icons.cloud_sync;
   bool _isLoading = true;
+  
+  // Nome do Usuário (Padrão: Florestal)
+  String _nomeUsuario = "Florestal";
 
   // --- SUA CHAVE NOVA JÁ CONFIGURADA ---
   final String _apiKey = "44c419e21659fd02589ddc5f3be43f89";
@@ -27,18 +31,37 @@ class _WeatherHeaderState extends State<WeatherHeader> {
   @override
   void initState() {
     super.initState();
-    // Pequeno delay para garantir que a interface carregou antes de chamar o GPS
+    // Carrega o nome do usuário e o clima
+    _carregarUsuario();
+    
     Future.delayed(Duration.zero, () {
       _carregarClima();
     });
   }
 
+  // --- LÓGICA PARA PEGAR O NOME DO USUÁRIO ---
+  void _carregarUsuario() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
+      // Pega apenas o primeiro nome para não quebrar o layout
+      final nomeCompleto = user.displayName!;
+      final primeiroNome = nomeCompleto.split(' ')[0];
+      
+      // Capitaliza a primeira letra (ex: joao -> Joao)
+      final nomeFormatado = "${primeiroNome[0].toUpperCase()}${primeiroNome.substring(1)}";
+
+      if (mounted) {
+        setState(() {
+          _nomeUsuario = nomeFormatado;
+        });
+      }
+    }
+  }
+
   Future<void> _carregarClima() async {
     try {
-      // 1. Pega a posição (agora mais robusto)
       Position posicao = await _determinarPosicao();
 
-      // 2. Chama a API
       final url = Uri.parse(
           'https://api.openweathermap.org/data/2.5/weather?lat=${posicao.latitude}&lon=${posicao.longitude}&appid=$_apiKey&units=metric&lang=pt_br');
 
@@ -52,11 +75,9 @@ class _WeatherHeaderState extends State<WeatherHeader> {
             _cidade = data['name'];
             _temperatura = "${data['main']['temp'].toStringAsFixed(0)}°C";
             
-            // Arruma a descrição (Primeira letra maiúscula)
             String desc = data['weather'][0]['description'];
             _descricao = desc[0].toUpperCase() + desc.substring(1);
             
-            // Ícone
             int conditionId = data['weather'][0]['id'];
             _iconeClima = _getIconForCondition(conditionId);
             
@@ -64,7 +85,6 @@ class _WeatherHeaderState extends State<WeatherHeader> {
           });
         }
       } else {
-        // Se der erro, mostra no terminal o motivo real
         print("ERRO API CLIMA: Código ${response.statusCode} - Corpo: ${response.body}");
         throw Exception('Erro na API: ${response.statusCode}');
       }
@@ -82,18 +102,15 @@ class _WeatherHeaderState extends State<WeatherHeader> {
     }
   }
 
-  // Função de GPS melhorada para Emuladores e Celulares
   Future<Position> _determinarPosicao() async {
     bool serviceEnabled;
     LocationPermission permission;
 
-    // 1. Verifica se GPS está ligado
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       return Future.error('GPS desligado.');
     }
 
-    // 2. Verifica Permissões
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -105,13 +122,11 @@ class _WeatherHeaderState extends State<WeatherHeader> {
       return Future.error('Permissão negada permanentemente.');
     }
 
-    // 3. Tenta pegar a ÚLTIMA posição conhecida (É instantâneo e funciona melhor no emulador)
     Position? lastPosition = await Geolocator.getLastKnownPosition();
     if (lastPosition != null) {
       return lastPosition;
     }
 
-    // 4. Se não tiver última, tenta pegar a atual (com timeout para não travar)
     return await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.medium, 
       timeLimit: const Duration(seconds: 10),
@@ -172,9 +187,10 @@ class _WeatherHeaderState extends State<WeatherHeader> {
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
-                "Olá, Florestal!",
-                style: TextStyle(
+              // --- AQUI ESTÁ A MUDANÇA ---
+              Text(
+                "Olá, $_nomeUsuario!", // Usa a variável dinâmica
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.w900,
