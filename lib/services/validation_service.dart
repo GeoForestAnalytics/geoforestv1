@@ -1,4 +1,4 @@
-// lib/services/validation_service.dart (VERSÃO COMPLETA E CORRIGIDA)
+// lib/services/validation_service.dart (VERSÃO CORRIGIDA - REGRA BIFURCADA vs MÚLTIPLA)
 
 import 'dart:math';
 import 'package:collection/collection.dart';
@@ -66,7 +66,6 @@ class ValidationService {
     if (arvore.altura != null && arvore.cap > 150 && arvore.altura! < 10) {
       warnings.add("Relação CAP/Altura incomum: ${arvore.cap} cm de CAP com apenas ${arvore.altura}m de altura.");
     }
-    // ✅ NOVO CHECK: Valida a relação entre altura e altura do dano
     if (arvore.altura != null && arvore.alturaDano != null && arvore.altura! > 0 && arvore.alturaDano! >= arvore.altura!) {
       warnings.add("Altura do Dano (${arvore.alturaDano}m) não pode ser maior ou igual à Altura Total (${arvore.altura}m).");
     }
@@ -105,7 +104,6 @@ class ValidationService {
       allIssues.addAll(_checkParcelaStructure(parcela, arvores));
     }
     
-    // ✅ CORREÇÃO: Agora a verificação de cubagem roda para todas as cubagens, não só as "concluídas"
     for (final cubagem in cubagens) {
       allIssues.addAll(await _checkCubagemIntegrity(cubagem, cubagemRepo));
     }
@@ -129,7 +127,6 @@ class ValidationService {
       issues.add(ValidationIssue(tipo: 'Início Inválido', mensagem: 'A primeira árvore não é Linha 1 / Posição 1. Começa em L:${primeiraArvore.linha} P:${primeiraArvore.posicaoNaLinha}.', parcelaId: parcela.dbId!, identificador: identificador));
     }
 
-    // Agrupa as árvores por linha para verificar sequências internas
     final arvoresPorLinha = groupBy(arvores, (Arvore a) => a.linha);
     final linhasUnicas = arvoresPorLinha.keys.toList()..sort();
 
@@ -143,15 +140,24 @@ class ValidationService {
     arvoresPorLinha.forEach((linha, arvoresDaLinha) {
       arvoresDaLinha.sort((a, b) => a.posicaoNaLinha.compareTo(b.posicaoNaLinha));
 
-      // ✅ NOVO CHECK: Verifica a sequência de posições dentro de cada linha
       for (int i = 0; i < arvoresDaLinha.length - 1; i++) {
-        if (arvoresDaLinha[i+1].posicaoNaLinha != arvoresDaLinha[i].posicaoNaLinha + 1) {
-          final posFaltando = arvoresDaLinha[i].posicaoNaLinha + 1;
-          issues.add(ValidationIssue(tipo: 'Sequência de Posição', mensagem: 'Na Linha $linha, a sequência pulou da Posição ${arvoresDaLinha[i].posicaoNaLinha} para ${arvoresDaLinha[i+1].posicaoNaLinha} (faltando P$posFaltando).', parcelaId: parcela.dbId!, identificador: identificador));
+        final atual = arvoresDaLinha[i];
+        final proxima = arvoresDaLinha[i+1];
+
+        // Se a posição for a mesma, verifica se é aceitável (Múltipla)
+        // A checagem de "código correto" é feita no bloco 'posicoesAgrupadas' abaixo.
+        // Aqui apenas pulamos o erro de "sequência quebrada" se for a mesma posição.
+        if (proxima.posicaoNaLinha == atual.posicaoNaLinha) {
+          continue;
+        }
+
+        // Se pulou número (ex: 1 para 3), aí sim é erro
+        if (proxima.posicaoNaLinha != atual.posicaoNaLinha + 1) {
+          final posFaltando = atual.posicaoNaLinha + 1;
+          issues.add(ValidationIssue(tipo: 'Sequência de Posição', mensagem: 'Na Linha $linha, a sequência pulou da Posição ${atual.posicaoNaLinha} para ${proxima.posicaoNaLinha} (faltando P$posFaltando).', parcelaId: parcela.dbId!, identificador: identificador));
         }
       }
       
-      // ✅ NOVO CHECK: Verifica a flag "fimDeLinha"
       if (arvoresDaLinha.isNotEmpty && !arvoresDaLinha.last.fimDeLinha) {
         issues.add(ValidationIssue(tipo: 'Fim de Linha Ausente', mensagem: 'A última árvore da Linha $linha (Posição ${arvoresDaLinha.last.posicaoNaLinha}) não está marcada como "Fim de Linha".', parcelaId: parcela.dbId!, arvoreId: arvoresDaLinha.last.id, identificador: identificador));
       }
@@ -159,13 +165,19 @@ class ValidationService {
 
     final posicoesAgrupadas = groupBy(arvores, (Arvore a) => '${a.linha}-${a.posicaoNaLinha}');
     posicoesAgrupadas.forEach((pos, arvoresNaPosicao) {
+      // Se tiver mais de uma árvore na mesma posição (cova)
       if (arvoresNaPosicao.length > 1) {
+        // ✅ CORREÇÃO: Apenas "Multipla" justifica ter > 1 registro na mesma cova
+        // "Bifurcada" foi removido daqui pois é um único fuste na base.
         final temMultipla = arvoresNaPosicao.any((a) => a.codigo == Codigo.Multipla);
+        
         if (!temMultipla) {
           issues.add(ValidationIssue(tipo: 'Árvore Duplicada', mensagem: 'A posição L:${pos.split('-')[0]} P:${pos.split('-')[1]} está duplicada sem o código "Multipla".', parcelaId: parcela.dbId!, identificador: identificador));
         }
-      } else if (arvoresNaPosicao.length == 1 && arvoresNaPosicao.first.codigo == Codigo.Multipla) {
-        issues.add(ValidationIssue(tipo: 'Código Inconsistente', mensagem: 'A posição L:${pos.split('-')[0]} P:${pos.split('-')[1]} tem código "Multipla" mas apenas 1 fuste.', parcelaId: parcela.dbId!, arvoreId: arvoresNaPosicao.first.id, identificador: identificador));
+      } 
+      // Se tiver só uma árvore, mas ela diz que é Multipla (Erro: Múltipla solitária)
+      else if (arvoresNaPosicao.length == 1 && arvoresNaPosicao.first.codigo == Codigo.Multipla) {
+         issues.add(ValidationIssue(tipo: 'Código Inconsistente', mensagem: 'A posição L:${pos.split('-')[0]} P:${pos.split('-')[1]} tem código "Multipla" mas apenas 1 fuste registrado.', parcelaId: parcela.dbId!, arvoreId: arvoresNaPosicao.first.id, identificador: identificador));
       }
     });
 

@@ -1,4 +1,4 @@
-// lib/widgets/progress_dialog.dart (NOVO ARQUIVO)
+// lib/widgets/progress_dialog.dart (VISUAL CORRIGIDO)
 
 import 'package:flutter/material.dart';
 
@@ -10,9 +10,9 @@ class ProgressDialog extends StatelessWidget {
   static void show(BuildContext context, String message) {
     showDialog(
       context: context,
-      barrierDismissible: false, // Impede que o usuário feche o diálogo
+      barrierDismissible: false,
       builder: (BuildContext context) {
-        return PopScope( // Impede o botão "Voltar" do Android de fechar
+        return PopScope(
           canPop: false,
           child: ProgressDialog(message: message),
         );
@@ -27,14 +27,22 @@ class ProgressDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(24.0),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             const CircularProgressIndicator(),
-            const SizedBox(width: 20),
-            Text(message),
+            const SizedBox(width: 24),
+            // O Expanded faz o texto ocupar o espaço restante e quebrar linha se necessário
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(fontSize: 16),
+                textAlign: TextAlign.left,
+              ),
+            ),
           ],
         ),
       ),

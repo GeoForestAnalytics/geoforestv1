@@ -2,7 +2,7 @@
 
 buildscript {
     // --- AQUI ESTÁ A CORREÇÃO DO KOTLIN ---
-    val kotlin_version by extra("1.9.0") 
+    val kotlin_version by extra("2.1.0") 
     
     repositories {
         google()

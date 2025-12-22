@@ -11,7 +11,7 @@ plugins {
 
 android {
     namespace = "com.example.geoforestv1"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     // <<< ADICIONE O BLOCO LINT AQUI DENTRO >>>
@@ -47,8 +47,8 @@ android {
 
     defaultConfig {
         applicationId = "br.com.geoforest.analytics"
-        minSdk = 23
-        targetSdk = 35
+        minSdk = flutter.minSdkVersion
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         

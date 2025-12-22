@@ -1,4 +1,4 @@
-// lib/pages/analises/analise_selecao_page.dart (VERSÃO ATUALIZADA COM FILTROS HIERÁRQUICOS)
+// lib/pages/analises/analise_selecao_page.dart (VERSÃO COMPLETA E FINAL)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
@@ -6,7 +6,7 @@ import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/pages/dashboard/relatorio_comparativo_page.dart';
-import 'package:geoforestv1/pages/analises/analise_volumetrica_page.dart';
+import 'package:geoforestv1/pages/analises/analise_volumetrica_page.dart'; // Import restaurado e usado
 import 'package:geoforestv1/pages/dashboard/estrato_dashboard_page.dart';
 
 // Repositórios
@@ -14,6 +14,12 @@ import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:geoforestv1/data/repositories/analise_repository.dart';
+
+// Serviços
+import 'package:geoforestv1/services/ai_validation_service.dart'; 
+import 'package:geoforestv1/widgets/progress_dialog.dart';
 
 class AnaliseSelecaoPage extends StatefulWidget {
   const AnaliseSelecaoPage({super.key});
@@ -28,6 +34,8 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
   final _atividadeRepository = AtividadeRepository();
   final _fazendaRepository = FazendaRepository();
   final _talhaoRepository = TalhaoRepository();
+  final _analiseRepository = AnaliseRepository();
+  final _parcelaRepository = ParcelaRepository();
 
   // Listas para popular os dropdowns
   List<Projeto> _projetosDisponiveis = [];
@@ -40,7 +48,7 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
   Atividade? _atividadeSelecionada;
   Fazenda? _fazendaSelecionada;
 
-  // Lista final de talhões selecionados para a análise
+  // Lista final de talhões selecionados (Isso forma o ESTRATO)
   final Set<int> _talhoesSelecionados = {};
 
   bool _isLoading = true;
@@ -51,11 +59,8 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
     _carregarProjetos();
   }
 
-  // --- LÓGICA DE CARREGAMENTO EM CASCATA ---
-
   Future<void> _carregarProjetos() async {
     setState(() => _isLoading = true);
-    // Busca todos os projetos que são de inventário e têm dados concluídos
     final talhoesCompletos = await _talhaoRepository.getTalhoesComParcelasConcluidas();
     if (talhoesCompletos.isEmpty) {
        if(mounted) setState(() { _projetosDisponiveis = []; _isLoading = false; });
@@ -78,26 +83,8 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
       });
     }
   }
-  
-  void _gerarAnaliseEstrato() {
-    if (_talhoesSelecionados.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Selecione pelo menos 2 talhões para formar um estrato.'),
-        backgroundColor: Colors.orange,
-      ));
-      return;
-    }
-    
-    final talhoesParaAnalisar = _talhoesDisponiveis.where((t) => _talhoesSelecionados.contains(t.id)).toList();
-    
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => EstratoDashboardPage(talhoesSelecionados: talhoesParaAnalisar),
-      ),
-    );
-  }
 
+  // --- Lógica de Filtros ---
   Future<void> _onProjetoSelecionado(Projeto? projeto) async {
     setState(() {
       _projetoSelecionado = projeto;
@@ -112,7 +99,6 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
     });
 
     final atividades = await _atividadeRepository.getAtividadesDoProjeto(projeto!.id!);
-    // Filtra para mostrar apenas atividades de inventário
     final tiposInventario = ["IPC", "IFC", "IFS", "BIO", "IFQ"];
     _atividadesDisponiveis = atividades.where((a) => tiposInventario.any((tipo) => a.tipo.toUpperCase().contains(tipo))).toList();
     
@@ -161,11 +147,33 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
     });
   }
 
-  void _gerarRelatorio() {
+  // --- AÇÕES PRINCIPAIS ---
+
+  // 1. Gera o Dashboard de Estrato (Média Ponderada dos Talhões Selecionados)
+  void _gerarAnaliseEstrato() {
     if (_talhoesSelecionados.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Selecione pelo menos um talhão para gerar a análise.'),
+        content: Text('Selecione pelo menos um talhão para formar o estrato.'),
         backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+    
+    final talhoesParaAnalisar = _talhoesDisponiveis.where((t) => _talhoesSelecionados.contains(t.id)).toList();
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EstratoDashboardPage(talhoesSelecionados: talhoesParaAnalisar),
+      ),
+    );
+  }
+
+  // 2. Relatório Comparativo (Tabela lado a lado)
+  void _gerarRelatorioComparativo() {
+    if (_talhoesSelecionados.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Selecione os talhões para comparar.'),
       ));
       return;
     }
@@ -178,80 +186,144 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
     );
   }
 
-  void _navegarParaAnaliseVolumetrica() {
-    // 1. Coleta os objetos Talhao baseados nos IDs selecionados
-    final talhoesParaEnviar = _talhoesDisponiveis
-        .where((t) => _talhoesSelecionados.contains(t.id))
-        .toList();
+  // 3. Auditoria com IA (Verifica o Estrato Selecionado)
+  Future<void> _executarAuditoriaIA() async {
+    if (_talhoesSelecionados.isEmpty) return;
 
+    ProgressDialog.show(context, 'A IA está auditando o estrato selecionado...');
+
+    final aiService = AiValidationService();
+    List<String> relatorioGeral = [];
+    int totalProblemas = 0;
+
+    try {
+      for (int talhaoId in _talhoesSelecionados) {
+        final talhao = _talhoesDisponiveis.firstWhere((t) => t.id == talhaoId);
+        final dados = await _analiseRepository.getDadosAgregadosDoTalhao(talhaoId);
+        final parcelas = dados['parcelas'] as List;
+        
+        for (var p in parcelas) {
+          final arvores = await _parcelaRepository.getArvoresDaParcela(p.dbId);
+          if (arvores.isNotEmpty) {
+            final alertas = await aiService.validarParcelaInteligente(p, arvores);
+            if (alertas.isNotEmpty) {
+              totalProblemas += alertas.length;
+              relatorioGeral.add("\n📍 ${talhao.nome} - P${p.idParcela}");
+              relatorioGeral.addAll(alertas.map((a) => "  • $a"));
+            }
+          }
+        }
+      }
+
+      if (!mounted) return;
+      ProgressDialog.hide(context);
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(totalProblemas == 0 ? Icons.check_circle : Icons.auto_awesome, 
+                   color: totalProblemas == 0 ? Colors.green : Colors.deepPurple),
+              const SizedBox(width: 10),
+              const Text("Auditoria do Estrato"),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: relatorioGeral.isEmpty 
+              ? const Text("✅ Nenhuma inconsistência encontrada neste estrato.")
+              : SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text("Pontos de atenção no estrato ($totalProblemas):", style: const TextStyle(fontWeight: FontWeight.bold)),
+                      const Divider(),
+                      ...relatorioGeral.map((linha) => Text(linha, style: TextStyle(
+                        fontWeight: linha.startsWith("\n📍") ? FontWeight.bold : FontWeight.normal,
+                        color: linha.startsWith("\n📍") ? Colors.blue[800] : Colors.black87
+                      ))),
+                    ],
+                  ),
+                ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Fechar"))],
+        ),
+      );
+
+    } catch (e) {
+      if (mounted) {
+        ProgressDialog.hide(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro na IA: $e"), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  // 4. Navegar para Análise Volumétrica
+  void _navegarParaAnaliseVolumetrica() {
     Navigator.push(
       context, 
-      MaterialPageRoute(
-        builder: (context) => AnaliseVolumetricaPage(
-          // 2. Passa a lista (se estiver vazia, passa null ou lista vazia, a outra tela trata)
-          talhoesPreSelecionados: talhoesParaEnviar.isNotEmpty ? talhoesParaEnviar : null,
-        )
-      )
+      MaterialPageRoute(builder: (context) => const AnaliseVolumetricaPage())
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('GeoForest Analista')),
+      appBar: AppBar(title: const Text('Análise de Estrato')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // --- NOVOS DROPDOWNS HIERÁRQUICOS ---
+            // Filtros Hierárquicos
             DropdownButtonFormField<Projeto>(
               value: _projetoSelecionado,
-              hint: const Text('1. Selecione um Projeto'),
+              hint: const Text('1. Projeto'),
               isExpanded: true,
               items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome, overflow: TextOverflow.ellipsis))).toList(),
               onChanged: _onProjetoSelecionado,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
+              decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5)),
             ),
-            const SizedBox(height: 16),
-
+            const SizedBox(height: 10),
             DropdownButtonFormField<Atividade>(
               value: _atividadeSelecionada,
-              hint: const Text('2. Selecione uma Atividade'),
+              hint: const Text('2. Atividade'),
               isExpanded: true,
-              // Desabilita se o projeto não foi selecionado
-              disabledHint: const Text('Selecione um projeto primeiro'),
               items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo, overflow: TextOverflow.ellipsis))).toList(),
               onChanged: _projetoSelecionado == null ? null : _onAtividadeSelecionada,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
+              decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5)),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<Fazenda>(
+              value: _fazendaSelecionada,
+              hint: const Text('3. Fazenda'),
+              isExpanded: true,
+              items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome, overflow: TextOverflow.ellipsis))).toList(),
+              onChanged: _atividadeSelecionada == null ? null : _onFazendaSelecionada,
+              decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5)),
             ),
             const SizedBox(height: 16),
             
-            DropdownButtonFormField<Fazenda>(
-              value: _fazendaSelecionada,
-              hint: const Text('3. Selecione uma Fazenda'),
-              isExpanded: true,
-              disabledHint: const Text('Selecione uma atividade primeiro'),
-              items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome, overflow: TextOverflow.ellipsis))).toList(),
-              onChanged: _atividadeSelecionada == null ? null : _onFazendaSelecionada,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 16),
-            const Text('4. Selecione os Talhões para Análise Comparativa', style: TextStyle(fontWeight: FontWeight.bold)),
+            // Área de Seleção do Estrato
+            Text('4. Selecione os Talhões do Estrato (${_talhoesSelecionados.length})', 
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const Divider(),
             
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _talhoesDisponiveis.isEmpty
-                      ? const Center(child: Text('Nenhum talhão com parcelas concluídas para os filtros selecionados.'))
+                      ? const Center(child: Text('Nenhum talhão disponível.'))
                       : ListView(
                           children: _talhoesDisponiveis.map((talhao) {
                             return CheckboxListTile(
                               title: Text(talhao.nome),
+                              subtitle: Text('${talhao.areaHa?.toStringAsFixed(2) ?? "0"} ha'),
                               value: _talhoesSelecionados.contains(talhao.id!),
                               onChanged: (value) => _toggleTalhao(talhao.id!, value),
-                              controlAffinity: ListTileControlAffinity.leading,
+                              secondary: const Icon(Icons.park),
                             );
                           }).toList(),
                         ),
@@ -259,41 +331,53 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
           ],
         ),
       ),
+      // Botões de Ação
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // BOTÃO 1: Equação de Volume
+          // 1. Botão IA para auditar o que foi selecionado
+          if (_talhoesSelecionados.isNotEmpty)
+            FloatingActionButton.extended(
+              onPressed: _executarAuditoriaIA,
+              heroTag: 'auditoriaIAFab',
+              label: const Text('Auditar Estrato com IA'),
+              icon: const Icon(Icons.auto_awesome),
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+            ),
+          const SizedBox(height: 12),
+          
+          // 2. Botão de Análise Volumétrica
           FloatingActionButton.extended(
             onPressed: _navegarParaAnaliseVolumetrica,
             heroTag: 'analiseVolumetricaFab',
             label: const Text('Equação de Volume'),
-            icon: const Icon(Icons.calculate_outlined),
-            backgroundColor: const Color(0xFFEBE4AB), 
-            foregroundColor: const Color(0xFF023853),
+            icon: const Icon(Icons.calculate),
+            backgroundColor: const Color(0xFFEBE4AB), // Dourado
+            foregroundColor: const Color(0xFF023853), // Azul Escuro
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
-          // BOTÃO 2 (NOVO): Análise de Estrato (Aqui usamos a sua função!)
+          // 3. Botão Principal: Analisar o Estrato
           FloatingActionButton.extended(
-            onPressed: _gerarAnaliseEstrato, // <--- Chamando a função que estava parada
+            onPressed: _gerarAnaliseEstrato,
             heroTag: 'analiseEstratoFab',
-            label: const Text('Análise de Estrato'),
-            icon: const Icon(Icons.layers_outlined),
-            // Cor verde para diferenciar (indica consolidação)
-            backgroundColor: Colors.teal.shade700, 
-            foregroundColor: Colors.white,
+            label: const Text('Dashboard do Estrato'),
+            icon: const Icon(Icons.layers),
+            backgroundColor: const Color(0xFF023853), // Azul Marinho
+            foregroundColor: const Color(0xFFEBE4AB), // Dourado
           ),
-          const SizedBox(height: 16),
-
-          // BOTÃO 3: Análise Comparativa
+          const SizedBox(height: 12),
+          
+          // 4. Botão Secundário: Tabela Comparativa
           FloatingActionButton.extended(
-            onPressed: _gerarRelatorio,
+            onPressed: _gerarRelatorioComparativo,
             heroTag: 'analiseComparativaFab',
-            label: const Text('Análise Comparativa'),
-            icon: const Icon(Icons.analytics_outlined),
-            backgroundColor: const Color(0xFF023853),
-            foregroundColor: const Color(0xFFEBE4AB),
+            label: const Text('Tabela Comparativa'),
+            icon: const Icon(Icons.table_chart),
+            backgroundColor: Colors.teal,
+            foregroundColor: Colors.white,
           ),
         ],
       ),
