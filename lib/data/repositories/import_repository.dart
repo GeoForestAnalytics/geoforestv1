@@ -1,4 +1,4 @@
-// lib/data/repositories/import_repository.dart (VERSÃO ATUALIZADA PARA PLANO DE CUBAGEM)
+// lib/data/repositories/import_repository.dart
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
@@ -18,9 +18,8 @@ import 'package:geoforestv1/services/import/csv_import_strategy.dart';
 import 'package:geoforestv1/services/import/planejamento_import_strategy.dart';
 import 'package:geoforestv1/services/import/inventario_import_strategy.dart';
 import 'package:geoforestv1/services/import/cubagem_import_strategy.dart';
-import 'package:geoforestv1/services/import/planejamento_cubagem_import_strategy.dart'; // <<< ADICIONE ESTE NOVO IMPORT
+import 'package:geoforestv1/services/import/planejamento_cubagem_import_strategy.dart';
 
-// <<< ADICIONE O NOVO TIPO AO ENUM >>>
 enum TipoImportacao { inventario, cubagem, planejamento, planejamentoCubagem, desconhecido }
 
 class ImportRepository {
@@ -31,51 +30,43 @@ class ImportRepository {
     return "Funcionalidade a ser revisada";
   }
 
-  /// <<< SUBSTITUA COMPLETAMENTE ESTA FUNÇÃO >>>
   /// Identifica o tipo de arquivo e retorna a estratégia de importação correta.
   (CsvImportStrategy?, TipoImportacao) _getImportStrategy({
-  required List<String> headers,
-  required Transaction txn,
-  required Projeto projeto,
-  String? nomeDoResponsavel,
-}) {
-  // Detecção flexível de cabeçalhos
-  bool hasTreeData = headers.contains('cap_cm') || headers.contains('cap') || headers.contains('cod_1') || headers.contains('codigo_arvore');
-  bool hasCubingMeasurementData = headers.contains('circunferencia_secao_cm') || headers.contains('circunferencia_cm');
-  bool hasPlanningData = headers.contains('medir ?') || (headers.contains('long (x)') && headers.contains('lat (y)'));
-  bool hasCubingIdentifier = headers.contains('identificador_arvore');
+    required List<String> headers,
+    required Transaction txn,
+    required Projeto projeto,
+    String? nomeDoResponsavel,
+  }) {
+    // Detecção flexível de cabeçalhos
+    bool hasTreeData = headers.contains('cap_cm') || headers.contains('cap') || headers.contains('cod_1') || headers.contains('codigo_arvore');
+    bool hasCubingMeasurementData = headers.contains('circunferencia_secao_cm') || headers.contains('circunferencia_cm');
+    bool hasPlanningData = headers.contains('medir ?') || (headers.contains('long (x)') && headers.contains('lat (y)'));
+    bool hasCubingIdentifier = headers.contains('identificador_arvore');
 
-  // --- NOVA LÓGICA DE DETECÇÃO ---
+    // 1. É um PLANO DE CUBAGEM?
+    if (hasCubingIdentifier && hasPlanningData && !hasCubingMeasurementData) {
+      return (PlanejamentoCubagemImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.planejamentoCubagem);
+    }
+    
+    // 2. É um PLANO DE AMOSTRAGEM (parcelas)?
+    if (hasPlanningData && !hasTreeData && !hasCubingMeasurementData) {
+      return (PlanejamentoImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.planejamento);
+    } 
+    
+    // 3. É um INVENTÁRIO já coletado?
+    if (hasTreeData) {
+      return (InventarioImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.inventario);
+    } 
+    
+    // 4. É uma CUBAGEM já coletada?
+    if (hasCubingMeasurementData) {
+      return (CubagemImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.cubagem);
+    }
 
-  // 1. É um PLANO DE CUBAGEM?
-  //    Tem identificador de árvore e coordenadas, mas NÃO tem dados de medição de cubagem.
-  if (hasCubingIdentifier && hasPlanningData && !hasCubingMeasurementData) {
-    return (PlanejamentoCubagemImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.planejamentoCubagem);
-  }
-  
-  // 2. É um PLANO DE AMOSTRAGEM (parcelas)?
-  //    Tem coordenadas, mas NÃO tem dados de árvore nem de cubagem.
-  if (hasPlanningData && !hasTreeData && !hasCubingMeasurementData) {
-    return (PlanejamentoImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.planejamento);
-  } 
-  
-  // 3. É um INVENTÁRIO já coletado?
-  //    Tem dados de árvore (CAP, código).
-  if (hasTreeData) {
-    return (InventarioImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.inventario);
-  } 
-  
-  // 4. É uma CUBAGEM já coletada?
-  //    Tem dados de medição de seção.
-  if (hasCubingMeasurementData) {
-    return (CubagemImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.cubagem);
+    return (null, TipoImportacao.desconhecido);
   }
 
-  return (null, TipoImportacao.desconhecido);
-}
-
-
-  /// Função principal, agora atuando como um "coordenador".
+  /// Função principal que coordena a importação.
   Future<String> importarCsvUniversal({
     required String csvContent,
     required int projetoIdAlvo,
@@ -88,11 +79,17 @@ class ImportRepository {
     final commaCount = ','.allMatches(firstLine).length;
     final semicolonCount = ';'.allMatches(firstLine).length;
     final tabCount = '\t'.allMatches(firstLine).length;
+    
     String detectedDelimiter = ';';
     if (commaCount > semicolonCount && commaCount > tabCount) detectedDelimiter = ',';
     else if (tabCount > semicolonCount && tabCount > commaCount) detectedDelimiter = '\t';
     
-    final List<List<dynamic>> rows = CsvToListConverter(fieldDelimiter: detectedDelimiter, eol: '\n', allowInvalid: true).convert(csvContent);
+    final List<List<dynamic>> rows = CsvToListConverter(
+      fieldDelimiter: detectedDelimiter, 
+      eol: '\n', 
+      allowInvalid: true
+    ).convert(csvContent);
+    
     if (rows.length < 2) return "Erro: O arquivo CSV está vazio ou contém apenas o cabeçalho.";
     
     final headers = rows.first.map((h) => h.toString().trim().toLowerCase()).toList();
@@ -116,7 +113,6 @@ class ImportRepository {
 
       final db = await _dbHelper.database;
       await db.transaction((txn) async {
-        
         final (strategy, tipo) = _getImportStrategy(
           headers: headers,
           txn: txn,
@@ -132,7 +128,7 @@ class ImportRepository {
         finalResult = await strategy.processar(dataRows);
       });
 
-      // <<< AJUSTE O RELATÓRIO FINAL PARA INCLUIR O NOVO TIPO >>>
+      // Relatório final baseado no tipo detectado
       String report;
       if (tipoArquivo == TipoImportacao.planejamento) {
         report = "Importação de Plano de Amostragem Concluída!\n\n"
@@ -167,7 +163,7 @@ class ImportRepository {
 
     } catch(e, s) {
       debugPrint("Erro CRÍTICO na importação universal: $e\n$s");
-      return "Ocorreu um erro grave durante a importação. Verifique o console de debug. Erro: ${e.toString()}";
+      return "Ocorreu um erro grave durante a importação. Erro: ${e.toString()}";
     }
   }
 }

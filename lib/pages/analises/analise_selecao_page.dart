@@ -366,7 +366,8 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
         
         resumosParaIA.add({
           "talhao": t.nome,
-          "idade": t.idadeAnos,
+          "especie": t.especie,
+          "idade": t.idadeAnos ?? 0.0, // Envia 0.0 em vez de texto se estiver nulo
           "vol_ha": analise.volumePorHectare.toStringAsFixed(1),
           "cap_medio": analise.mediaCap.toStringAsFixed(1),
           "arv_ha": analise.arvoresPorHectare
@@ -390,41 +391,79 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
   void _mostrarResultadoIA(List<String> alertas) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("🌲 Auditoria do Estrato", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const Divider(),
-            if (alertas.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Center(child: Text("✅ Nenhuma inconsistência biológica detectada.")),
-              )
-            else
-              ...alertas.map((a) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(children: [
-                  const Icon(Icons.info_outline, color: Colors.deepPurple, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(a)),
-                ]),
-              )),
-            const SizedBox(height: 20),
-            ListTile(
-              tileColor: Colors.deepPurple.withOpacity(0.05),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              leading: const Icon(Icons.chat_bubble_outline, color: Colors.deepPurple),
-              title: const Text("Conversar com os dados deste estrato"),
-              onTap: () {
-                Navigator.pop(ctx);
-                _abrirChatUnificado();
-              },
-            ),
-          ],
+      // 1. Permite que o modal cresça além do tamanho padrão e gerencie melhor o scroll
+      isScrollControlled: true, 
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        // 2. Opcional: Faz o modal abrir em 60% da tela e poder ser arrastado até 90%
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (_, scrollController) => Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Barra de arraste visual (opcional)
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 15),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text("🌲 Auditoria do Estrato", 
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Divider(),
+              
+              // 3. O segredo da rolagem: Usar Expanded + ListView ou SingleChildScrollView
+              Expanded(
+                child: ListView(
+                  controller: scrollController, // Vincula o scroll do modal ao conteúdo
+                  children: [
+                    if (alertas.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: Center(child: Text("✅ Nenhuma inconsistência biológica detectada.")),
+                      )
+                    else
+                      ...alertas.map((a) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start, // Alinha ícone no topo do parágrafo
+                          children: [
+                            const Icon(Icons.info_outline, color: Colors.deepPurple, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(child: Text(a, style: const TextStyle(fontSize: 15, height: 1.4))),
+                          ],
+                        ),
+                      )),
+                    
+                    const SizedBox(height: 20),
+                    
+                    ListTile(
+                      tileColor: Colors.deepPurple.withOpacity(0.05),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      leading: const Icon(Icons.chat_bubble_outline, color: Colors.deepPurple),
+                      title: const Text("Conversar com os dados deste estrato"),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _abrirChatUnificado();
+                      },
+                    ),
+                    const SizedBox(height: 20), // Espaço extra no fim para não colar na borda
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

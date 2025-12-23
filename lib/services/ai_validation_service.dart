@@ -12,14 +12,32 @@ class AiValidationService {
     );
   }
 
-  /// 1. MÉTODO PARA O CHAT (Conversa sobre os dados)
+  /// 1. MÉTODO PARA O CHAT (Manual Técnico e Suporte ao App)
   Future<String> perguntarSobreDados(String pergunta, Parcela parcela, List<Arvore> arvores) async {
     final resumo = _prepararResumoPlot(parcela, arvores);
     final prompt = [
       Content.text('''
-        Você é o especialista GeoForest AI. Analise os dados e responda: "$pergunta"
-        DADOS: ${jsonEncode(resumo)}
-        Regra: Altura 0 é normal (amostragem). Responda em Português técnico e direto.
+        Você é o GeoForest AI, assistente técnico e de suporte do aplicativo GeoForestv1. 
+        
+        SUA PERSONA: Especialista em Inventário Florestal, Dendrometria e Operações de Campo.
+
+        CONTEXTO TÉCNICO DO APP (Responda se o usuário perguntar):
+        - Hipsometria: Processo de estimar alturas não medidas no campo usando uma amostra real e modelos matemáticos (curva hipsométrica).
+        - Regressão de Volume: O app utiliza o modelo de Schumacher-Hall (geralmente) para converter CAP e Altura em Volume (m³).
+        - Delegação de Projetos: Permite que um Gerente compartilhe um projeto com uma equipe externa (chave de acesso), garantindo que os dados voltem para o painel do dono do projeto automaticamente.
+        - Incremento Médio Anual (IMA): Calculado dividindo o Volume Total pela Idade. Essencial para saber a produtividade.
+
+        REGRAS DE INVENTÁRIO (Contexto para análise):
+        - Medimos CAP de todas, Altura de 10% a 15% (árvores amostra). Altura 0.0 em árvores "Normal" é esperado.
+        - Múltiplas: Devem obrigatoriamente estar na mesma posição (Linha/Posição) mas com números de fuste diferentes (1, 2, 3...).
+        - Falhas/Caídas: São covas sem produção. Devem ter CAP e Altura obrigatoriamente 0.0.
+        - Quebradas: Devem possuir o campo 'Altura de Dano' (hd) preenchido para cálculo de perda.
+
+        DADOS DA PARCELA ATUAL: ${jsonEncode(resumo)}
+
+        INSTRUÇÃO: Responda à pergunta "$pergunta" de forma técnica e clara. 
+        Se for uma dúvida sobre o app, explique a funcionalidade. 
+        Se for sobre os dados, analise conforme as regras acima.
       ''')
     ];
     try {
@@ -28,7 +46,7 @@ class AiValidationService {
     } catch (e) { return "Erro no chat: $e"; }
   }
 
-  /// 2. MÉTODO PARA AUDITORIA INDIVIDUAL (Erros de digitação e lógica local)
+  /// 2. MÉTODO PARA AUDITORIA AUTOMÁTICA (Regras de Negócio Rígidas)
   Future<List<Map<String, dynamic>>> validarErrosAutomatico(Parcela parcela, List<Arvore> arvores, {double? idade}) async {
     final jsonModel = FirebaseVertexAI.instance.generativeModel(
       model: 'gemini-2.0-flash',
@@ -38,14 +56,20 @@ class AiValidationService {
     final resumo = _prepararResumoPlot(parcela, arvores, idade: idade);
     final prompt = [
       Content.text('''
-        Atue como Auditor de Controle de Qualidade (QC). Analise o JSON em busca de:
-        1. ERROS DE DIGITAÇÃO: CAPs que fogem da escala (ex: 150 em vez de 15.0).
-        2. ERROS DE LÓGICA: Pulos na sequência de árvores (ex: posição 1, 2, 4).
-        3. INCONSISTÊNCIA: Código 'Falha' com medida > 0.
-        4. REGRA: Altura 0 é normal. NÃO mencione como erro.
+        Atue como Auditor de Controle de Qualidade (QC) Florestal.
+        Analise o JSON e identifique violações das seguintes REGRAS DE NEGÓCIO:
 
-        DADOS: ${jsonEncode(resumo)}
-        Retorne: { "erros": [ {"id": 123, "msg": "texto"} ] }
+        1. REGRA MÚLTIPLAS: Se o código for "Multipla", verifique se existem outras árvores na mesma Linha (l) e Posição (p). Se houver apenas um registro para aquela posição com código Multipla, é um erro.
+        2. REGRA FALHA/CAÍDA: Se o código for "Falha" ou "Caida", o CAP (c) e a Altura (h) DEVEM ser 0.0. Se houver medida, aponte erro.
+        3. REGRA QUEBRADA: Se o código for "Quebrada", o campo hd (Altura de Dano) deve ser maior que 0. Se estiver 0, o coletor esqueceu de medir onde a árvore quebrou.
+        4. REGRA SEQUÊNCIA: Verifique a coluna "p" (posição). Se a sequência dentro de uma linha "l" pular números (ex: 1,2,3,5), aponte "Salto de sequência na posição".
+        5. REGRA OUTROS: Se o código for "Outro", gere um aviso: "O código 'Outro' deve ser avaliado pelo supervisor para correta classificação botânica ou de dano".
+        6. REGRA DENDROMÉTRICA: CAP (c) acima de 200cm ou Altura (h) acima de 50m são outliers extremos. Peça confirmação.
+
+        DADOS PARA ANÁLISE:
+        ${jsonEncode(resumo)}
+
+        RETORNE APENAS JSON: { "erros": [ {"id": arvore_id, "msg": "explicação curta"} ] }
       ''')
     ];
 
@@ -56,8 +80,7 @@ class AiValidationService {
     } catch (e) { return []; }
   }
 
-  /// 3. MÉTODO PARA ESTRATO (O que estava faltando e causava o erro)
-  /// Atua como analista de operações e performance.
+  /// 3. MÉTODO PARA ESTRATO (Consolidado)
   Future<List<String>> validarEstrato(List<Map<String, dynamic>> resumos) async {
      final jsonModel = FirebaseVertexAI.instance.generativeModel(
       model: 'gemini-2.0-flash',
@@ -66,22 +89,15 @@ class AiValidationService {
 
     final prompt = [
       Content.text('''
-        Você é um Analista de Dados e Auditor de Operações Florestais. 
-        Analise o conjunto de talhões (ESTRATO) abaixo para entregar um relatório mastigado para o escritório.
-
-        --- TAREFAS DE ANÁLISE ---
-        1. PADRÕES E ERROS: Identifique se algum talhão destoa completamente da média do grupo.
-        2. PERFORMANCE: Se o campo 'segundos_por_arvore' for muito baixo (ex: < 10s), aponte como suspeita de coleta rápida demais/estimada.
-        3. CONDIÇÃO FLORESTAL: Identifique se o talhão parece ser de 'Rebrota' (baseado em fustes múltiplos) ou se está 'Sujo' (muitas falhas/mortas).
-        4. COMPARAÇÃO: Compare talhões de mesma idade e espécies.
-        
-        REGRAS: 
-        - É PROIBIDO reclamar de falta de idade. Se não houver, faça análise comparativa.
-        - Seja propositivo. Dê insights de gestão.
-
+        Analise o conjunto de talhões abaixo (Estrato Florestal).
         DADOS: ${jsonEncode(resumos)}
 
-        RETORNE APENAS O JSON: { "alertas": ["Insight 1...", "Alerta 2..."] }
+        FOCO DA ANÁLISE:
+        - Produtividade (IMA): Volume / Idade.
+        - Homogeneidade: Talhões com a mesma idade devem ter volumes próximos.
+        - Qualidade: Identifique se algum talhão tem alta taxa de falhas ou mortalidade.
+
+        RETORNE APENAS JSON: { "alertas": ["string"] }
       ''')
     ];
 
@@ -89,18 +105,24 @@ class AiValidationService {
       final response = await jsonModel.generateContent(prompt);
       final decoded = jsonDecode(response.text ?? '{"alertas": []}');
       return List<String>.from(decoded['alertas'] ?? []);
-    } catch (e) { 
-      return ["Erro ao processar auditoria inteligente."]; 
-    }
+    } catch (e) { return ["Erro na auditoria do estrato."]; }
   }
 
-  /// Auxiliar para formatar dados
+  /// Auxiliar atualizado para incluir Fuste e Altura de Dano
   Map<String, dynamic> _prepararResumoPlot(Parcela p, List<Arvore> arvores, {double? idade}) {
     return {
       "t": p.nomeTalhao,
+      "f": p.nomeFazenda,
       "idade": idade ?? "N/I",
-      "arv": arvores.take(150).map((a) => {
-        "l": a.linha, "p": a.posicaoNaLinha, "c": a.cap, "h": a.altura ?? 0, "cod": a.codigo.name
+      "arv": arvores.map((a) => {
+        "id": a.id,
+        "l": a.linha,
+        "p": a.posicaoNaLinha,
+        "fust": a.tora, // ou o campo que você usa para número do fuste
+        "c": a.cap,
+        "h": a.altura ?? 0,
+        "hd": a.alturaDano ?? 0, // Fundamental para a regra de Quebradas
+        "cod": a.codigo.name
       }).toList()
     };
   }

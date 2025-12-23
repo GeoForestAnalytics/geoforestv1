@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:collection/collection.dart';
+import 'package:intl/intl.dart'; // Importante para as datas
 
 // Modelos e Repositórios necessários
 import 'package:geoforestv1/models/projeto_model.dart';
@@ -7,19 +8,16 @@ import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 
-/// Classe para encapsular os resultados da importação de forma estruturada.
 class ImportResult {
   int linhasProcessadas = 0, atividadesCriadas = 0, fazendasCriadas = 0, talhoesCriados = 0;
   int parcelasCriadas = 0, arvoresCriadas = 0, cubagensCriadas = 0, secoesCriadas = 0;
   int parcelasAtualizadas = 0, cubagensAtualizadas = 0, parcelasIgnoradas = 0;
 }
 
-/// A interface (contrato) que todas as nossas estratégias de importação devem seguir.
 abstract class CsvImportStrategy {
   Future<ImportResult> processar(List<Map<String, dynamic>> dataRows);
 }
 
-/// Uma classe base que contém a lógica COMUM a todas as estratégias.
 abstract class BaseImportStrategy implements CsvImportStrategy {
   final Transaction txn;
   final Projeto projeto;
@@ -33,9 +31,9 @@ abstract class BaseImportStrategy implements CsvImportStrategy {
   
   static String? getValue(Map<String, dynamic> row, List<String> possibleKeys) {
     for (final key in possibleKeys) {
-      final sanitizedKey = key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      final sanitizedSearchKey = key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
       final originalKey = row.keys.firstWhereOrNull(
-        (k) => k.toString().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') == sanitizedKey
+        (k) => k.toString().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') == sanitizedSearchKey
       );
 
       if (originalKey != null) {
@@ -64,13 +62,8 @@ abstract class BaseImportStrategy implements CsvImportStrategy {
         atividadesCache[tipoAtividadeStr] = atividade;
     }
 
-    final nomeFazenda = getValue(row, ['fazenda']);
+    final nomeFazenda = getValue(row, ['fazenda', 'codigo_fazenda', 'fazenda_nome']);
     if (nomeFazenda == null) return null;
-
-    // --- BUSCA DE MUNICÍPIO E ESTADO NO CSV ---
-    final municipioCsv = getValue(row, ['municipio', 'município', 'cidade']);
-    final estadoCsv = getValue(row, ['estado', 'uf']);
-    // ------------------------------------------
 
     final fazendaCacheKey = '${atividade.id}_$nomeFazenda';
     Fazenda? fazenda = fazendasCache[fazendaCacheKey];
@@ -78,38 +71,72 @@ abstract class BaseImportStrategy implements CsvImportStrategy {
     if (fazenda == null) {
         final idFazenda = nomeFazenda;
         fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [idFazenda, atividade.id!])).map(Fazenda.fromMap).firstOrNull;
-        
         if (fazenda == null) {
-            // --- AGORA USANDO OS VALORES DO CSV ---
-            fazenda = Fazenda(
-              id: idFazenda, 
-              atividadeId: atividade.id!, 
-              nome: nomeFazenda, 
-              municipio: municipioCsv ?? 'N/I', 
-              estado: estadoCsv ?? 'UF'
-            );
-            
+            fazenda = Fazenda(id: idFazenda, atividadeId: atividade.id!, nome: nomeFazenda, municipio: getValue(row, ['municipio']) ?? 'N/I', estado: getValue(row, ['uf', 'estado']) ?? 'UF');
             await txn.insert('fazendas', fazenda.toMap()..['lastModified'] = now);
             result.fazendasCriadas++;
         }
         fazendasCache[fazendaCacheKey] = fazenda;
     }
 
-    final nomeTalhao = getValue(row, ['talhão', 'talhao']);
+    final nomeTalhao = getValue(row, ['talhão', 'talhao', 'id_talhao']);
     if (nomeTalhao == null) return null;
     final talhaoCacheKey = '${fazenda.id}_${fazenda.atividadeId}_$nomeTalhao';
     Talhao? talhao = talhoesCache[talhaoCacheKey];
     if (talhao == null) {
         talhao = (await txn.query('talhoes', where: 'nome = ? AND fazendaId = ? AND fazendaAtividadeId = ?', whereArgs: [nomeTalhao, fazenda.id, fazenda.atividadeId])).map(Talhao.fromMap).firstOrNull;
         if (talhao == null) {
+            
+            // --- NOVA LÓGICA DE IDADE INTELIGENTE ---
+            final dataPlantioStr = getValue(row, ['data_plantio', 'plantio', 'dt_plantio']);
+            final dataColetaStr = getValue(row, ['data_cole', 'data_coleta']);
+            final idadeFixaStr = getValue(row, ['idade_anos', 'idade', 'idade_ano']);
+            
+            double? idadeCalculada;
+
+            // Se tiver as duas datas, calcula a idade decimal
+            if (dataPlantioStr != null && dataColetaStr != null) {
+              try {
+                // Tenta converter Data de Plantio (dd/mm/aaaa)
+                DateFormat dmy = DateFormat('dd/MM/yyyy');
+                DateTime dtPlantio = dmy.parse(dataPlantioStr);
+                
+                // Tenta converter Data de Coleta (Aceita dd/mm/aaaa ou aaaa-mm-dd)
+                DateTime dtColeta;
+                try { 
+                   dtColeta = DateTime.parse(dataColetaStr); 
+                } catch(_) { 
+                   dtColeta = dmy.parse(dataColetaStr); 
+                }
+
+                int dias = dtColeta.difference(dtPlantio).inDays;
+                if (dias > 0) {
+                  idadeCalculada = dias / 365.25;
+                }
+              } catch (e) {
+                print("Aviso: Falha ao processar datas. Usando idade fixa.");
+              }
+            }
+
+            // Se não conseguiu calcular pela data, usa o número da coluna Idade_Anos
+            final idadeFinal = idadeCalculada ?? double.tryParse(idadeFixaStr?.replaceAll(',', '.') ?? '');
+
             talhao = Talhao(
-              fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao, projetoId: projeto.id, fazendaNome: fazenda.nome,
-              bloco: getValue(row, ['bloco']), up: getValue(row, ['rf']),
-              areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'áreatalhão', 'areatalhao', 'area_talh'])?.replaceAll(',', '.') ?? ''),
-              especie: getValue(row, ['espécie', 'especie']), materialGenetico: getValue(row, ['material']),
-              espacamento: getValue(row, ['espaçamento', 'espacamento']), dataPlantio: getValue(row, ['plantio']),
-              municipio: fazenda.municipio, // Vincula o local ao talhão também
-              estado: fazenda.estado,       // Vincula o local ao talhão também
+              fazendaId: fazenda.id, 
+              fazendaAtividadeId: fazenda.atividadeId, 
+              nome: nomeTalhao, 
+              projetoId: projeto.id, 
+              fazendaNome: fazenda.nome,
+              bloco: getValue(row, ['bloco']), 
+              up: getValue(row, ['rf', 'up']),
+              areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'area_talh', 'area_ha'])?.replaceAll(',', '.') ?? ''),
+              especie: getValue(row, ['espécie', 'especie']), 
+              materialGenetico: getValue(row, ['material']),
+              espacamento: getValue(row, ['espaçamento', 'espacamento']), 
+              dataPlantio: dataPlantioStr, // Salva a data como texto para registro
+              idadeAnos: idadeFinal,       // Salva o número (calculado ou fixo)
+              municipio: fazenda.municipio, 
+              estado: fazenda.estado,       
             );
             final tId = await txn.insert('talhoes', talhao.toMap()..['lastModified'] = now);
             talhao = talhao.copyWith(id: tId);
