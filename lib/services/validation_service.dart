@@ -1,4 +1,4 @@
-// lib/services/validation_service.dart (VERSÃO CORRIGIDA - REGRA BIFURCADA vs MÚLTIPLA)
+// lib/services/validation_service.dart
 
 import 'dart:math';
 import 'package:collection/collection.dart';
@@ -19,7 +19,7 @@ class ValidationIssue {
   final String mensagem;
   final int? parcelaId;
   final int? cubagemId;
-  final int? arvoreId;
+  final int? arvoreId; // ID da árvore para o "Pulo Direto"
   final String identificador;
 
   ValidationIssue({
@@ -50,42 +50,70 @@ class FullValidationReport {
 
 class ValidationService {
   
-  ValidationResult validateSingleTree(Arvore arvore) {
+  /// Converte os resultados brutos da IA para a lista de problemas clicáveis
+  List<ValidationIssue> mapIaErrorsToIssues(
+    List<Map<String, dynamic>> iaErros, 
+    Parcela parcela
+  ) {
+    final idRelatorio = "P${parcela.idParcela} | IA - ${parcela.nomeTalhao}";
+    
+    return iaErros.map((erro) {
+      return ValidationIssue(
+        tipo: 'Análise IA',
+        mensagem: erro['msg'] ?? 'Inconsistência detectada pela IA.',
+        parcelaId: parcela.dbId,
+        arvoreId: erro['id'], // Aqui o ID que a IA devolveu faz a mágica
+        identificador: idRelatorio,
+      );
+    }).toList();
+  }
+
+  ValidationResult validateParcela(List<Arvore> arvores) {
     final List<String> warnings = [];
-    if (arvore.codigo != Codigo.Falha && arvore.codigo != Codigo.Caida) {
-      if (arvore.cap <= 5.0) {
-        warnings.add("CAP de ${arvore.cap} cm é muito baixo. Verifique.");
+    final vivas = arvores.where((a) => a.codigo != Codigo.Falha && a.codigo != Codigo.Caida && a.cap > 0).toList();
+    
+    if (vivas.length < 5) return ValidationResult(isValid: true, warnings: []);
+
+    double somaCap = vivas.map((a) => a.cap).reduce((a, b) => a + b);
+    double mediaCap = somaCap / vivas.length;
+    double somaDiferencasQuadrado = vivas.map((a) => pow(a.cap - mediaCap, 2)).reduce((a, b) => a + b).toDouble();
+    double desvioPadraoCap = sqrt(somaDiferencasQuadrado / (vivas.length - 1));
+
+    for (final arvore in vivas) {
+      if ((arvore.cap - mediaCap).abs() > 3 * desvioPadraoCap) {
+        warnings.add("L:${arvore.linha} P:${arvore.posicaoNaLinha}: CAP de ${arvore.cap}cm é um outlier (Média: ${mediaCap.toStringAsFixed(1)}cm).");
       }
-      if (arvore.cap > 400.0) {
-        warnings.add("CAP de ${arvore.cap} cm é fisicamente improvável. Verifique.");
+      
+      final singleRes = validateSingleTree(arvore);
+      if (!singleRes.isValid) {
+        warnings.addAll(singleRes.warnings.map((w) => "L:${arvore.linha} P:${arvore.posicaoNaLinha}: $w"));
       }
-    }
-    if (arvore.altura != null && arvore.altura! > 70) {
-      warnings.add("Altura de ${arvore.altura}m é extremamente rara. Confirme.");
-    }
-    if (arvore.altura != null && arvore.cap > 150 && arvore.altura! < 10) {
-      warnings.add("Relação CAP/Altura incomum: ${arvore.cap} cm de CAP com apenas ${arvore.altura}m de altura.");
-    }
-    if (arvore.altura != null && arvore.alturaDano != null && arvore.altura! > 0 && arvore.alturaDano! >= arvore.altura!) {
-      warnings.add("Altura do Dano (${arvore.alturaDano}m) não pode ser maior ou igual à Altura Total (${arvore.altura}m).");
     }
     return ValidationResult(isValid: warnings.isEmpty, warnings: warnings);
   }
 
-  ValidationResult validateParcela(List<Arvore> arvores) {
-    final arvoresValidasParaAnalise = arvores.where((a) => a.codigo != Codigo.Falha && a.codigo != Codigo.Caida).toList();
-    if (arvoresValidasParaAnalise.length < 10) return ValidationResult();
+  ValidationResult validateSingleTree(Arvore arvore) {
     final List<String> warnings = [];
-    double somaCap = arvoresValidasParaAnalise.map((a) => a.cap).reduce((a, b) => a + b);
-    double mediaCap = somaCap / arvoresValidasParaAnalise.length;
-    double somaDiferencasQuadrado = arvoresValidasParaAnalise.map((a) => pow(a.cap - mediaCap, 2)).reduce((a, b) => a + b).toDouble();
-    if (arvoresValidasParaAnalise.length <= 1) return ValidationResult();
-    double desvioPadraoCap = sqrt(somaDiferencasQuadrado / (arvoresValidasParaAnalise.length - 1));
-    for (final arvore in arvoresValidasParaAnalise) {
-      if ((arvore.cap - mediaCap).abs() > 2.5 * desvioPadraoCap) {
-        warnings.add("Árvore Linha ${arvore.linha}/Pos ${arvore.posicaoNaLinha}: O CAP de ${arvore.cap}cm é um outlier estatístico (média: ${mediaCap.toStringAsFixed(1)}cm).");
-      }
+    
+    if (arvore.codigo == Codigo.Normal && arvore.codigo2 != null) {
+      warnings.add("Árvore 'Normal' com código secundário (${arvore.codigo2!.name}).");
     }
+
+    if (arvore.codigo != Codigo.Falha && arvore.codigo != Codigo.Caida) {
+      if (arvore.cap <= 3.0) warnings.add("CAP (${arvore.cap} cm) muito baixo.");
+      if (arvore.cap > 450.0) warnings.add("CAP (${arvore.cap} cm) improvável. Verifique digitação.");
+    }
+
+    if (arvore.altura != null && arvore.altura! > 70) warnings.add("Altura (${arvore.altura}m) extremamente rara.");
+
+    if (arvore.altura != null && arvore.cap > 150 && arvore.altura! < 8) {
+      warnings.add("CAP alto (${arvore.cap}cm) para altura baixa (${arvore.altura}m).");
+    }
+
+    if (arvore.altura != null && arvore.alturaDano != null && arvore.altura! > 0 && arvore.alturaDano! >= arvore.altura!) {
+      warnings.add("Altura do Dano deve ser menor que a Altura Total.");
+    }
+    
     return ValidationResult(isValid: warnings.isEmpty, warnings: warnings);
   }
 
@@ -96,129 +124,98 @@ class ValidationService {
     required CubagemRepository cubagemRepo,
   }) async {
     final List<ValidationIssue> allIssues = [];
+    int arvoresContadas = 0;
 
-    int arvoresVerificadas = 0;
-    for (final parcela in parcelas) {
+    // Proteção: Processa apenas se tiver dbId
+    final parcelasValidas = parcelas.where((p) => p.dbId != null).toList();
+
+    for (final parcela in parcelasValidas) {
       final arvores = await parcelaRepo.getArvoresDaParcela(parcela.dbId!);
-      arvoresVerificadas += arvores.length;
+      arvoresContadas += arvores.length;
       allIssues.addAll(_checkParcelaStructure(parcela, arvores));
     }
     
     for (final cubagem in cubagens) {
-      allIssues.addAll(await _checkCubagemIntegrity(cubagem, cubagemRepo));
+      if (cubagem.id != null) {
+        allIssues.addAll(await _checkCubagemIntegrity(cubagem, cubagemRepo));
+      }
     }
 
     return FullValidationReport(
       issues: allIssues,
-      parcelasVerificadas: parcelas.length,
-      arvoresVerificadas: arvoresVerificadas,
+      parcelasVerificadas: parcelasValidas.length,
+      arvoresVerificadas: arvoresContadas,
       cubagensVerificadas: cubagens.length,
     );
   }
 
   List<ValidationIssue> _checkParcelaStructure(Parcela parcela, List<Arvore> arvores) {
     final List<ValidationIssue> issues = [];
-    final identificador = "${parcela.idParcela} (Talhão: ${parcela.nomeTalhao})";
+    final idRelatorio = "P${parcela.idParcela} | ${parcela.nomeFazenda} - ${parcela.nomeTalhao}";
 
-    if (arvores.isEmpty) return issues;
+    if (arvores.isEmpty) {
+       issues.add(ValidationIssue(tipo: 'Parcela Vazia', mensagem: 'Parcela finalizada sem registros.', parcelaId: parcela.dbId, identificador: idRelatorio));
+       return issues;
+    }
 
-    final primeiraArvore = arvores.first;
-    if (primeiraArvore.linha != 1 || primeiraArvore.posicaoNaLinha != 1) {
-      issues.add(ValidationIssue(tipo: 'Início Inválido', mensagem: 'A primeira árvore não é Linha 1 / Posição 1. Começa em L:${primeiraArvore.linha} P:${primeiraArvore.posicaoNaLinha}.', parcelaId: parcela.dbId!, identificador: identificador));
+    final primeira = arvores.first;
+    if (primeira.linha != 1 || primeira.posicaoNaLinha != 1) {
+      issues.add(ValidationIssue(tipo: 'Início de Coleta', mensagem: 'Não inicia na L:1 P:1.', parcelaId: parcela.dbId, arvoreId: primeira.id, identificador: idRelatorio));
     }
 
     final arvoresPorLinha = groupBy(arvores, (Arvore a) => a.linha);
-    final linhasUnicas = arvoresPorLinha.keys.toList()..sort();
+    final posicoesAgrupadas = groupBy(arvores, (Arvore a) => '${a.linha}-${a.posicaoNaLinha}');
 
-    for (int i = 0; i < linhasUnicas.length - 1; i++) {
-      if (linhasUnicas[i+1] != linhasUnicas[i] + 1) {
-        issues.add(ValidationIssue(tipo: 'Sequência de Linha', mensagem: 'Sequência de linha quebrada. Pulou de ${linhasUnicas[i]} para ${linhasUnicas[i+1]}.', parcelaId: parcela.dbId!, identificador: identificador));
-        break;
-      }
-    }
+    arvoresPorLinha.forEach((linha, listaArvores) {
+      listaArvores.sort((a, b) => a.posicaoNaLinha.compareTo(b.posicaoNaLinha));
 
-    arvoresPorLinha.forEach((linha, arvoresDaLinha) {
-      arvoresDaLinha.sort((a, b) => a.posicaoNaLinha.compareTo(b.posicaoNaLinha));
-
-      for (int i = 0; i < arvoresDaLinha.length - 1; i++) {
-        final atual = arvoresDaLinha[i];
-        final proxima = arvoresDaLinha[i+1];
-
-        // Se a posição for a mesma, verifica se é aceitável (Múltipla)
-        // A checagem de "código correto" é feita no bloco 'posicoesAgrupadas' abaixo.
-        // Aqui apenas pulamos o erro de "sequência quebrada" se for a mesma posição.
-        if (proxima.posicaoNaLinha == atual.posicaoNaLinha) {
-          continue;
-        }
-
-        // Se pulou número (ex: 1 para 3), aí sim é erro
-        if (proxima.posicaoNaLinha != atual.posicaoNaLinha + 1) {
-          final posFaltando = atual.posicaoNaLinha + 1;
-          issues.add(ValidationIssue(tipo: 'Sequência de Posição', mensagem: 'Na Linha $linha, a sequência pulou da Posição ${atual.posicaoNaLinha} para ${proxima.posicaoNaLinha} (faltando P$posFaltando).', parcelaId: parcela.dbId!, identificador: identificador));
+      for (int i = 0; i < listaArvores.length - 1; i++) {
+        final atual = listaArvores[i];
+        final proxima = listaArvores[i+1];
+        if (proxima.posicaoNaLinha != atual.posicaoNaLinha && proxima.posicaoNaLinha != atual.posicaoNaLinha + 1) {
+          issues.add(ValidationIssue(tipo: 'Sequência', mensagem: 'Salto de posição na Linha $linha.', parcelaId: parcela.dbId, arvoreId: atual.id, identificador: idRelatorio));
         }
       }
       
-      if (arvoresDaLinha.isNotEmpty && !arvoresDaLinha.last.fimDeLinha) {
-        issues.add(ValidationIssue(tipo: 'Fim de Linha Ausente', mensagem: 'A última árvore da Linha $linha (Posição ${arvoresDaLinha.last.posicaoNaLinha}) não está marcada como "Fim de Linha".', parcelaId: parcela.dbId!, arvoreId: arvoresDaLinha.last.id, identificador: identificador));
+      if (listaArvores.isNotEmpty && !listaArvores.last.fimDeLinha) {
+        issues.add(ValidationIssue(tipo: 'Fim de Linha', mensagem: 'Última árvore da linha não marcada.', parcelaId: parcela.dbId, arvoreId: listaArvores.last.id, identificador: idRelatorio));
       }
     });
 
-    final posicoesAgrupadas = groupBy(arvores, (Arvore a) => '${a.linha}-${a.posicaoNaLinha}');
-    posicoesAgrupadas.forEach((pos, arvoresNaPosicao) {
-      // Se tiver mais de uma árvore na mesma posição (cova)
-      if (arvoresNaPosicao.length > 1) {
-        // ✅ CORREÇÃO: Apenas "Multipla" justifica ter > 1 registro na mesma cova
-        // "Bifurcada" foi removido daqui pois é um único fuste na base.
-        final temMultipla = arvoresNaPosicao.any((a) => a.codigo == Codigo.Multipla);
-        
-        if (!temMultipla) {
-          issues.add(ValidationIssue(tipo: 'Árvore Duplicada', mensagem: 'A posição L:${pos.split('-')[0]} P:${pos.split('-')[1]} está duplicada sem o código "Multipla".', parcelaId: parcela.dbId!, identificador: identificador));
+    posicoesAgrupadas.forEach((pos, fustes) {
+      if (fustes.length > 1) {
+        if (!fustes.any((a) => a.codigo == Codigo.Multipla)) {
+          issues.add(ValidationIssue(tipo: 'Duplicata', mensagem: 'Cova duplicada sem código Múltipla.', parcelaId: parcela.dbId, arvoreId: fustes.first.id, identificador: idRelatorio));
         }
-      } 
-      // Se tiver só uma árvore, mas ela diz que é Multipla (Erro: Múltipla solitária)
-      else if (arvoresNaPosicao.length == 1 && arvoresNaPosicao.first.codigo == Codigo.Multipla) {
-         issues.add(ValidationIssue(tipo: 'Código Inconsistente', mensagem: 'A posição L:${pos.split('-')[0]} P:${pos.split('-')[1]} tem código "Multipla" mas apenas 1 fuste registrado.', parcelaId: parcela.dbId!, arvoreId: arvoresNaPosicao.first.id, identificador: identificador));
+      } else if (fustes.first.codigo == Codigo.Multipla) {
+         issues.add(ValidationIssue(tipo: 'Código', mensagem: 'Marcada como Múltipla mas só tem 1 fuste.', parcelaId: parcela.dbId, arvoreId: fustes.first.id, identificador: idRelatorio));
       }
     });
 
     for (final arvore in arvores) {
-      final singleValidation = validateSingleTree(arvore);
-      if (!singleValidation.isValid) {
-        issues.add(ValidationIssue(tipo: 'Outlier de Dados', mensagem: 'Árvore L:${arvore.linha} P:${arvore.posicaoNaLinha}: ${singleValidation.warnings.join(", ")}', parcelaId: parcela.dbId!, arvoreId: arvore.id, identificador: identificador));
-      }
-      if (arvore.codigo == Codigo.Falha && arvore.cap > 0) {
-        issues.add(ValidationIssue(tipo: 'Código Inconsistente', mensagem: 'Árvore L:${arvore.linha} P:${arvore.posicaoNaLinha} é "Falha" mas tem CAP > 0.', parcelaId: parcela.dbId!, arvoreId: arvore.id, identificador: identificador));
+      final res = validateSingleTree(arvore);
+      if (!res.isValid) {
+        issues.add(ValidationIssue(tipo: 'Inconsistência', mensagem: res.warnings.join(" "), parcelaId: parcela.dbId, arvoreId: arvore.id, identificador: idRelatorio));
       }
     }
+
     return issues;
   }
 
   Future<List<ValidationIssue>> _checkCubagemIntegrity(CubagemArvore cubagem, CubagemRepository cubagemRepo) async {
     final List<ValidationIssue> issues = [];
-    final identificador = "${cubagem.identificador} (Talhão: ${cubagem.nomeTalhao})";
+    final idRelatorio = "CUB: ${cubagem.identificador} (${cubagem.nomeTalhao})";
     
     final secoes = await cubagemRepo.getSecoesPorArvoreId(cubagem.id!);
+    if (secoes.length < 2 && cubagem.alturaTotal > 0) {
+       issues.add(ValidationIssue(tipo: 'Incompleta', mensagem: 'Menos de 2 seções medidas.', cubagemId: cubagem.id, identificador: idRelatorio));
+    }
+
     if (secoes.length >= 2) {
       secoes.sort((a, b) => a.alturaMedicao.compareTo(b.alturaMedicao));
       for (int i = 1; i < secoes.length; i++) {
-        final secaoAnterior = secoes[i - 1];
-        final secaoAtual = secoes[i];
-        if (secaoAtual.diametroSemCasca > secaoAnterior.diametroSemCasca) {
-          issues.add(ValidationIssue(tipo: 'Afilamento Incorreto', mensagem: 'Diâmetro a ${secaoAtual.alturaMedicao}m (${secaoAtual.diametroSemCasca.toStringAsFixed(1)}cm) é maior que o diâmetro a ${secaoAnterior.alturaMedicao}m (${secaoAnterior.diametroSemCasca.toStringAsFixed(1)}cm).', cubagemId: cubagem.id, identificador: identificador));
-        }
-      }
-    }
-
-    if (cubagem.classe != null && cubagem.classe!.isNotEmpty && cubagem.valorCAP > 0) {
-      final dap = cubagem.valorCAP / pi;
-      final numerosNaClasse = RegExp(r'(\d+\.?\d*)').allMatches(cubagem.classe!).map((m) => double.tryParse(m.group(1) ?? '0')).whereType<double>().toList();
-      
-      if (numerosNaClasse.length >= 2) {
-        numerosNaClasse.sort();
-        final minClasse = numerosNaClasse.first;
-        final maxClasse = numerosNaClasse.last;
-        if (dap < minClasse || dap >= maxClasse) {
-           issues.add(ValidationIssue(tipo: 'Fora da Classe', mensagem: 'Árvore com DAP ${dap.toStringAsFixed(1)}cm está fora da sua classe designada (${cubagem.classe}).', cubagemId: cubagem.id, identificador: identificador));
+        if (secoes[i].diametroSemCasca > secoes[i-1].diametroSemCasca) {
+          issues.add(ValidationIssue(tipo: 'Afilamento', mensagem: 'Diâmetro aumenta na altura ${secoes[i].alturaMedicao}m.', cubagemId: cubagem.id, identificador: idRelatorio));
         }
       }
     }

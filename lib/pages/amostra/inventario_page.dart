@@ -1,4 +1,4 @@
-// lib/pages/amostra/inventario_page.dart (VERSÃO COM NAVEGAÇÃO CORRIGIDA)
+// lib/pages/amostra/inventario_page.dart (VERSÃO COM SUPORTE A PULO DE ERRO IA)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -8,10 +8,13 @@ import 'package:geoforestv1/widgets/arvore_dialog.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:geoforestv1/pages/dashboard/dashboard_page.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:collection/collection.dart'; // Import necessário para firstWhereOrNull
 
 class InventarioPage extends StatefulWidget {
   final Parcela parcela;
-  const InventarioPage({super.key, required this.parcela});
+  final int? targetArvoreId; // <--- NOVO: ID alvo para o pulo direto
+
+  const InventarioPage({super.key, required this.parcela, this.targetArvoreId});
 
   @override
   State<InventarioPage> createState() => _InventarioPageState();
@@ -38,6 +41,21 @@ class _InventarioPageState extends State<InventarioPage> {
     _parcelaAtual = widget.parcela;
     _arvoresColetadas = widget.parcela.arvores; 
     _dataLoadingFuture = _configurarStatusDaTela();
+
+    // --- LÓGICA DO PULO DIRETO ---
+    if (widget.targetArvoreId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Busca a árvore na lista pelo ID que veio da Auditoria
+        final arvoreAlvo = _arvoresColetadas.firstWhereOrNull(
+          (a) => a.id == widget.targetArvoreId
+        );
+
+        // Se encontrar e não estiver em modo leitura, abre o formulário
+        if (arvoreAlvo != null && !_isReadOnly) {
+          _abrirFormularioParaEditar(arvoreAlvo);
+        }
+      });
+    }
   }
 
   Future<bool> _configurarStatusDaTela() async {
@@ -123,10 +141,8 @@ class _InventarioPageState extends State<InventarioPage> {
         return (a.id ?? 0).compareTo(b.id ?? 0);
       });
 
-      // 1. Salva e recebe de volta a parcela com as árvores contendo os IDs corretos.
       final parcelaSalva = await _parcelaRepository.saveFullColeta(_parcelaAtual, _arvoresColetadas);
       
-      // 2. Atualiza o estado da tela com os dados completos.
       if (mounted) {
         setState(() {
           _parcelaAtual = parcelaSalva;
@@ -324,9 +340,7 @@ class _InventarioPageState extends State<InventarioPage> {
     }
   }
 
-   // <<< FUNÇÃO '_abrirFormularioParaEditar' SUBSTITUÍDA >>>
   Future<void> _abrirFormularioParaEditar(Arvore arvore) async {
-    // A busca pelo índice agora é feita pelo ID, que é único e confiável.
     final int indexOriginal = _arvoresColetadas.indexWhere((a) => a.id == arvore.id);
     if (indexOriginal == -1) return;
 
@@ -474,6 +488,10 @@ class _InventarioPageState extends State<InventarioPage> {
                           itemCount: listaExibida.length,
                           itemBuilder: (context, index) {
                             final arvore = listaExibida[index];
+                            
+                            // --- LÓGICA DE DESTAQUE DO ERRO ---
+                            final bool isTarget = arvore.id == widget.targetArvoreId;
+
                             return Slidable(
                               key: ValueKey(arvore.id ?? arvore.hashCode),
                               endActionPane: _isReadOnly ? null : ActionPane(
@@ -494,8 +512,13 @@ class _InventarioPageState extends State<InventarioPage> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
                                   decoration: BoxDecoration(
-                                    color: arvore.dominante ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.4) : (index.isOdd ? Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3) : Colors.transparent),
-                                    border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 0.8)),
+                                    // A cor muda para vermelho claro se for o alvo do erro
+                                    color: isTarget 
+                                        ? Colors.red.shade100 
+                                        : arvore.dominante 
+                                            ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.4) 
+                                            : (index.isOdd ? Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3) : Colors.transparent),
+                                    border: Border(bottom: BorderSide(color: isTarget ? Colors.red : Theme.of(context).dividerColor, width: isTarget ? 1.5 : 0.8)),
                                   ),
                                   child: Row(
                                     children: [
@@ -531,7 +554,6 @@ class _InventarioPageState extends State<InventarioPage> {
     );
   }
 
-  // MÉTODO MODIFICADO PARA INCLUIR A PORCENTAGEM
   Widget _buildSummaryCard() {
     final covas = <String>{};
     for (var arvore in _arvoresColetadas) {
@@ -539,11 +561,9 @@ class _InventarioPageState extends State<InventarioPage> {
     }
     final int totalCovas = covas.length;
 
-    // --- LÓGICA ADICIONADA ---
     final int totalNormal = _arvoresColetadas.where((a) => a.codigo == Codigo.Normal).length;
     final int contagemAlturaNormal = _arvoresColetadas.where((a) => a.codigo == Codigo.Normal && a.altura != null && a.altura! > 0).length;
     final double porcentagem = (totalNormal > 0) ? (contagemAlturaNormal / totalNormal) * 100 : 0.0;
-    // --- FIM DA LÓGICA ADICIONADA ---
     
     final int contagemAlturaDominante = _arvoresColetadas.where((a) => a.dominante && a.altura != null && a.altura! > 0).length;
     final int contagemAlturaOutros = _arvoresColetadas.where((a) => a.codigo != Codigo.Normal && a.altura != null && a.altura! > 0).length;
@@ -560,7 +580,6 @@ class _InventarioPageState extends State<InventarioPage> {
             Text('Talhão: ${_parcelaAtual.nomeTalhao} / Parcela: ${_parcelaAtual.idParcela}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const Divider(height: 20),
             _buildStatRow('Total de Covas:', '$totalCovas'),
-            // --- LINHA MODIFICADA ---
             _buildStatRow('Alturas (Normais):', '$contagemAlturaNormal (${porcentagem.toStringAsFixed(0)}%)'),
             _buildStatRow('Alturas (Dominantes):', '$contagemAlturaDominante'),
             _buildStatRow('Alturas (Outros Códigos):', '$contagemAlturaOutros'),

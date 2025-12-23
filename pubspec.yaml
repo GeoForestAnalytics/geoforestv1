@@ -1,103 +1,96 @@
 name: geoforestv1
-description: "A new Flutter project."
-# The following line prevents the package from being accidentally published to
-# pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-
+description: "Geo Forest Analytics - Coletor Florestal Inteligente"
+publish_to: 'none'
 
 environment:
-  sdk: '>=3.0.0 <4.0.0' # Compatível com versões do Dart entre 3.0.0 e 3.9.x
+  sdk: '>=3.5.0 <4.0.0' # Atualizado para melhor performance em 2025
 
 dependencies:
   flutter:
     sdk: flutter
 
-  # Firebase e Gerenciamento de Estado (VERSÕES ATUALIZADAS)
-  firebase_core: ^4.0.0 # Inicialização do Firebase
-  firebase_auth: ^6.0.0 # Autenticação de usuários
-  cloud_firestore: ^6.0.0 # Banco de dados Firestore
-  firebase_app_check: ^0.4.0 # Comentado, usado para proteção contra abuso
-  provider: ^6.1.2 # Gerenciamento de estado
-  ml_linalg: ^13.12.6 # Biblioteca de álgebra linear para ML
+  # --- FIREBASE E GERENCIAMENTO DE ESTADO (Sincronizados para evitar conflitos) ---
+  firebase_core: ^3.10.1
+  firebase_auth: ^5.4.1
+  cloud_firestore: ^5.6.0
+  firebase_app_check: ^0.3.1
+  firebase_vertexai: ^1.3.0 # Pacote OFICIAL para IA no Firebase
+  cloud_functions: ^5.2.0
+  provider: ^6.1.2
+  
+  # --- MATEMÁTICA E CIÊNCIA DE DADOS ---
+  ml_linalg: ^13.12.6
+  stats: ^3.0.0
+  math_expressions: ^2.6.0
 
-  # Mapa e Geometria
-  flutter_map: ^8.2.1 # Alternativa ao Google Maps
-  latlong2: ^0.9.1 # Tipos de latitude/longitude
-  geolocator: ^14.0.2 # Localização do dispositivo
-  proj4dart: ^2.1.0 # Conversão entre sistemas de coordenadas
+  # --- MAPA E GEOMETRIA ---
+  flutter_map: ^8.2.1
+  latlong2: ^0.9.1
+  geolocator: ^14.0.2
+  proj4dart: ^2.1.0
+  supercluster: ^3.1.0 # Para agrupamento de pontos no mapa
 
-  # Banco de Dados Local
-  sqflite: ^2.3.2 # SQLite para Flutter
-  sqflite_common_ffi: ^2.3.3 # SQLite com FFI para desktop
+  # --- BANCO DE DADOS LOCAL ---
+  sqflite: ^2.4.0
+  sqflite_common_ffi: ^2.3.3
 
-  # Utilitários e Interface de Usuário
-  cupertino_icons: ^1.0.8 # Ícones do iOS
-  intl: ^0.20.2 # Internacionalização e formatação
-  path: ^1.9.0 # Manipulação de caminhos
-  path_provider: ^2.1.5 # Acesso a diretórios do dispositivo
-  path_provider_android: ^2.2.4 # Suporte Android para path_provider
-  shared_preferences: ^2.2.2 # Armazenamento de dados simples localmente
-  device_info_plus: ^11.5.0 # Informações sobre o dispositivo
-  permission_handler: ^12.0.1 # Solicitação de permissões
-  gal: ^2.2.0 # Acesso à galeria
-  go_router: ^14.2.0 # ✅ PACOTE DE ROTEAMENTO ADICIONADO AQUI
+  # --- UTILITÁRIOS E NAVEGAÇÃO ---
+  cupertino_icons: ^1.0.8
+  intl: ^0.20.2
+  path: ^1.9.0
+  path_provider: ^2.1.5
+  path_provider_android: ^2.2.4
+  shared_preferences: ^2.3.2
+  device_info_plus: ^11.5.0
+  permission_handler: ^12.0.1
+  go_router: ^14.2.0
+  uuid: ^4.5.1
+  connectivity_plus: ^6.1.4
+  http: ^1.2.0
 
-  # Arquivos e Compartilhamento
-  file_picker: ^10.2.0 # Selecionar arquivos do sistema
-  share_plus: ^11.0.0 # Compartilhamento de arquivos e textos
-  csv: ^6.0.0 # Leitura e escrita de arquivos CSV
-  pdf: ^3.10.8 # Geração de PDFs
-  open_file: ^3.5.10 # Abrir arquivos com apps externos
-  media_scanner: ^2.1.0 # Atualizar mídia na galeria
+  # --- ARQUIVOS E COMPARTILHAMENTO ---
+  file_picker: ^10.2.0
+  share_plus: ^11.0.0
+  csv: ^6.0.0
+  pdf: ^3.10.8
+  open_file: ^3.5.10
+  flutter_archive: ^6.0.3 # Para ZIP
+  gal: ^2.2.0 # Galeria
 
-  # Componentes Visuais
-  flutter_slidable: ^4.0.0 # Slidable widgets (arrastar para ação)
-  flutter_speed_dial: ^7.0.0 # Botão de ação flutuante com opções
-  url_launcher: ^6.3.2 # Abrir URLs externas
-  connectivity_plus: ^6.1.4 # Verificar conexão de rede
-  flutter_map_line_editor: ^8.0.0 # Edição de linhas no mapa
-  flutter_map_dragmarker: ^8.0.3 # Marcadores móveis em mapas 
+  # --- COMPONENTES VISUAIS ---
+  flutter_slidable: ^4.0.0
+  flutter_speed_dial: ^7.0.0
   google_fonts: ^6.1.0
   flutter_animate: ^4.5.0
-  audioplayers: ^6.0.0
-  http: ^1.2.0  # <--- Adicione esta linha
-
-
-  # Pacote para o cálculo matemático do cluster  
-  fl_chart: ^0.69.0 # Gráficos interativos
-  flutter_archive: ^6.0.3 # Compactar/descompactar arquivos ZIP
-  uuid: ^4.3.3 # Gerar identificadores únicos
+  audioplayers: ^6.1.0
+  fl_chart: ^0.69.0
   pie_chart: ^5.4.0
-  stats: ^3.0.0 # Estatísticas descritivas
-
-  # Imagens
-  image_picker: ^1.0.7 # Capturar ou escolher imagens
-  image: ^4.5.4 # Manipulação de imagens em Dart puro
-  cloud_functions: ^6.0.0
-  supercluster: ^3.1.0
-  firebase_vertexai: ^2.2.0
-  firebase_ai: ^3.6.1
+  url_launcher: ^6.3.2
   
+  # --- EDIÇÃO DE MAPA ---
+  flutter_map_line_editor: ^8.0.0
+  flutter_map_dragmarker: ^8.0.3
 
-  # Vitrines (comentados)
-  # flutter_stripe: ^10.1.1 # Pagamentos com Stripe
-  # cloud_functions: ^4.7.6 # Funções do Firebase na nuvem
+  # --- IMAGENS ---
+  image_picker: ^1.1.2
+  image: ^4.5.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0 # Conjunto de regras de lint para qualidade de código
-  flutter_launcher_icons: ^0.14.4 # Geração automática de ícones do app
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
-  uses-material-design: true # Usa componentes do Material Design
+  uses-material-design: true
   assets:
     - assets/images/
-    - assets/icons/ # Boa prática declarar aqui também
+    - assets/icons/
     - assets/sounds/
     - assets/grid/
+    - assets/sounds/intro.mp3
+    - assets/sounds/click.mp3
 
-# Configuração de ícones do app (correta)
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true

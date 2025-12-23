@@ -1,8 +1,8 @@
-// lib/pages/menu/consistencia_resultado_page.dart (VERSÃO CORRIGIDA)
+// lib/pages/menu/consistencia_resultado_page.dart (VERSÃO COM PULO DIRETO)
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
-import 'package:geoforestv1/models/arvore_model.dart'; // <-- IMPORT NECESSÁRIO
+import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/pages/amostra/inventario_page.dart';
 import 'package:geoforestv1/services/validation_service.dart';
@@ -53,6 +53,7 @@ class ConsistenciaResultadoPage extends StatelessWidget {
                         leading: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
                         title: Text(issue.identificador),
                         subtitle: Text(issue.mensagem),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 14), // Indicador de clique
                         onTap: () async {
                           if (issue.parcelaId != null) {
                             final parcelaRepo = ParcelaRepository();
@@ -67,13 +68,15 @@ class ConsistenciaResultadoPage extends StatelessWidget {
                               // 3. Anexa as árvores ao objeto
                               parcela.arvores = arvoresDaParcela;
                               
-                              // 4. Navega com o objeto completo
+                              // 4. Navega passando o ID da árvore alvo para o Pulo Direto
                               Navigator.push(context, MaterialPageRoute(
-                                builder: (_) => InventarioPage(parcela: parcela)
+                                builder: (_) => InventarioPage(
+                                  parcela: parcela,
+                                  targetArvoreId: issue.arvoreId, // <--- AQUI A MÁGICA ACONTECE
+                                )
                               ));
                             }
                           }
-                          // Lógica para cubagem pode ser adicionada aqui
                         },
                       );
                     }).toList(),
