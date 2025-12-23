@@ -1,28 +1,26 @@
 // lib/pages/analises/analise_selecao_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/models/arvore_model.dart'; // Import necessário
-import 'package:geoforestv1/models/parcela_model.dart'; // Import necessário
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
-import 'package:geoforestv1/pages/dashboard/relatorio_comparativo_page.dart';
+import 'package:geoforestv1/models/enums.dart'; 
+import 'package:geoforestv1/pages/dashboard/relatorio_comparativo_page.dart'; 
 import 'package:geoforestv1/pages/analises/analise_volumetrica_page.dart';
 import 'package:geoforestv1/pages/dashboard/estrato_dashboard_page.dart';
 
-// Repositórios
+// Repositórios e Serviços
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
-import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/analise_repository.dart';
-
-// Serviços
 import 'package:geoforestv1/services/ai_validation_service.dart'; 
+import 'package:geoforestv1/services/analysis_service.dart';
+import 'package:geoforestv1/services/pdf_service.dart'; 
 import 'package:geoforestv1/widgets/progress_dialog.dart';
-import 'package:geoforestv1/widgets/chat_ia_dialog.dart'; // <<< CERTIFIQUE-SE DE CRIAR ESTE ARQUIVO
+import 'package:geoforestv1/widgets/chat_ia_dialog.dart'; 
 
 class AnaliseSelecaoPage extends StatefulWidget {
   const AnaliseSelecaoPage({super.key});
@@ -32,21 +30,19 @@ class AnaliseSelecaoPage extends StatefulWidget {
 }
 
 class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
-  // Repositórios
   final _projetoRepository = ProjetoRepository();
   final _atividadeRepository = AtividadeRepository();
   final _fazendaRepository = FazendaRepository();
   final _talhaoRepository = TalhaoRepository();
   final _analiseRepository = AnaliseRepository();
-  final _parcelaRepository = ParcelaRepository();
+  final _analysisService = AnalysisService();
+  final _pdfService = PdfService();
 
-  // Listas para popular os dropdowns
   List<Projeto> _projetosDisponiveis = [];
   List<Atividade> _atividadesDisponiveis = [];
   List<Fazenda> _fazendasDisponiveis = [];
   List<Talhao> _talhoesDisponiveis = [];
 
-  // Itens selecionados nos filtros
   Projeto? _projetoSelecionado;
   Atividade? _atividadeSelecionada;
   Fazenda? _fazendaSelecionada;
@@ -60,7 +56,8 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
     _carregarProjetos();
   }
 
-  // --- FUNÇÕES EXISTENTES PRESERVADAS ---
+  // --- LÓGICA DE DADOS ---
+
   Future<void> _carregarProjetos() async {
     setState(() => _isLoading = true);
     final talhoesCompletos = await _talhaoRepository.getTalhoesComParcelasConcluidas();
@@ -69,10 +66,8 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
        return;
     }
     final todosProjetos = await _projetoRepository.getTodosOsProjetosParaGerente();
-    final projetosIdsComDados = <int>{};
-    for (var talhao in talhoesCompletos) {
-      if(talhao.projetoId != null) projetosIdsComDados.add(talhao.projetoId!);
-    }
+    final projetosIdsComDados = talhoesCompletos.map((t) => t.projetoId).toSet();
+    
     if (mounted) {
       setState(() {
         _projetosDisponiveis = todosProjetos.where((p) => projetosIdsComDados.contains(p.id)).toList();
@@ -81,309 +76,487 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
     }
   }
 
-  Future<void> _onProjetoSelecionado(Projeto? projeto) async {
+  Future<void> _onProjetoSelecionado(dynamic projeto) async {
+    final p = projeto as Projeto?;
     setState(() {
-      _projetoSelecionado = projeto;
+      _projetoSelecionado = p;
       _atividadeSelecionada = null;
       _fazendaSelecionada = null;
       _atividadesDisponiveis = [];
       _fazendasDisponiveis = [];
       _talhoesDisponiveis = [];
       _talhoesSelecionados.clear();
-      if (projeto == null) return;
-      _isLoading = true;
     });
-    final atividades = await _atividadeRepository.getAtividadesDoProjeto(projeto!.id!);
+    if (p == null) return;
+    setState(() => _isLoading = true);
+    final atividades = await _atividadeRepository.getAtividadesDoProjeto(p.id!);
     final tiposInventario = ["IPC", "IFC", "IFS", "BIO", "IFQ"];
     _atividadesDisponiveis = atividades.where((a) => tiposInventario.any((tipo) => a.tipo.toUpperCase().contains(tipo))).toList();
     setState(() => _isLoading = false);
   }
 
-  Future<void> _onAtividadeSelecionada(Atividade? atividade) async {
+  Future<void> _onAtividadeSelecionada(dynamic atividade) async {
+    final a = atividade as Atividade?;
     setState(() {
-      _atividadeSelecionada = atividade;
+      _atividadeSelecionada = a;
       _fazendaSelecionada = null;
       _fazendasDisponiveis = [];
       _talhoesDisponiveis = [];
       _talhoesSelecionados.clear();
-      if (atividade == null) return;
-      _isLoading = true;
     });
-    _fazendasDisponiveis = await _fazendaRepository.getFazendasDaAtividade(atividade!.id!);
+    if (a == null) return;
+    setState(() => _isLoading = true);
+    _fazendasDisponiveis = await _fazendaRepository.getFazendasDaAtividade(a.id!);
     setState(() => _isLoading = false);
   }
 
-  Future<void> _onFazendaSelecionada(Fazenda? fazenda) async {
+  Future<void> _onFazendaSelecionada(dynamic fazenda) async {
+    final f = fazenda as Fazenda?;
     setState(() {
-      _fazendaSelecionada = fazenda;
+      _fazendaSelecionada = f;
       _talhoesDisponiveis = [];
       _talhoesSelecionados.clear();
-      if (fazenda == null) return;
-      _isLoading = true;
     });
-    final todosTalhoesDaFazenda = await _talhaoRepository.getTalhoesDaFazenda(fazenda!.id, fazenda.atividadeId);
-    final talhoesCompletosIds = (await _talhaoRepository.getTalhoesComParcelasConcluidas()).map((t) => t.id).toSet();
-    _talhoesDisponiveis = todosTalhoesDaFazenda.where((t) => talhoesCompletosIds.contains(t.id)).toList();
+    if (f == null) return;
+    setState(() => _isLoading = true);
+    final todosTalhoes = await _talhaoRepository.getTalhoesDaFazenda(f.id, f.atividadeId);
+    final concluidosIds = (await _talhaoRepository.getTalhoesComParcelasConcluidas()).map((t) => t.id).toSet();
+    _talhoesDisponiveis = todosTalhoes.where((t) => concluidosIds.contains(t.id)).toList();
     setState(() => _isLoading = false);
   }
-  
+
   void _toggleTalhao(int talhaoId, bool? isSelected) {
     if (isSelected == null) return;
-    setState(() {
-      if (isSelected) _talhoesSelecionados.add(talhaoId);
-      else _talhoesSelecionados.remove(talhaoId);
-    });
+    setState(() => isSelected ? _talhoesSelecionados.add(talhaoId) : _talhoesSelecionados.remove(talhaoId));
   }
 
+  // --- MÉTODOS DE NAVEGAÇÃO ---
+
   void _gerarAnaliseEstrato() {
-    if (_talhoesSelecionados.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione pelo menos um talhão.')));
-      return;
-    }
-    final talhoesParaAnalisar = _talhoesDisponiveis.where((t) => _talhoesSelecionados.contains(t.id)).toList();
-    Navigator.push(context, MaterialPageRoute(builder: (context) => EstratoDashboardPage(talhoesSelecionados: talhoesParaAnalisar)));
+    if (_talhoesSelecionados.isEmpty) return;
+    final selecionados = _talhoesDisponiveis.where((t) => _talhoesSelecionados.contains(t.id)).toList();
+    Navigator.push(context, MaterialPageRoute(builder: (ctx) => EstratoDashboardPage(talhoesSelecionados: selecionados)));
   }
 
   void _gerarRelatorioComparativo() {
-    if (_talhoesSelecionados.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione os talhões para comparar.')));
-      return;
-    }
-    final talhoesParaAnalisar = _talhoesDisponiveis.where((t) => _talhoesSelecionados.contains(t.id)).toList();
-    Navigator.push(context, MaterialPageRoute(builder: (context) => RelatorioComparativoPage(talhoesSelecionados: talhoesParaAnalisar)));
+    if (_talhoesSelecionados.isEmpty) return;
+    final selecionados = _talhoesDisponiveis.where((t) => _talhoesSelecionados.contains(t.id)).toList();
+    Navigator.push(context, MaterialPageRoute(builder: (ctx) => RelatorioComparativoPage(talhoesSelecionados: selecionados)));
   }
 
   void _navegarParaAnaliseVolumetrica() {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const AnaliseVolumetricaPage()));
+    if (_talhoesSelecionados.isEmpty) {
+       Navigator.push(context, MaterialPageRoute(builder: (ctx) => const AnaliseVolumetricaPage()));
+    } else {
+       final selecionados = _talhoesDisponiveis.where((t) => _talhoesSelecionados.contains(t.id)).toList();
+       Navigator.push(context, MaterialPageRoute(builder: (ctx) => AnaliseVolumetricaPage(talhoesPreSelecionados: selecionados)));
+    }
   }
 
-  Future<void> _executarAuditoriaIA() async {
+  // --- GERAÇÃO DE PLANOS DE CUBAGEM (ESTRATO) ---
+
+  Future<void> _gerarPlanosDeCubagemParaEstrato() async {
     if (_talhoesSelecionados.isEmpty) return;
 
-    ProgressDialog.show(context, 'A IA está auditando o estrato selecionado...');
+    final selecionados = _talhoesDisponiveis.where((t) => _talhoesSelecionados.contains(t.id)).toList();
+    
+    final config = await _mostrarDialogoConfiguracaoLote();
+    if (config == null) return;
 
-    final aiService = AiValidationService();
-    List<String> relatorioGeral = [];
-    int totalProblemas = 0;
+    if (!mounted) return;
+    ProgressDialog.show(context, 'Gerando Atividades e Planos de Cubagem...');
 
     try {
-      for (int talhaoId in _talhoesSelecionados) {
-        final talhao = _talhoesDisponiveis.firstWhere((t) => t.id == talhaoId);
-        final dados = await _analiseRepository.getDadosAgregadosDoTalhao(talhaoId);
-        final parcelas = dados['parcelas'] as List<Parcela>;
-        
-        for (var p in parcelas) {
-          final arvores = await _parcelaRepository.getArvoresDaParcela(p.dbId!);
-          
-          if (arvores.isNotEmpty) {
-            // CORREÇÃO AQUI: O retorno agora é uma lista de Mapas {"id": ..., "msg": ...}
-            final List<Map<String, dynamic>> alertasBrutos = 
-                await aiService.validarErrosAutomatico(p, arvores);
-            
-            if (alertasBrutos.isNotEmpty) {
-              // Extraímos apenas as mensagens (strings) para compor o relatório textual desta página
-              final List<String> alertasMensagens = 
-                  alertasBrutos.map((e) => e['msg'].toString()).toList();
-
-              totalProblemas += alertasMensagens.length;
-              relatorioGeral.add("\n📍 ${talhao.nome} - P${p.idParcela}");
-              relatorioGeral.addAll(alertasMensagens.map((a) => "  • $a"));
-            }
-          }
-        }
-      }
+      final planosGerados = await _analysisService.criarMultiplasAtividadesDeCubagem(
+        talhoes: selecionados,
+        metodo: config.metodoDistribuicao,
+        quantidade: config.quantidade,
+        metodoCubagem: config.metodoCubagem,
+        metrica: config.metricaDistribuicao,
+        isIntervaloManual: config.isIntervaloManual,
+        intervaloManual: config.intervaloManual,
+      );
 
       if (!mounted) return;
       ProgressDialog.hide(context);
 
-      _exibirResultadoAuditoria(relatorioGeral, totalProblemas);
+      if (planosGerados.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Nenhum plano foi gerado. Verifique os dados dos talhões.'),
+          backgroundColor: Colors.orange,
+        ));
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Atividades criadas com sucesso! Gerando PDF...'),
+        backgroundColor: Colors.green,
+      ));
+
+      await _pdfService.gerarPdfUnificadoDePlanosDeCubagem(
+        context: context, 
+        planosPorTalhao: planosGerados,
+        metrica: config.metricaDistribuicao,
+      );
 
     } catch (e) {
       if (mounted) {
         ProgressDialog.hide(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Erro na IA: $e"), 
-          backgroundColor: Colors.red
+          content: Text('Erro ao gerar cubagem: $e'),
+          backgroundColor: Colors.red,
         ));
       }
     }
   }
 
-  void _exibirResultadoAuditoria(List<String> relatorioGeral, int totalProblemas) {
-    showDialog(
+  Future<PlanoConfig?> _mostrarDialogoConfiguracaoLote() async {
+    final quantidadeController = TextEditingController(text: "20");
+    final intervaloController = TextEditingController(); 
+    final formKey = GlobalKey<FormState>();
+    
+    MetodoDistribuicaoCubagem metodoDistribuicao = MetodoDistribuicaoCubagem.fixoPorTalhao;
+    String metodoCubagem = 'Fixas';
+    MetricaDistribuicao metricaSelecionada = MetricaDistribuicao.dap; 
+    bool isIntervaloManual = false;
+
+    return showDialog<PlanoConfig>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(children: [
-          Icon(totalProblemas == 0 ? Icons.check_circle : Icons.auto_awesome, color: totalProblemas == 0 ? Colors.green : Colors.deepPurple),
-          const SizedBox(width: 10), const Text("Auditoria do Estrato")
-        ]),
-        content: SizedBox(width: double.maxFinite, child: relatorioGeral.isEmpty 
-          ? const Text("✅ Nenhuma inconsistência encontrada.") 
-          : SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [...relatorioGeral.map((l) => Text(l))]))),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Fechar"))],
-      ),
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Configurar Cubagem do Estrato'),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('1. Métrica Base', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      SegmentedButton<MetricaDistribuicao>(
+                        segments: const [
+                          ButtonSegment(value: MetricaDistribuicao.dap, label: Text('DAP')),
+                          ButtonSegment(value: MetricaDistribuicao.cap, label: Text('CAP')),
+                        ],
+                        selected: {metricaSelecionada},
+                        onSelectionChanged: (newSelection) {
+                          setDialogState(() => metricaSelecionada = newSelection.first);
+                        },
+                      ),
+                      const Divider(height: 24),
+                      const Text('2. Distribuição', style: TextStyle(fontWeight: FontWeight.bold)),
+                      RadioListTile<MetodoDistribuicaoCubagem>(
+                        title: const Text('Qtd Fixa por Talhão'),
+                        value: MetodoDistribuicaoCubagem.fixoPorTalhao,
+                        groupValue: metodoDistribuicao,
+                        onChanged: (v) => setDialogState(() => metodoDistribuicao = v!),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      RadioListTile<MetodoDistribuicaoCubagem>(
+                        title: const Text('Proporcional à Área'),
+                        value: MetodoDistribuicaoCubagem.proporcionalPorArea,
+                        groupValue: metodoDistribuicao,
+                        onChanged: (v) => setDialogState(() => metodoDistribuicao = v!),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      TextFormField(
+                        controller: quantidadeController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: metodoDistribuicao == MetodoDistribuicaoCubagem.fixoPorTalhao ? 'Árvores por talhão' : 'Total para o estrato',
+                          border: const OutlineInputBorder(),
+                        ),
+                        validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null,
+                      ),
+                      const Divider(height: 24),
+                      const Text('3. Método de Medição', style: TextStyle(fontWeight: FontWeight.bold)),
+                      DropdownButtonFormField<String>(
+                        value: metodoCubagem,
+                        items: const [
+                          DropdownMenuItem(value: 'Fixas', child: Text('Seções Fixas')),
+                          DropdownMenuItem(value: 'Relativas', child: Text('Seções Relativas')),
+                        ],
+                        onChanged: (value) => setDialogState(() => metodoCubagem = value!),
+                        decoration: const InputDecoration(border: OutlineInputBorder()),
+                      ),
+                      const Divider(height: 24),
+                      const Text('4. Intervalo das Classes', style: TextStyle(fontWeight: FontWeight.bold)),
+                      RadioListTile<bool>(
+                        title: const Text('Automático (Padrão)'),
+                        subtitle: Text(metricaSelecionada == MetricaDistribuicao.dap ? 'Classes de 5 em 5 cm' : 'Classes de 15 em 15 cm'),
+                        value: false,
+                        groupValue: isIntervaloManual,
+                        onChanged: (v) => setDialogState(() => isIntervaloManual = v!),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      RadioListTile<bool>(
+                        title: const Text('Manual'),
+                        value: true,
+                        groupValue: isIntervaloManual,
+                        onChanged: (v) => setDialogState(() => isIntervaloManual = v!),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      if (isIntervaloManual)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: TextFormField(
+                            controller: intervaloController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: InputDecoration(
+                              labelText: 'Largura da classe (cm)',
+                              border: const OutlineInputBorder(),
+                              hintText: metricaSelecionada == MetricaDistribuicao.dap ? 'Ex: 2.5' : 'Ex: 10',
+                            ),
+                            validator: (v) {
+                              if (!isIntervaloManual) return null;
+                              if (v == null || v.isEmpty) return 'Obrigatório';
+                              return null;
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(ctx).pop(null), child: const Text('Cancelar')),
+                ElevatedButton(
+                  onPressed: () {
+                    if (formKey.currentState!.validate()) {
+                      Navigator.of(ctx).pop(PlanoConfig(
+                        metodoDistribuicao: metodoDistribuicao,
+                        quantidade: int.parse(quantidadeController.text),
+                        metodoCubagem: metodoCubagem,
+                        metricaDistribuicao: metricaSelecionada,
+                        isIntervaloManual: isIntervaloManual,
+                        intervaloManual: isIntervaloManual 
+                            ? double.tryParse(intervaloController.text.replaceAll(',', '.')) 
+                            : null,
+                      ));
+                    }
+                  },
+                  child: const Text('Gerar Planos'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
-  // --- NOVA FUNÇÃO: CHAT IA CONVERSACIONAL SOBRE O ESTRATO ---
-  Future<void> _abrirChatIAEstrato() async {
-    if (_talhoesSelecionados.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione os talhões para conversar com os dados.')));
-      return;
-    }
+  // --- AÇÕES IA UNIFICADAS ---
 
-    ProgressDialog.show(context, 'Preparando dados para a IA...');
+  Future<void> _executarAuditoriaInteligente() async {
+    if (_talhoesSelecionados.isEmpty) return;
+    ProgressDialog.show(context, 'IA analisando o estrato...');
+
+    final aiService = AiValidationService();
+    List<Map<String, dynamic>> resumosParaIA = [];
 
     try {
-      // Coletamos uma amostra ou resumo do estrato para dar contexto à IA
-      // Para não estourar o limite de tokens, enviamos o primeiro talhão completo 
-      // ou um resumo agregado.
-      int primeiroTalhaoId = _talhoesSelecionados.first;
-      final talhao = _talhoesDisponiveis.firstWhere((t) => t.id == primeiroTalhaoId);
-      final dados = await _analiseRepository.getDadosAgregadosDoTalhao(primeiroTalhaoId);
-      final parcelas = dados['parcelas'] as List<Parcela>;
-      
-      // Pegamos as árvores da primeira parcela para servir de base de conversa
-      List<Arvore> arvoresContexto = [];
-      if (parcelas.isNotEmpty) {
-        arvoresContexto = await _parcelaRepository.getArvoresDaParcela(parcelas.first.dbId!);
+      for (int id in _talhoesSelecionados) {
+        final t = _talhoesDisponiveis.firstWhere((element) => element.id == id);
+        final dados = await _analiseRepository.getDadosAgregadosDoTalhao(id);
+        final analise = _analysisService.getTalhaoInsights(t, dados['parcelas'], dados['arvores']);
+        
+        resumosParaIA.add({
+          "talhao": t.nome,
+          "idade": t.idadeAnos,
+          "vol_ha": analise.volumePorHectare.toStringAsFixed(1),
+          "cap_medio": analise.mediaCap.toStringAsFixed(1),
+          "arv_ha": analise.arvoresPorHectare
+        });
       }
 
+      final alertas = await aiService.validarEstrato(resumosParaIA);
       if (!mounted) return;
       ProgressDialog.hide(context);
 
-      // Abre o diálogo de chat que você criou anteriormente
-      showDialog(
-        context: context,
-        builder: (context) => ChatIaDialog(
-          parcela: parcelas.first, 
-          arvores: arvoresContexto,
-        ),
-      );
+      _mostrarResultadoIA(alertas);
 
     } catch (e) {
-      ProgressDialog.hide(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro ao preparar chat: $e")));
+      if (mounted) {
+        ProgressDialog.hide(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro na IA: $e")));
+      }
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Análise de Estrato')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+  void _mostrarResultadoIA(List<String> alertas) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            DropdownButtonFormField<Projeto>(
-              value: _projetoSelecionado,
-              hint: const Text('1. Projeto'),
-              isExpanded: true,
-              items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome, overflow: TextOverflow.ellipsis))).toList(),
-              onChanged: _onProjetoSelecionado,
-              decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5)),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<Atividade>(
-              value: _atividadeSelecionada,
-              hint: const Text('2. Atividade'),
-              isExpanded: true,
-              items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo, overflow: TextOverflow.ellipsis))).toList(),
-              onChanged: _projetoSelecionado == null ? null : _onAtividadeSelecionada,
-              decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5)),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<Fazenda>(
-              value: _fazendaSelecionada,
-              hint: const Text('3. Fazenda'),
-              isExpanded: true,
-              items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome, overflow: TextOverflow.ellipsis))).toList(),
-              onChanged: _atividadeSelecionada == null ? null : _onFazendaSelecionada,
-              decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5)),
-            ),
-            const SizedBox(height: 16),
-            Text('4. Selecione os Talhões do Estrato (${_talhoesSelecionados.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const Text("🌲 Auditoria do Estrato", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const Divider(),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _talhoesDisponiveis.isEmpty
-                      ? const Center(child: Text('Nenhum talhão disponível.'))
-                      : ListView(
-                          children: _talhoesDisponiveis.map((talhao) {
-                            return CheckboxListTile(
-                              title: Text(talhao.nome),
-                              subtitle: Text('${talhao.areaHa?.toStringAsFixed(2) ?? "0"} ha'),
-                              value: _talhoesSelecionados.contains(talhao.id!),
-                              onChanged: (value) => _toggleTalhao(talhao.id!, value),
-                              secondary: const Icon(Icons.park),
-                            );
-                          }).toList(),
-                        ),
+            if (alertas.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(child: Text("✅ Nenhuma inconsistência biológica detectada.")),
+              )
+            else
+              ...alertas.map((a) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(children: [
+                  const Icon(Icons.info_outline, color: Colors.deepPurple, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(a)),
+                ]),
+              )),
+            const SizedBox(height: 20),
+            ListTile(
+              tileColor: Colors.deepPurple.withOpacity(0.05),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              leading: const Icon(Icons.chat_bubble_outline, color: Colors.deepPurple),
+              title: const Text("Conversar com os dados deste estrato"),
+              onTap: () {
+                Navigator.pop(ctx);
+                _abrirChatUnificado();
+              },
             ),
           ],
         ),
       ),
-      // --- BOTÕES DE AÇÃO (TODOS PRESERVADOS + NOVO CHAT) ---
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.end,
+    );
+  }
+
+  void _abrirChatUnificado() async {
+    final dados = await _analiseRepository.getDadosAgregadosDoTalhao(_talhoesSelecionados.first);
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => ChatIaDialog(parcela: dados['parcelas'].first, arvores: dados['arvores']),
+    );
+  }
+
+  // --- CONSTRUÇÃO DA INTERFACE ---
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Analista de Estrato')),
+      body: Column(
         children: [
-          // 1. NOVO: Botão Chat Conversacional
-          if (_talhoesSelecionados.isNotEmpty)
-            FloatingActionButton.extended(
-              onPressed: _abrirChatIAEstrato,
-              heroTag: 'chatIAFab',
-              label: const Text('Perguntar aos Dados (IA)'),
-              icon: const Icon(Icons.chat),
-              backgroundColor: Colors.blueAccent,
-              foregroundColor: Colors.white,
+          _buildFiltrosCard(isDark),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Selecione os Talhões', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text('${_talhoesSelecionados.length} selecionados', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+              ],
             ),
-          const SizedBox(height: 12),
+          ),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _talhoesDisponiveis.isEmpty
+                    ? const Center(child: Text("Selecione os filtros acima", style: TextStyle(color: Colors.grey)))
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        itemCount: _talhoesDisponiveis.length,
+                        itemBuilder: (ctx, i) {
+                          final t = _talhoesDisponiveis[i];
+                          return CheckboxListTile(
+                            secondary: const Icon(Icons.park_outlined, color: Colors.green),
+                            title: Text(t.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text("${t.areaHa?.toStringAsFixed(2) ?? '0'} ha • ${t.especie}"),
+                            value: _talhoesSelecionados.contains(t.id),
+                            onChanged: (val) => _toggleTalhao(t.id!, val),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: _buildBottomActionArea(),
+    );
+  }
 
-          // 2. Botão IA Auditoria (Original)
-          if (_talhoesSelecionados.isNotEmpty)
-            FloatingActionButton.extended(
-              onPressed: _executarAuditoriaIA,
-              heroTag: 'auditoriaIAFab',
-              label: const Text('Auditar Estrato com IA'),
-              icon: const Icon(Icons.auto_awesome),
-              backgroundColor: Colors.deepPurple,
-              foregroundColor: Colors.white,
+  Widget _buildFiltrosCard(bool isDark) {
+    return Card(
+      margin: const EdgeInsets.all(16),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _buildDropdown("Projeto", _projetoSelecionado, _projetosDisponiveis, _onProjetoSelecionado),
+            const SizedBox(height: 12),
+            _buildDropdown("Atividade", _atividadeSelecionada, _atividadesDisponiveis, _onAtividadeSelecionada),
+            const SizedBox(height: 12),
+            _buildDropdown("Fazenda", _fazendaSelecionada, _fazendasDisponiveis, _onFazendaSelecionada),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropdown(String label, dynamic value, List<dynamic> items, void Function(dynamic) onChanged) {
+    return DropdownButtonFormField<dynamic>(
+      value: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      ),
+      items: items.map((i) {
+        String texto = (i is Projeto) ? i.nome : (i is Atividade ? i.tipo : i.nome);
+        return DropdownMenuItem(value: i, child: Text(texto, overflow: TextOverflow.ellipsis));
+      }).toList(),
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _buildBottomActionArea() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0, -2))],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: ElevatedButton.icon(
+              onPressed: _talhoesSelecionados.isEmpty ? null : _gerarAnaliseEstrato,
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)),
+              icon: const Icon(Icons.dashboard_customize_outlined),
+              label: const Text("GERAR DASHBOARD"),
             ),
-          const SizedBox(height: 12),
-          
-          // 3. Botão Análise Volumétrica (Original)
-          FloatingActionButton.extended(
-            onPressed: _navegarParaAnaliseVolumetrica,
-            heroTag: 'analiseVolumetricaFab',
-            label: const Text('Equação de Volume'),
-            icon: const Icon(Icons.calculate),
-            backgroundColor: const Color(0xFFEBE4AB),
-            foregroundColor: const Color(0xFF023853),
           ),
-          const SizedBox(height: 12),
-
-          // 4. Botão Dashboard Estrato (Original)
-          FloatingActionButton.extended(
-            onPressed: _gerarAnaliseEstrato,
-            heroTag: 'analiseEstratoFab',
-            label: const Text('Dashboard do Estrato'),
-            icon: const Icon(Icons.layers),
-            backgroundColor: const Color(0xFF023853),
-            foregroundColor: const Color(0xFFEBE4AB),
-          ),
-          const SizedBox(height: 12),
-          
-          // 5. Botão Tabela Comparativa (Original)
-          FloatingActionButton.extended(
-            onPressed: _gerarRelatorioComparativo,
-            heroTag: 'analiseComparativaFab',
-            label: const Text('Tabela Comparativa'),
-            icon: const Icon(Icons.table_chart),
-            backgroundColor: Colors.teal,
-            foregroundColor: Colors.white,
+          const SizedBox(width: 12),
+          PopupMenuButton<int>(
+            icon: const Icon(Icons.more_vert, size: 30),
+            onSelected: (val) {
+              if (val == 1) _gerarRelatorioComparativo();
+              if (val == 2) _navegarParaAnaliseVolumetrica();
+              if (val == 3) _executarAuditoriaInteligente();
+              if (val == 4) _gerarPlanosDeCubagemParaEstrato();
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(value: 1, child: Row(children: [Icon(Icons.table_chart), SizedBox(width: 8), Text("Tabela Comparativa")])),
+              const PopupMenuItem(value: 2, child: Row(children: [Icon(Icons.calculate), SizedBox(width: 8), Text("Equação de Volume")])),
+              const PopupMenuItem(value: 4, child: Row(children: [Icon(Icons.playlist_add_check_outlined, color: Colors.blue), SizedBox(width: 8), Text("Gerar Planos de Cubagem", style: TextStyle(color: Colors.blue))])),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 3, child: Row(children: [Icon(Icons.auto_awesome, color: Colors.deepPurple), SizedBox(width: 8), Text("Auditoria IA", style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold))])),
+            ],
           ),
         ],
       ),

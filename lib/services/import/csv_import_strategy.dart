@@ -66,13 +66,29 @@ abstract class BaseImportStrategy implements CsvImportStrategy {
 
     final nomeFazenda = getValue(row, ['fazenda']);
     if (nomeFazenda == null) return null;
+
+    // --- BUSCA DE MUNICÍPIO E ESTADO NO CSV ---
+    final municipioCsv = getValue(row, ['municipio', 'município', 'cidade']);
+    final estadoCsv = getValue(row, ['estado', 'uf']);
+    // ------------------------------------------
+
     final fazendaCacheKey = '${atividade.id}_$nomeFazenda';
     Fazenda? fazenda = fazendasCache[fazendaCacheKey];
+
     if (fazenda == null) {
         final idFazenda = nomeFazenda;
         fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [idFazenda, atividade.id!])).map(Fazenda.fromMap).firstOrNull;
+        
         if (fazenda == null) {
-            fazenda = Fazenda(id: idFazenda, atividadeId: atividade.id!, nome: nomeFazenda, municipio: 'N/I', estado: 'N/I');
+            // --- AGORA USANDO OS VALORES DO CSV ---
+            fazenda = Fazenda(
+              id: idFazenda, 
+              atividadeId: atividade.id!, 
+              nome: nomeFazenda, 
+              municipio: municipioCsv ?? 'N/I', 
+              estado: estadoCsv ?? 'UF'
+            );
+            
             await txn.insert('fazendas', fazenda.toMap()..['lastModified'] = now);
             result.fazendasCriadas++;
         }
@@ -89,10 +105,11 @@ abstract class BaseImportStrategy implements CsvImportStrategy {
             talhao = Talhao(
               fazendaId: fazenda.id, fazendaAtividadeId: fazenda.atividadeId, nome: nomeTalhao, projetoId: projeto.id, fazendaNome: fazenda.nome,
               bloco: getValue(row, ['bloco']), up: getValue(row, ['rf']),
-              // <<< VERSÃO FINAL E CORRETA DA ÁREA >>>
               areaHa: double.tryParse(getValue(row, ['area_talhao_ha', 'áreatalhão', 'areatalhao', 'area_talh'])?.replaceAll(',', '.') ?? ''),
               especie: getValue(row, ['espécie', 'especie']), materialGenetico: getValue(row, ['material']),
               espacamento: getValue(row, ['espaçamento', 'espacamento']), dataPlantio: getValue(row, ['plantio']),
+              municipio: fazenda.municipio, // Vincula o local ao talhão também
+              estado: fazenda.estado,       // Vincula o local ao talhão também
             );
             final tId = await txn.insert('talhoes', talhao.toMap()..['lastModified'] = now);
             talhao = talhao.copyWith(id: tId);
