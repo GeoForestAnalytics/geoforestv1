@@ -1,4 +1,4 @@
-# Miscellaneous
+# Miscellaneous (Arquivos temporários e logs)
 *.class
 *.log
 *.pyc
@@ -12,18 +12,18 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# IntelliJ/Android Studio
 *.iml
 *.ipr
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# VS Code (Segurança máxima para suas chaves de API)
+.vscode/launch.json
+.vscode/tasks.json
+.vscode/settings.json
 
-# Flutter/Dart/Pub related
+# Flutter/Dart/Pub
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
@@ -33,32 +33,30 @@ migrate_working_dir/
 .pub/
 /build/
 
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
+# Android específico (Essencial!)
+android/local.properties
+android/key.properties
 /android/app/debug
 /android/app/profile
 /android/app/release
 
-# Firebase config files you want to hide
-lib/firebase_options.dart
+# iOS específico
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Runner/GoogleService-Info.plist
+**/ios/Flutter/ephemeral/
 
+# Firebase (Configurações sensíveis)
+lib/firebase_options.dart
 /android/app/google-services.json
 
-# Arquivos de Configuração do Firebase iOS (Faltou esse!)
-ios/Runner/GoogleService-Info.plist
-
-# Chaves de Assinatura Android (CRÍTICO para quando for publicar na loja)
+# Chaves de Assinatura (NUNCA SUBIR)
 *.jks
 *.keystore
+*.p12
+*.pem
 key.properties
 
-# Arquivos de ambiente (se você usar .env para guardar senhas no futuro)
+# Ambientes e Segredos
 .env
-
-# Lixo do Mac (se você ou alguém da equipe usar Mac)
-.DS_Store
+.env.*

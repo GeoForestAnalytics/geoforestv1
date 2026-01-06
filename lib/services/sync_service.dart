@@ -24,6 +24,8 @@ import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:geoforestv1/utils/app_config.dart';
 
 class SyncService {
   final firestore.FirebaseFirestore _firestore = firestore.FirebaseFirestore.instance;
@@ -39,12 +41,42 @@ class SyncService {
   Stream<SyncProgress> get progressStream => _progressStreamController.stream;
 
   final List<SyncConflict> conflicts = [];
+  bool _isCancelled = false;
+
+  /// Cancela a sincronização em andamento
+  void cancelarSincronizacao() {
+    _isCancelled = true;
+  }
 
   Future<void> sincronizarDados() async {
     conflicts.clear();
+    _isCancelled = false;
+    
     final user = _auth.currentUser;
     if (user == null) {
       _progressStreamController.add(SyncProgress(erro: "Usuário não está logado.", concluido: true));
+      return;
+    }
+
+    // Verifica conectividade antes de iniciar
+    try {
+      final connectivityResults = await Connectivity().checkConnectivity().timeout(
+        AppConfig.shortNetworkTimeout,
+        onTimeout: () => [ConnectivityResult.none],
+      );
+      
+      if (connectivityResults.isEmpty || connectivityResults.contains(ConnectivityResult.none)) {
+        _progressStreamController.add(SyncProgress(
+          erro: "Sem conexão com a internet. Verifique sua rede e tente novamente.",
+          concluido: true,
+        ));
+        return;
+      }
+    } catch (e) {
+      _progressStreamController.add(SyncProgress(
+        erro: "Erro ao verificar conexão: $e",
+        concluido: true,
+      ));
       return;
     }
 
@@ -94,8 +126,20 @@ class SyncService {
       _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, processados: totalGeral, mensagem: finalMessage, concluido: true));
 
     } catch(e, s) {
-      final erroMsg = "Ocorreu um erro geral na sincronização: $e";
-      debugPrint("$erroMsg\n$s");
+      String erroMsg = "Ocorreu um erro durante a sincronização";
+      
+      // Mensagens mais amigáveis para o usuário
+      if (e.toString().contains('network') || e.toString().contains('connection')) {
+        erroMsg = "Erro de conexão. Verifique sua internet e tente novamente.";
+      } else if (e.toString().contains('timeout')) {
+        erroMsg = "Tempo de espera esgotado. Tente novamente.";
+      } else if (e.toString().contains('permission')) {
+        erroMsg = "Sem permissão para sincronizar. Verifique suas credenciais.";
+      } else {
+        erroMsg = "Erro inesperado: ${e.toString().length > 100 ? e.toString().substring(0, 100) + '...' : e.toString()}";
+      }
+      
+      debugPrint("Erro na sincronização: $e\n$s");
       _progressStreamController.add(SyncProgress(erro: erroMsg, concluido: true));
       rethrow;
     }
@@ -185,10 +229,20 @@ class SyncService {
   
   Future<void> _uploadColetasNaoSincronizadas(String? licenseIdDoUsuarioLogado, int totalGeral) async {
     int processados = 0;
-    while (true) {
+    int tentativas = 0;
+    const maxTentativas = AppConfig.maxSyncAttempts;
+    
+    while (tentativas < maxTentativas && !_isCancelled) {
+      if (_isCancelled) {
+        _progressStreamController.add(SyncProgress(erro: "Sincronização cancelada pelo usuário.", concluido: true));
+        break;
+      }
+      
       if (totalGeral > 0) {
         _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, processados: processados, mensagem: "Enviando item ${processados + 1} de $totalGeral..."));
       }
+      
+      tentativas++;
 
       // --- PARCELAS ---
       final parcelaLocal = await _parcelaRepository.getOneUnsyncedParcel();
@@ -244,8 +298,12 @@ class SyncService {
         } catch (e) {
           final erroMsg = "Falha ao enviar parcela ${parcelaLocal.idParcela}: $e";
           debugPrint(erroMsg);
-          _progressStreamController.add(SyncProgress(erro: erroMsg, concluido: true));
-          break;
+          // Não para completamente, apenas reporta e continua
+          _progressStreamController.add(SyncProgress(
+            mensagem: "Erro ao enviar parcela ${parcelaLocal.idParcela}. Continuando...",
+          ));
+          // Marca como erro mas continua tentando outros itens
+          continue;
         }
       }
 
@@ -301,12 +359,24 @@ class SyncService {
         } catch (e) {
           final erroMsg = "Falha ao enviar cubagem ${cubagemLocal.id}: $e";
           debugPrint(erroMsg);
-          _progressStreamController.add(SyncProgress(erro: erroMsg, concluido: true));
-          break;
+          // Não para completamente, apenas reporta e continua
+          _progressStreamController.add(SyncProgress(
+            mensagem: "Erro ao enviar cubagem ${cubagemLocal.id}. Continuando...",
+          ));
+          // Marca como erro mas continua tentando outros itens
+          continue;
         }
       }
 
+      // Se chegou aqui, não há mais itens para processar
       break;
+    }
+    
+    if (tentativas >= maxTentativas) {
+      _progressStreamController.add(SyncProgress(
+        erro: "Limite de tentativas atingido. Alguns itens podem não ter sido sincronizados.",
+        concluido: true,
+      ));
     }
   }
 

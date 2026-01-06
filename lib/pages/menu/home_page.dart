@@ -1,7 +1,6 @@
 // lib/pages/menu/home_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -199,7 +198,7 @@ class _HomePageState extends State<HomePage> {
 
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true, // Permite cancelar
       builder: (dialogContext) {
         return StreamBuilder<SyncProgress>(
           stream: syncService.progressStream,
@@ -221,6 +220,7 @@ class _HomePageState extends State<HomePage> {
               return const SizedBox.shrink(); 
             }
             return AlertDialog(
+              title: const Text('Sincronizando dados'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -233,6 +233,21 @@ class _HomePageState extends State<HomePage> {
                   ]
                 ],
               ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    syncService.cancelarSincronizacao();
+                    Navigator.of(dialogContext).pop();
+                    if (mounted) {
+                      setState(() => _isSyncing = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Sincronização cancelada'), backgroundColor: Colors.orange),
+                      );
+                    }
+                  },
+                  child: const Text('Cancelar'),
+                ),
+              ],
             );
           },
         );

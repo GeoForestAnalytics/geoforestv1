@@ -25,6 +25,7 @@ import 'package:geoforestv1/providers/dashboard_metrics_provider.dart';
 import 'package:geoforestv1/providers/operacoes_provider.dart';
 import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
 import 'package:geoforestv1/utils/app_router.dart';
+import 'package:geoforestv1/utils/app_config.dart';
 
 void initializeProj4Definitions() {
   void addProjectionIfNotExists(String name, String definition) {
@@ -73,11 +74,11 @@ Future<void> main() async {
     // iOS
     appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
     
-    // WEB: Colei a sua "CHAVE DE SITE" aqui abaixo 👇
-    webProvider: ReCaptchaV3Provider('6LdafxgsAAAAAInBOeFOrNJR3l-4gUCzdry_XELi'), 
+    // WEB: Chave de Site do ReCaptcha (configurável via AppConfig)
+    webProvider: ReCaptchaV3Provider(AppConfig.recaptchaSiteKey), 
   );
 
-  print("Firebase App Check ativado com sucesso.");
+  debugPrint("Firebase App Check ativado com sucesso.");
 
   runApp(const AppServicesLoader());
 }
@@ -103,8 +104,9 @@ class _AppServicesLoaderState extends State<AppServicesLoader> {
         [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown],
       );
       return await loadThemeFromPreferences();
-    } catch (e) {
-      print("!!!!!! ERRO NA INICIALIZAÇÃO DOS SERVIÇOS: $e !!!!!");
+    } catch (e, stackTrace) {
+      debugPrint("ERRO NA INICIALIZAÇÃO DOS SERVIÇOS: $e");
+      debugPrint("Stack trace: $stackTrace");
       rethrow;
     }
   }

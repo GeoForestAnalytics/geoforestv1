@@ -270,7 +270,12 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
                           labelText: metodoDistribuicao == MetodoDistribuicaoCubagem.fixoPorTalhao ? 'Árvores por talhão' : 'Total para o estrato',
                           border: const OutlineInputBorder(),
                         ),
-                        validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null,
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return 'Campo obrigatório';
+                          final parsed = int.tryParse(v);
+                          if (parsed == null || parsed <= 0) return 'Digite um número válido maior que zero';
+                          return null;
+                        },
                       ),
                       const Divider(height: 24),
                       const Text('3. Método de Medição', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -327,9 +332,19 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
                 ElevatedButton(
                   onPressed: () {
                     if (formKey.currentState!.validate()) {
+                      // Valida novamente antes de parse (segurança extra)
+                      final quantidadeParsed = int.tryParse(quantidadeController.text);
+                      if (quantidadeParsed == null || quantidadeParsed <= 0) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                          content: Text('Quantidade inválida'),
+                          backgroundColor: Colors.red,
+                        ));
+                        return;
+                      }
+                      
                       Navigator.of(ctx).pop(PlanoConfig(
                         metodoDistribuicao: metodoDistribuicao,
-                        quantidade: int.parse(quantidadeController.text),
+                        quantidade: quantidadeParsed,
                         metodoCubagem: metodoCubagem,
                         metricaDistribuicao: metricaSelecionada,
                         isIntervaloManual: isIntervaloManual,

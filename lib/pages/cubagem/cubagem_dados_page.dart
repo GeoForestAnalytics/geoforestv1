@@ -182,9 +182,20 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     // Se passou por todas as validações, continua com o processo de salvar
     setState(() => _isLoading = true);
   
-    final alturaTotal = double.parse(_alturaTotalController.text.replaceAll(',', '.'));
-    final valorCAP = double.parse(_valorCAPController.text.replaceAll(',', '.'));
-    final alturaBase = double.parse(_alturaBaseController.text.replaceAll(',', '.'));
+    // Usa tryParse para evitar crashes se a validação falhar
+    final alturaTotal = double.tryParse(_alturaTotalController.text.replaceAll(',', '.')) ?? 0.0;
+    final valorCAP = double.tryParse(_valorCAPController.text.replaceAll(',', '.')) ?? 0.0;
+    final alturaBase = double.tryParse(_alturaBaseController.text.replaceAll(',', '.')) ?? 0.0;
+    
+    // Verifica se os valores são válidos (deveria ter sido pego pela validação, mas é uma segurança extra)
+    if (alturaTotal <= 0 || valorCAP <= 0 || alturaBase <= 0) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Erro: Valores inválidos detectados. Por favor, verifique os campos.'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
   
     final arvoreToSave = CubagemArvore(
       id: widget.arvoreParaEditar?.id,

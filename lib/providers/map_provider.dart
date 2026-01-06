@@ -22,6 +22,7 @@ import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/utils/app_config.dart';
 
 enum MapLayerType { ruas, satelite, sateliteMapbox }
 
@@ -131,13 +132,13 @@ class MapProvider with ChangeNotifier {
     MapLayerType.satelite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     MapLayerType.sateliteMapbox: 'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/256/{z}/{x}/{y}@2x?access_token={accessToken}',
   };
-  final String _mapboxAccessToken = 'pk.eyJ1IjoiZ2VvZm9yZXN0YXBwIiwiYSI6ImNtY2FyczBwdDAxZmYybHB1OWZlbG1pdW0ifQ.5HeYC0moMJ8dzZzVXKTPrg';
 
   String get currentTileUrl {
     String url = _tileUrls[_currentLayer]!;
     if (url.contains('{accessToken}')) {
-      if (_mapboxAccessToken.isEmpty) return _tileUrls[MapLayerType.satelite]!;
-      return url.replaceAll('{accessToken}', _mapboxAccessToken);
+      final token = AppConfig.mapboxAccessToken;
+      if (token.isEmpty) return _tileUrls[MapLayerType.satelite]!;
+      return url.replaceAll('{accessToken}', token);
     }
     return url;
   }

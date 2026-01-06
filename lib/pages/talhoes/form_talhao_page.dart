@@ -176,6 +176,15 @@ class _FormTalhaoPageState extends State<FormTalhaoPage> {
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(RegExp(r'^\d*[,.]?\d*')),
                       ],
+                      validator: (value) {
+                        if (value != null && value.trim().isNotEmpty) {
+                          final parsed = double.tryParse(value.replaceAll(',', '.'));
+                          if (parsed == null || parsed < 0) {
+                            return 'Digite um valor válido';
+                          }
+                        }
+                        return null;
+                      },
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -191,6 +200,15 @@ class _FormTalhaoPageState extends State<FormTalhaoPage> {
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(RegExp(r'^\d*[,.]?\d*')),
                       ],
+                      validator: (value) {
+                        if (value != null && value.trim().isNotEmpty) {
+                          final parsed = double.tryParse(value.replaceAll(',', '.'));
+                          if (parsed == null || parsed < 0) {
+                            return 'Digite um valor válido';
+                          }
+                        }
+                        return null;
+                      },
                     ),
                   ),
                 ],

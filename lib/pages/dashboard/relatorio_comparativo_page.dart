@@ -175,7 +175,12 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
                               : 'Nº total de árvores para o lote',
                           border: const OutlineInputBorder(),
                         ),
-                        validator: (v) => (v == null || v.isEmpty || int.tryParse(v) == null || int.parse(v) <= 0) ? 'Valor inválido' : null,
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return 'Campo obrigatório';
+                          final parsed = int.tryParse(v);
+                          if (parsed == null || parsed <= 0) return 'Digite um número válido maior que zero';
+                          return null;
+                        },
                       ),
                       const Divider(height: 24),
                       const Text('3. Qual o método de medição?', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -237,10 +242,20 @@ class _RelatorioComparativoPageState extends State<RelatorioComparativoPage> {
                 ElevatedButton(
                   onPressed: () {
                     if (formKey.currentState!.validate()) {
+                      // Valida novamente antes de parse (segurança extra)
+                      final quantidadeParsed = int.tryParse(quantidadeController.text);
+                      if (quantidadeParsed == null || quantidadeParsed <= 0) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                          content: Text('Quantidade inválida'),
+                          backgroundColor: Colors.red,
+                        ));
+                        return;
+                      }
+                      
                       Navigator.of(ctx).pop(
                         PlanoConfig(
                           metodoDistribuicao: metodoDistribuicao,
-                          quantidade: int.parse(quantidadeController.text),
+                          quantidade: quantidadeParsed,
                           metodoCubagem: metodoCubagem,
                           metricaDistribuicao: metricaSelecionada,
                           isIntervaloManual: isIntervaloManual,

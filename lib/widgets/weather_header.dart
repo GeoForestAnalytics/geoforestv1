@@ -1,11 +1,14 @@
 // lib/widgets/weather_header.dart
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // <--- Importante
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:geoforestv1/utils/app_config.dart';
 
 class WeatherHeader extends StatefulWidget {
   const WeatherHeader({super.key});
@@ -24,9 +27,6 @@ class _WeatherHeaderState extends State<WeatherHeader> {
   
   // Nome do Usuário (Padrão: Florestal)
   String _nomeUsuario = "Florestal";
-
-  // --- SUA CHAVE NOVA JÁ CONFIGURADA ---
-  final String _apiKey = "44c419e21659fd02589ddc5f3be43f89";
 
   @override
   void initState() {
@@ -60,42 +60,73 @@ class _WeatherHeaderState extends State<WeatherHeader> {
 
   Future<void> _carregarClima() async {
     try {
+      // Verifica conectividade antes de fazer requisição
+      final connectivityResults = await Connectivity().checkConnectivity();
+      if (connectivityResults.isEmpty || connectivityResults.contains(ConnectivityResult.none)) {
+        if (mounted) {
+          setState(() {
+            _cidade = "Sem conexão";
+            _temperatura = "--";
+            _descricao = "Verifique sua internet";
+            _iconeClima = Icons.signal_wifi_off;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
       Position posicao = await _determinarPosicao();
 
       final url = Uri.parse(
-          'https://api.openweathermap.org/data/2.5/weather?lat=${posicao.latitude}&lon=${posicao.longitude}&appid=$_apiKey&units=metric&lang=pt_br');
+          'https://api.openweathermap.org/data/2.5/weather?lat=${posicao.latitude}&lon=${posicao.longitude}&appid=${AppConfig.openWeatherApiKey}&units=metric&lang=pt_br');
 
-      final response = await http.get(url);
+      final response = await http.get(url).timeout(
+        AppConfig.shortNetworkTimeout,
+        onTimeout: () {
+          throw TimeoutException('Tempo de espera esgotado ao buscar dados do clima');
+        },
+      );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
         if (mounted) {
           setState(() {
-            _cidade = data['name'];
+            _cidade = data['name'] ?? 'Desconhecido';
             _temperatura = "${data['main']['temp'].toStringAsFixed(0)}°C";
             
-            String desc = data['weather'][0]['description'];
-            _descricao = desc[0].toUpperCase() + desc.substring(1);
+            String desc = data['weather'][0]['description'] ?? 'Sem descrição';
+            _descricao = desc.isNotEmpty ? desc[0].toUpperCase() + desc.substring(1) : 'Sem descrição';
             
-            int conditionId = data['weather'][0]['id'];
+            int conditionId = data['weather'][0]['id'] ?? 800;
             _iconeClima = _getIconForCondition(conditionId);
             
             _isLoading = false;
           });
         }
       } else {
-        print("ERRO API CLIMA: Código ${response.statusCode} - Corpo: ${response.body}");
-        throw Exception('Erro na API: ${response.statusCode}');
+        debugPrint("ERRO API CLIMA: Código ${response.statusCode}");
+        throw Exception('Não foi possível obter dados do clima. Código: ${response.statusCode}');
       }
-    } catch (e) {
-      print("Erro geral no clima: $e");
+    } on TimeoutException catch (e) {
+      debugPrint("Timeout ao carregar clima: $e");
       if (mounted) {
         setState(() {
-          _cidade = "Sem sinal GPS";
+          _cidade = "Timeout";
           _temperatura = "--";
-          _descricao = "Verifique conexão";
-          _iconeClima = Icons.signal_wifi_off;
+          _descricao = "Tempo esgotado";
+          _iconeClima = Icons.timer_off;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar clima: $e");
+      if (mounted) {
+        setState(() {
+          _cidade = "Erro";
+          _temperatura = "--";
+          _descricao = "Não foi possível carregar";
+          _iconeClima = Icons.error_outline;
           _isLoading = false;
         });
       }
