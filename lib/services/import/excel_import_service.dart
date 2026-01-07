@@ -60,7 +60,7 @@ class ExcelImportService {
               'obrigaHipso': _safeGet(row, 6, defaultValue: 'N'), // <--- CORRIGIDO (Coluna G)
               'obrigaAlturaDano': _safeGet(row, 7, defaultValue: 'N'), // Coluna H
               'permiteDominante': _safeGet(row, 8, defaultValue: 'N'), // Coluna I
-              'listaCompativeis': '', // Pode deixar vazio por enquanto
+              'listaCompativeis': '', // Pode deixar vazio por enquantO
             });
             result.regrasCriadas++;
           }
