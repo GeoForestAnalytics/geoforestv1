@@ -1,13 +1,13 @@
-// lib/services/import/inventario_import_strategy.dart (VERSÃO CORRIGIDA)
+// lib/services/import/inventario_import_strategy.dart (VERSÃO CORRIGIDA PARA CÓDIGOS DINÂMICOS)
 
 import 'package:collection/collection.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
-import 'csv_import_strategy.dart'; // Importa a base
+import 'csv_import_strategy.dart'; 
 import 'package:intl/intl.dart';
 import 'package:proj4dart/proj4dart.dart' as proj4;
-import 'dart:math' as math; // Necessário para o cálculo PI
+import 'dart:math' as math; 
 
 class InventarioImportStrategy extends BaseImportStrategy {
   InventarioImportStrategy({required super.txn, required super.projeto, super.nomeDoResponsavel});
@@ -15,41 +15,28 @@ class InventarioImportStrategy extends BaseImportStrategy {
   Parcela? parcelaCache;
   int? parcelaCacheDbId;
 
-  // ... (a função _mapCodigo permanece a mesma)
-  Codigo _mapCodigo(String? cod) {
-  if (cod == null) return Codigo.Normal;
-  
-  // 1. Limpa e padroniza o texto de entrada
-  final codTratado = cod.trim().toUpperCase();
+  // AGORA RETORNA STRING (ID DO EXCEL)
+  String _mapCodigo(String? cod) {
+    if (cod == null) return '101'; // Default: Normal
+    
+    final codTratado = cod.trim().toUpperCase();
 
-  // 2. Usa 'contains' para uma verificação flexível
-  if (codTratado.contains('MULTIPLA')) return Codigo.Multipla;
-  if (codTratado.contains('BIFURCADA')) return Codigo.Bifurcada;
-  if (codTratado.contains('QUEBRADA')) return Codigo.Quebrada;
-  if (codTratado.contains('MORTA') || codTratado.contains('SECA')) return Codigo.MortaOuSeca;
-  if (codTratado.contains('CAIDA')) return Codigo.Caida;
-  if (codTratado.contains('FALHA')) return Codigo.Falha;
-  if (codTratado.contains('ATAQUEMACACO')) return Codigo.AtaqueMacaco;
-  if (codTratado.contains('REGENERACAO') || codTratado.contains('REBROTA')) return Codigo.Rebrota;
-  if (codTratado.contains('INCLINADA')) return Codigo.Inclinada;
-  if (codTratado.contains('FOGO')) return Codigo.Fogo;
-  if (codTratado.contains('FORMIGA')) return Codigo.AtaqueFormiga;
-  if (codTratado.contains('OUTRO')) return Codigo.Outro;
-
-  // Verificações de abreviações, se necessário
-  switch(codTratado) {
-    case 'F': return Codigo.Falha;
-    case 'M': return Codigo.MortaOuSeca;
-    case 'Q': return Codigo.Quebrada;
-    case 'B': return Codigo.Bifurcada;
-    case 'C': return Codigo.Caida;
-    case 'A': return Codigo.AtaqueMacaco;
-    case 'R': return Codigo.Rebrota;
-    case 'I': return Codigo.Inclinada;
-    case 'NORMAL': return Codigo.Normal;
-    default: return Codigo.Normal; // Se nada corresponder, assume como Normal
+    // Mapeamento baseado na sua tabela de excel (Imagem enviada)
+    if (codTratado.contains('NORMAL')) return '101';
+    if (codTratado == 'A' || codTratado.contains('BIFURCADA ACIMA')) return '102';
+    if (codTratado == 'B' || codTratado.contains('BIFURCADA ABAIXO')) return '103';
+    if (codTratado == 'CA' || codTratado.contains('CAIDA')) return '104';
+    if (codTratado == 'CR' || codTratado.contains('RAIZ')) return '105';
+    if (codTratado == 'D' || codTratado.contains('DOMINADA')) return '106';
+    if (codTratado == 'F' || codTratado.contains('FALHA')) return '107';
+    if (codTratado == 'G' || codTratado.contains('GEADA')) return '108';
+    if (codTratado == 'H' || codTratado.contains('DOMINANTE')) return '109';
+    if (codTratado == 'M' || codTratado.contains('MORTA') || codTratado.contains('SECA')) return '114';
+    if (codTratado == 'Q' || codTratado.contains('QUEBRADA')) return '117';
+    if (codTratado == 'R' || codTratado.contains('REBROTA')) return '118';
+    
+    return '101'; // Fallback para Normal
   }
-}
 
   @override
   Future<ImportResult> processar(List<Map<String, dynamic>> dataRows) async {
@@ -85,7 +72,6 @@ class InventarioImportStrategy extends BaseImportStrategy {
               }
             } else { dataColetaFinal = DateTime.now(); }
             
-            // --- INÍCIO DA LÓGICA DE CORREÇÃO DA ÁREA ---
             final lado1 = double.tryParse(BaseImportStrategy.getValue(row, ['lado1_m', 'lado 1'])?.replaceAll(',', '.') ?? '');
             final lado2 = double.tryParse(BaseImportStrategy.getValue(row, ['lado2_m', 'lado 2'])?.replaceAll(',', '.') ?? '');
             final areaDoCsv = double.tryParse(BaseImportStrategy.getValue(row, ['area_m2', 'areaparcela'])?.replaceAll(',', '.') ?? '');
@@ -95,12 +81,10 @@ class InventarioImportStrategy extends BaseImportStrategy {
 
             if (areaDoCsv != null && areaDoCsv > 0) {
               areaFinal = areaDoCsv;
-              // Se a área veio pronta, mas lado2 não, consideramos circular
               if (lado2 == null || lado2 == 0.0) {
                 formaFinal = 'Circular';
               }
             } else {
-              // Fallback para cálculo manual
               if (lado1 != null && lado2 != null && lado1 > 0 && lado2 > 0) {
                 areaFinal = lado1 * lado2;
                 formaFinal = 'Retangular';
@@ -109,7 +93,6 @@ class InventarioImportStrategy extends BaseImportStrategy {
                 formaFinal = 'Circular';
               }
             }
-            // --- FIM DA LÓGICA DE CORREÇÃO DA ÁREA ---
 
             double? latitudeFinal, longitudeFinal;
             final eastingStr = BaseImportStrategy.getValue(row, ['easting']);
@@ -137,7 +120,7 @@ class InventarioImportStrategy extends BaseImportStrategy {
                 talhaoId: talhao.id!, 
                 idParcela: idParcelaColeta, 
                 idFazenda: talhao.fazendaId,
-                areaMetrosQuadrados: areaFinal, // <-- USA A ÁREA CORRIGIDA
+                areaMetrosQuadrados: areaFinal,
                 status: StatusParcela.concluida, 
                 dataColeta: dataColetaFinal, 
                 nomeFazenda: talhao.fazendaNome, 
@@ -149,9 +132,9 @@ class InventarioImportStrategy extends BaseImportStrategy {
                 ciclo: BaseImportStrategy.getValue(row, ['ciclo']),
                 rotacao: int.tryParse(BaseImportStrategy.getValue(row, ['rotação']) ?? ''), 
                 tipoParcela: BaseImportStrategy.getValue(row, ['tipo']),
-                formaParcela: formaFinal, // <-- USA A FORMA CORRIGIDA
+                formaParcela: formaFinal,
                 lado1: lado1, 
-                lado2: (lado2 != null && lado2 > 0) ? lado2 : null, // <-- Salva null se for circular
+                lado2: (lado2 != null && lado2 > 0) ? lado2 : null,
                 latitude: latitudeFinal,
                 longitude: longitudeFinal,
                 observacao: BaseImportStrategy.getValue(row, ['observacao_parcela', 'obsparcela']), 
@@ -191,8 +174,8 @@ class InventarioImportStrategy extends BaseImportStrategy {
             linha: int.tryParse(BaseImportStrategy.getValue(row, ['linha']) ?? '0') ?? 0, 
             posicaoNaLinha: int.tryParse(BaseImportStrategy.getValue(row, ['posicao_na_linha', 'arvore']) ?? '0') ?? 0, 
             dominante: BaseImportStrategy.getValue(row, ['dominante'])?.trim().toLowerCase() == 'sim', 
-            codigo: _mapCodigo(codigo1Str),
-            codigo2: codigo2Str != null ? Codigo2.values.firstWhereOrNull((e) => e.name.toUpperCase().startsWith(codigo2Str.toUpperCase())) : null,
+            codigo: _mapCodigo(codigo1Str), // Agora retorna String '101', '102', etc.
+            codigo2: codigo2Str ?? '',      // Agora é String
             codigo3: BaseImportStrategy.getValue(row, ['cod_3']),
             tora: int.tryParse(BaseImportStrategy.getValue(row, ['tora']) ?? ''),
             fimDeLinha: false

@@ -1,21 +1,7 @@
-// lib/models/arvore_model.dart (VERSÃO REFATORADA)
+// lib/models/arvore_model.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:collection/collection.dart';
 import 'package:geoforestv1/data/datasources/local/database_constants.dart';
-
-enum Codigo {
-  Normal, Falha, Bifurcada, Multipla, Quebrada, Caida, Dominada, Geada, Fogo,
-  PragasOuDoencas, AtaqueMacaco, VespaMadeira, MortaOuSeca, PonteiraSeca,
-  Rebrota, AtaqueFormiga, Torta, FoxTail, Inclinada, DeitadaVento, FeridaBase,
-  CaidaRaizVento, Resinado, Outro
-}
-
-enum Codigo2 {
-  Bifurcada, Multipla, Quebrada, Geada, Fogo, PragasOuDoencas, AtaqueMacaco,
-  VespaMadeira, MortaOuSeca, PonteiraSeca, Rebrota, AtaqueFormiga, Torta,
-  FoxTail, Inclinada, DeitadaVento, FeridaBase, Resinado, Outro
-}
 
 class Arvore {
   int? id;
@@ -26,9 +12,12 @@ class Arvore {
   final int posicaoNaLinha;
   final bool fimDeLinha;
   bool dominante;
-  final Codigo codigo;
-  final Codigo2? codigo2;
+  
+  // Mudamos de Codigo (Enum) para String para suportar o Excel dinâmico
+  final String codigo; 
+  final String? codigo2;
   final String? codigo3;
+  
   final int? tora;
   final double? capAuditoria;
   final double? alturaAuditoria;
@@ -36,28 +25,59 @@ class Arvore {
   final DateTime? lastModified;
 
   Arvore({
-    this.id, required this.cap, this.altura, this.alturaDano, required this.linha,
-    required this.posicaoNaLinha, this.fimDeLinha = false, this.dominante = false,
-    required this.codigo, this.codigo2, this.codigo3, this.tora,
-    this.capAuditoria, this.alturaAuditoria, this.volume, this.lastModified,
+    this.id,
+    required this.cap,
+    this.altura,
+    this.alturaDano,
+    required this.linha,
+    required this.posicaoNaLinha,
+    this.fimDeLinha = false,
+    this.dominante = false,
+    required this.codigo, // Agora String
+    this.codigo2,         // Agora String
+    this.codigo3,
+    this.tora,
+    this.capAuditoria,
+    this.alturaAuditoria,
+    this.volume,
+    this.lastModified,
   });
 
   Arvore copyWith({
-    int? id, double? cap, double? altura, double? alturaDano, int? linha,
-    int? posicaoNaLinha, bool? fimDeLinha, bool? dominante, Codigo? codigo,
-    Codigo2? codigo2, String? codigo3, int? tora, double? capAuditoria,
-    double? alturaAuditoria, double? volume, DateTime? lastModified,
+    int? id,
+    double? cap,
+    double? altura,
+    double? alturaDano,
+    int? linha,
+    int? posicaoNaLinha,
+    bool? fimDeLinha,
+    bool? dominante,
+    String? codigo,   // Alterado para String
+    String? codigo2,  // Alterado para String
+    String? codigo3,
+    int? tora,
+    double? capAuditoria,
+    double? alturaAuditoria,
+    double? volume,
+    DateTime? lastModified,
   }) {
     return Arvore(
-      id: id ?? this.id, cap: cap ?? this.cap, altura: altura ?? this.altura,
-      alturaDano: alturaDano ?? this.alturaDano, linha: linha ?? this.linha,
+      id: id ?? this.id,
+      cap: cap ?? this.cap,
+      altura: altura ?? this.altura,
+      alturaDano: alturaDano ?? this.alturaDano,
+      linha: linha ?? this.linha,
       posicaoNaLinha: posicaoNaLinha ?? this.posicaoNaLinha,
-      fimDeLinha: fimDeLinha ?? this.fimDeLinha, dominante: dominante ?? this.dominante,
-      codigo: codigo ?? this.codigo, codigo2: codigo2 ?? this.codigo2,
-      codigo3: codigo3 ?? this.codigo3, tora: tora ?? this.tora,
+      fimDeLinha: fimDeLinha ?? this.fimDeLinha,
+      dominante: dominante ?? this.dominante,
+      codigo: codigo ?? this.codigo,
+      codigo2: codigo2 ?? this.codigo2,
+      codigo3: codigo3 ?? this.codigo3,
+      tora: tora ?? this.tora,
       capAuditoria: capAuditoria ?? this.capAuditoria,
       alturaAuditoria: alturaAuditoria ?? this.alturaAuditoria,
-      volume: volume ?? this.volume, lastModified: lastModified ?? this.lastModified,
+      volume: volume ?? this.volume,
+      lastModified: lastModified ?? this.lastModified,
     );
   }
 
@@ -71,8 +91,9 @@ class Arvore {
       DbArvores.posicaoNaLinha: posicaoNaLinha,
       DbArvores.fimDeLinha: fimDeLinha ? 1 : 0,
       DbArvores.dominante: dominante ? 1 : 0,
-      DbArvores.codigo: codigo.name,
-      DbArvores.codigo2: codigo2?.name,
+      // Como agora é String, não usamos mais .name
+      DbArvores.codigo: codigo,
+      DbArvores.codigo2: codigo2,
       DbArvores.codigo3: codigo3,
       DbArvores.tora: tora,
       DbArvores.capAuditoria: capAuditoria,
@@ -97,12 +118,11 @@ class Arvore {
       posicaoNaLinha: map[DbArvores.posicaoNaLinha] ?? 0,
       fimDeLinha: map[DbArvores.fimDeLinha] == 1,
       dominante: map[DbArvores.dominante] == 1,
-      codigo: Codigo.values.firstWhere((e) => e.name == map[DbArvores.codigo], orElse: () => Codigo.Normal),
-      codigo2: map[DbArvores.codigo2] != null
-          ? Codigo2.values.firstWhereOrNull((e) => e.name.toLowerCase() == map[DbArvores.codigo2].toString().toLowerCase())
-          : null,
-      codigo3: map[DbArvores.codigo3],
-      tora: map[DbArvores.tora],
+      // Lemos diretamente como String. Se for nulo, vira 'Normal' por padrão
+      codigo: map[DbArvores.codigo]?.toString() ?? 'Normal',
+      codigo2: map[DbArvores.codigo2]?.toString(),
+      codigo3: map[DbArvores.codigo3]?.toString(),
+      tora: map[DbArvores.tora] is int ? map[DbArvores.tora] : int.tryParse(map[DbArvores.tora]?.toString() ?? ''),
       capAuditoria: (map[DbArvores.capAuditoria] as num?)?.toDouble(),
       alturaAuditoria: (map[DbArvores.alturaAuditoria] as num?)?.toDouble(),
       lastModified: parseDate(map[DbArvores.lastModified]),

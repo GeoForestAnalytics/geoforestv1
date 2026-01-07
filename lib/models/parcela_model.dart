@@ -115,63 +115,81 @@ class Parcela {
       DbParcelas.rotacao: rotacao, DbParcelas.tipoParcela: tipoParcela, 
       DbParcelas.formaParcela: formaParcela, DbParcelas.lado1: lado1, DbParcelas.lado2: lado2,
       DbParcelas.declividade: declividade, DbParcelas.photoPaths: jsonEncode(photoPaths),
+      'arvores': arvores.map((a) => a.toMap()).toList(),
       DbParcelas.lastModified: lastModified?.toIso8601String()
     };
   }
 
-  factory Parcela.fromMap(Map<String, dynamic> map) {
-    DateTime? parseDate(dynamic value) {
-      if (value is Timestamp) return value.toDate();
-      if (value is String) return DateTime.tryParse(value);
-      return null;
-    }
+ factory Parcela.fromMap(Map<String, dynamic> map) {
+  // 1. Função auxiliar para tratar datas de diferentes formatos (Firebase vs SQLite)
+  DateTime? parseDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
 
-    List<String> paths = [];
-    if (map[DbParcelas.photoPaths] != null) {
-      try {
-        paths = List<String>.from(jsonDecode(map[DbParcelas.photoPaths]));
-      } catch (e) {
-        debugPrint("Erro ao decodificar photoPaths: $e");
-      }
+  // 2. Lógica para as ÁRVORES COMPACTADAS (A novidade para economizar no Firebase)
+  List<Arvore> listaArvores = [];
+  if (map['arvores'] != null && map['arvores'] is List) {
+    try {
+      listaArvores = (map['arvores'] as List)
+          .map((item) => Arvore.fromMap(Map<String, dynamic>.from(item)))
+          .toList();
+    } catch (e) {
+      debugPrint("Erro ao converter lista de árvores: $e");
     }
-    
-    return Parcela(
-      dbId: map[DbParcelas.id],
-      uuid: map[DbParcelas.uuid] ?? const Uuid().v4(),
-      talhaoId: map[DbParcelas.talhaoId],
-      idFazenda: map[DbParcelas.idFazenda],
-      nomeFazenda: map[DbParcelas.nomeFazenda],
-      nomeTalhao: map[DbParcelas.nomeTalhao],
-      idParcela: map[DbParcelas.idParcela] ?? 'ID_N/A',
-      areaMetrosQuadrados: (map[DbParcelas.areaMetrosQuadrados] as num?)?.toDouble() ?? 0.0,
-      observacao: map[DbParcelas.observacao],
-      latitude: (map[DbParcelas.latitude] as num?)?.toDouble(),
-      longitude: (map[DbParcelas.longitude] as num?)?.toDouble(),
-      altitude: (map[DbParcelas.altitude] as num?)?.toDouble(),
-      dataColeta: parseDate(map[DbParcelas.dataColeta]),
-      
-      // >>> CORREÇÃO 2: Leitura insensível a maiúsculas/minúsculas <<<
-      status: StatusParcela.values.firstWhere(
-        (e) => e.name.toLowerCase() == map[DbParcelas.status]?.toString().toLowerCase(),
-        orElse: () => StatusParcela.pendente
-      ),
-      
-      exportada: map[DbParcelas.exportada] == 1,
-      isSynced: map[DbParcelas.isSynced] == 1,
-      nomeLider: map[DbParcelas.nomeLider],
-      projetoId: map[DbParcelas.projetoId],
-      atividadeTipo: map['atividadeTipo'],
-      up: map[DbParcelas.up],
-      referenciaRf: map[DbParcelas.referenciaRf],
-      ciclo: map[DbParcelas.ciclo]?.toString(),
-      rotacao: int.tryParse(map[DbParcelas.rotacao]?.toString() ?? ''),
-      tipoParcela: map[DbParcelas.tipoParcela],
-      formaParcela: map[DbParcelas.formaParcela],
-      lado1: (map[DbParcelas.lado1] as num?)?.toDouble(),
-      lado2: (map[DbParcelas.lado2] as num?)?.toDouble(),
-      declividade: (map[DbParcelas.declividade] as num?)?.toDouble(),
-      photoPaths: paths,
-      lastModified: parseDate(map[DbParcelas.lastModified]),
-    );
+  }
+
+  // 3. Lógica para as FOTOS (Já existente, mas agora mais robusta)
+  List<String> paths = [];
+  if (map[DbParcelas.photoPaths] != null) {
+    var rawPaths = map[DbParcelas.photoPaths];
+    try {
+      if (rawPaths is String) {
+        paths = List<String>.from(jsonDecode(rawPaths));
+      } else if (rawPaths is List) {
+        paths = List<String>.from(rawPaths);
+      }
+    } catch (e) {
+      debugPrint("Erro ao decodificar photoPaths: $e");
+    }
+  }
+
+  // 4. Retorno do objeto Parcela com todos os campos preenchidos
+  return Parcela(
+    dbId: map[DbParcelas.id],
+    uuid: map[DbParcelas.uuid] ?? '',
+    talhaoId: map[DbParcelas.talhaoId],
+    idFazenda: map[DbParcelas.idFazenda],
+    nomeFazenda: map[DbParcelas.nomeFazenda],
+    nomeTalhao: map[DbParcelas.nomeTalhao],
+    idParcela: map[DbParcelas.idParcela] ?? 'ID_N/A',
+    areaMetrosQuadrados: (map[DbParcelas.areaMetrosQuadrados] as num?)?.toDouble() ?? 0.0,
+    observacao: map[DbParcelas.observacao],
+    latitude: (map[DbParcelas.latitude] as num?)?.toDouble(),
+    longitude: (map[DbParcelas.longitude] as num?)?.toDouble(),
+    altitude: (map[DbParcelas.altitude] as num?)?.toDouble(),
+    dataColeta: parseDate(map[DbParcelas.dataColeta]),
+    status: StatusParcela.values.firstWhere(
+      (e) => e.name.toLowerCase() == map[DbParcelas.status]?.toString().toLowerCase(),
+      orElse: () => StatusParcela.pendente
+    ),
+    exportada: map[DbParcelas.exportada] == 1 || map[DbParcelas.exportada] == true,
+    isSynced: map[DbParcelas.isSynced] == 1 || map[DbParcelas.isSynced] == true,
+    nomeLider: map[DbParcelas.nomeLider],
+    projetoId: map[DbParcelas.projetoId],
+    up: map[DbParcelas.up],
+    referenciaRf: map[DbParcelas.referenciaRf] ?? map['referenciaRf'],
+    ciclo: map[DbParcelas.ciclo],
+    rotacao: map[DbParcelas.rotacao],
+    tipoParcela: map[DbParcelas.tipoParcela],
+    formaParcela: map[DbParcelas.formaParcela],
+    lado1: (map[DbParcelas.lado1] as num?)?.toDouble(),
+    lado2: (map[DbParcelas.lado2] as num?)?.toDouble(),
+    declividade: (map[DbParcelas.declividade] as num?)?.toDouble(),
+    photoPaths: paths,
+    arvores: listaArvores, // <--- LISTA COMPACTADA ATRIBUÍDA AQUI
+    lastModified: parseDate(map[DbParcelas.lastModified]),
+  );
   }
 }

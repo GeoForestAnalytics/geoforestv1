@@ -157,29 +157,36 @@ class AnalysisService {
   }
 
   List<VolumePorCodigo> _calcularVolumePorCodigo(List<Arvore> arvoresComVolume, double volumeTotalHa) {
-    if (arvoresComVolume.isEmpty || volumeTotalHa <= 0) return [];
-    final grupoPorCodigo = arvoresComVolume.groupBy((Arvore a) => a.codigo.name);
-    final Map<String, double> volumeAcumuladoPorCodigo = {};
-    grupoPorCodigo.forEach((codigo, arvores) {
-      volumeAcumuladoPorCodigo[codigo] = arvores.map((a) => a.volume ?? 0).fold(0.0, (prev, vol) => prev + vol);
-    });
+  if (arvoresComVolume.isEmpty || volumeTotalHa <= 0) return [];
 
-    final double volumeTotalAmostrado = volumeAcumuladoPorCodigo.values.fold(0.0, (a, b) => a + b);
-    if (volumeTotalAmostrado <= 0) return [];
+  // 1. Mudança: 'a.codigo' já é String, então removemos o '.name'
+  final grupoPorCodigo = arvoresComVolume.groupBy((Arvore a) => a.codigo);
 
-    final List<VolumePorCodigo> resultado = [];
-    volumeAcumuladoPorCodigo.forEach((codigo, volume) {
-      final porcentagem = (volume / volumeTotalAmostrado) * 100;
-      resultado.add(VolumePorCodigo(
-        codigo: codigo,
-        porcentagem: porcentagem,
-        volumeTotal: volumeTotalHa * (porcentagem / 100),
-      ));
-    });
+  final Map<String, double> volumeAcumuladoPorCodigo = {};
 
-    resultado.sort((a, b) => b.volumeTotal.compareTo(a.volumeTotal));
-    return resultado;
-  }
+  grupoPorCodigo.forEach((codigo, arvores) {
+    // 2. Mudança: Forçamos a chave a ser String (codigo.toString()) para evitar erros de tipagem
+    volumeAcumuladoPorCodigo[codigo.toString()] = arvores
+        .map((a) => a.volume ?? 0.0)
+        .fold(0.0, (prev, vol) => prev + vol);
+  });
+
+  final double volumeTotalAmostrado = volumeAcumuladoPorCodigo.values.fold(0.0, (a, b) => a + b);
+  if (volumeTotalAmostrado <= 0) return [];
+
+  final List<VolumePorCodigo> resultado = [];
+  volumeAcumuladoPorCodigo.forEach((codigo, volume) {
+    final porcentagem = (volume / volumeTotalAmostrado) * 100;
+    resultado.add(VolumePorCodigo(
+      codigo: codigo,
+      porcentagem: porcentagem,
+      volumeTotal: volumeTotalHa * (porcentagem / 100),
+    ));
+  });
+
+  resultado.sort((a, b) => b.volumeTotal.compareTo(a.volumeTotal));
+  return resultado;
+}
 
   double calcularVolumeComercialSmalian(List<CubagemSecao> secoes) {
     if (secoes.length < 2) return 0.0;
@@ -361,17 +368,20 @@ class AnalysisService {
     }
   }
 
-  // --- ATUALIZADO: Agora usa Curtis para preencher alturas antes de aplicar o volume ---
+ // --- ATUALIZADO: Agora usa Curtis para preencher alturas antes de aplicar o volume ---
   List<Arvore> aplicarEquacaoDeVolume({required List<Arvore> arvoresDoInventario, required double b0, required double b1, required double b2}) {
     // 1. Preenche as alturas (Se Curtis falhar, usa média)
     final arvoresPreparadas = _preencherAlturasFaltantes(arvoresDoInventario);
     
     final List<Arvore> arvoresComVolume = [];
-    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
+    
+    // MUDANÇA: Lista de IDs String (conforme seu Excel) em vez de Enum
+    final idsSemVolume = ['107', '114', '104', '105']; 
 
     for (final arvore in arvoresPreparadas) {
-      if (arvore.cap <= 0 || codigosSemVolume.contains(arvore.codigo)) {
-        arvoresComVolume.add(arvore.copyWith(volume: 0));
+      // MUDANÇA: Verificação usando a lista de IDs String
+      if (arvore.cap <= 0 || idsSemVolume.contains(arvore.codigo)) {
+        arvoresComVolume.add(arvore.copyWith(volume: 0.0));
         continue;
       }
       
@@ -379,7 +389,7 @@ class AnalysisService {
       final alturaParaCalculo = (arvore.altura != null && arvore.altura! > 0) ? arvore.altura! : 0.1;
       
       if (alturaParaCalculo <= 0.1) {
-        arvoresComVolume.add(arvore.copyWith(volume: 0));
+        arvoresComVolume.add(arvore.copyWith(volume: 0.0));
         continue;
       }
 
@@ -428,27 +438,23 @@ class AnalysisService {
     return _analisarListaDeArvores(talhao, todasAsArvores, areaTotalAmostradaHa, parcelasDoTalhao.length, codeAnalysis);
   }
   
-  // --- ATUALIZADO: Agora usa Curtis para preencher alturas antes de calcular as médias ---
   TalhaoAnalysisResult _analisarListaDeArvores(Talhao talhao, List<Arvore> arvoresDoConjunto, double areaTotalAmostradaHa, int numeroDeParcelas, CodeAnalysisResult? codeAnalysis) {
     if (arvoresDoConjunto.isEmpty || areaTotalAmostradaHa <= 0) return TalhaoAnalysisResult();
     
-    // Preenche alturas faltantes para estatísticas mais precisas
     final List<Arvore> arvoresComAlturaCompleta = _preencherAlturasFaltantes(arvoresDoConjunto);
 
-    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
-    final List<Arvore> arvoresVivas = arvoresComAlturaCompleta.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
+    // MUDANÇA: Lista de IDs (Strings) baseada no seu Excel
+    final List<String> idsSemVolume = ['107', '114', '104', '105']; 
     
-    if (arvoresVivas.isEmpty) return TalhaoAnalysisResult(warnings: ["Nenhuma árvore com potencial de volume encontrada nas amostras para análise."]);
+    // MUDANÇA: Filtra comparando a String do código
+    final List<Arvore> arvoresVivas = arvoresComAlturaCompleta.where((a) => !idsSemVolume.contains(a.codigo)).toList();
+    
+    if (arvoresVivas.isEmpty) return TalhaoAnalysisResult(warnings: ["Nenhuma árvore com potencial de volume encontrada."]);
 
     final double mediaCap = _calculateAverage(arvoresVivas.map((a) => a.cap).toList());
-    
-    // Média de altura agora reflete as estimativas do Curtis também
     final double mediaAltura = _calculateAverage(arvoresVivas.map((a) => a.altura!).toList());
-
     final double areaBasalTotalAmostrada = arvoresVivas.map((a) => _areaBasalPorArvore(a.cap)).fold(0.0, (a, b) => a + b);
     final double areaBasalPorHectare = areaBasalTotalAmostrada / areaTotalAmostradaHa;
-    
-    // Usa a altura estimada (ou média) para estimativa de volume individual
     final double volumeTotalAmostrado = arvoresVivas.map((a) => a.volume ?? _estimateVolume(a.cap, a.altura!)).fold(0.0, (a, b) => a + b);
     
     final double volumePorHectare = volumeTotalAmostrado / areaTotalAmostradaHa;
@@ -457,46 +463,44 @@ class AnalysisService {
     final double indiceDeSitio = _calculateSiteIndex(alturaDominante, talhao.idadeAnos);
 
     List<String> warnings = [];
-    List<String> insights = [];
-    List<String> recommendations = [];
-
-    final int arvoresMortas = (codeAnalysis?.contagemPorCodigo['MortaOuSeca'] ?? 0) + (codeAnalysis?.contagemPorCodigo['Caida'] ?? 0);
+    // MUDANÇA: Acessando o mapa de contagem pelos códigos String do Excel
+    final int arvoresMortas = (codeAnalysis?.contagemPorCodigo['114'] ?? 0) + (codeAnalysis?.contagemPorCodigo['104'] ?? 0);
     final taxaMortalidade = (codeAnalysis?.totalFustes ?? 0) > 0 ? (arvoresMortas / codeAnalysis!.totalFustes) * 100 : 0.0;
-    if (taxaMortalidade > 15) warnings.add("Mortalidade de ${taxaMortalidade.toStringAsFixed(1)}% detectada, valor considerado alto.");
-    if (areaBasalPorHectare > 38) {
-      insights.add("A Área Basal (${areaBasalPorHectare.toStringAsFixed(1)} m²/ha) indica um povoamento muito denso.");
-      recommendations.add("O talhão é um forte candidato para desbaste. Use a ferramenta de simulação para avaliar cenários.");
-    } else if (areaBasalPorHectare < 20) {
-      insights.add("A Área Basal (${areaBasalPorHectare.toStringAsFixed(1)} m²/ha) está baixa, indicando um povoamento aberto ou muito jovem.");
-    }
     
-    final Map<double, int> distribuicao = getDistribuicaoDiametrica(arvoresVivas);
-
+    if (taxaMortalidade > 15) warnings.add("Mortalidade de ${taxaMortalidade.toStringAsFixed(1)}% detectada.");
+    
     return TalhaoAnalysisResult(
       areaTotalAmostradaHa: areaTotalAmostradaHa, totalArvoresAmostradas: arvoresDoConjunto.length, totalParcelasAmostradas: numeroDeParcelas,
       mediaCap: mediaCap, mediaAltura: mediaAltura, areaBasalPorHectare: areaBasalPorHectare, volumePorHectare: volumePorHectare,
       arvoresPorHectare: arvoresPorHectare, alturaDominante: alturaDominante, indiceDeSitio: indiceDeSitio,
-      distribuicaoDiametrica: distribuicao, analiseDeCodigos: codeAnalysis,
-      warnings: warnings, insights: insights, recommendations: recommendations,
+      distribuicaoDiametrica: getDistribuicaoDiametrica(arvoresVivas), analiseDeCodigos: codeAnalysis,
+      warnings: warnings,
     );
   }
   
   CodeAnalysisResult getTreeCodeAnalysis(List<Arvore> arvores) {
     if (arvores.isEmpty) return CodeAnalysisResult();
-    final contagemPorCodigo = arvores.groupBy<String>((arvore) => arvore.codigo.name).map((key, value) => MapEntry(key, value.length));
+    
+    // MUDANÇA: Agrupamento direto pelo campo String codigo (sem .name)
+    final contagemPorCodigo = arvores.groupBy((arvore) => arvore.codigo).map((key, value) => MapEntry(key.toString(), value.length));
+    
     final covasUnicas = <String>{};
     for (final arvore in arvores) {
       covasUnicas.add('${arvore.linha}-${arvore.posicaoNaLinha}');
     }
+    
     final totalCovasAmostradas = covasUnicas.length;
-    final totalCovasOcupadas = arvores.where((a) => a.codigo != Codigo.Falha).map((a) => '${a.linha}-${a.posicaoNaLinha}').toSet().length;
+    
+    // MUDANÇA: 107 é o ID de Falha no seu Excel
+    final totalCovasOcupadas = arvores.where((a) => a.codigo != '107').map((a) => '${a.linha}-${a.posicaoNaLinha}').toSet().length;
+    
     final Map<String, CodeStatDetails> estatisticas = {};
-    final arvoresAgrupadas = arvores.groupBy((Arvore a) => a.codigo.name);
+    final arvoresAgrupadas = arvores.groupBy((Arvore a) => a.codigo);
 
     arvoresAgrupadas.forEach((codigo, listaDeArvores) {
       final caps = listaDeArvores.map((a) => a.cap).where((cap) => cap > 0).toList();
       final alturas = listaDeArvores.map((a) => a.altura).whereType<double>().where((h) => h > 0).toList();
-      estatisticas[codigo] = CodeStatDetails(
+      estatisticas[codigo.toString()] = CodeStatDetails(
         mediaCap: _calculateAverage(caps), medianaCap: _calculateMedian(caps), modaCap: _calculateMode(caps).firstOrNull ?? 0.0, desvioPadraoCap: _calculateStdDev(caps),
         mediaAltura: _calculateAverage(alturas), medianaAltura: _calculateMedian(alturas), modaAltura: _calculateMode(alturas).firstOrNull ?? 0.0, desvioPadraoAltura: _calculateStdDev(alturas),
       );
@@ -515,12 +519,13 @@ class AnalysisService {
     required double porcentagemRemocaoSeletiva,
     required bool sistematicoAtivo,
     required int? linhaSistematica,
-  }) {
+  })
+   {
     if (parcelasOriginais.isEmpty) {
       return getTalhaoInsights(talhao, parcelasOriginais, todasAsArvores);
     }
 
-    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
+    const codigosSemVolume = ['107', '114', '104'];
     final List<Arvore> arvoresVivas = todasAsArvores.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
     if (arvoresVivas.isEmpty) {
       return getTalhaoInsights(talhao, parcelasOriginais, todasAsArvores);
@@ -861,32 +866,28 @@ class AnalysisService {
     // Para CAP, Altura e Distribuição, usamos todos os dados juntos (média aritmética da amostra composta)
     final codeAnalysis = getTreeCodeAnalysis(todasArvores);
     
-    // Filtra árvores vivas para médias dendrométricas
-    const codigosSemVolume = [Codigo.Falha, Codigo.MortaOuSeca, Codigo.Caida];
-    final arvoresVivas = todasArvores.where((a) => !codigosSemVolume.contains(a.codigo)).toList();
+    // --- CORREÇÃO: Filtra árvores vivas usando IDs String do Excel para médias dendrométricas ---
+    final List<String> idsSemVolume = ['107', '114', '104', '105'];
+    final arvoresVivas = todasArvores.where((a) => !idsSemVolume.contains(a.codigo)).toList();
     
     final double mediaCap = _calculateAverage(arvoresVivas.map((a) => a.cap).toList());
     final double mediaAltura = _calculateAverage(arvoresVivas.map((a) => a.altura ?? 0).where((h) => h > 0).toList());
     final double alturaDominante = _calculateDominantHeight(arvoresVivas);
     
-    // Índice de Sítio (Usa a idade do primeiro talhão como referência ou média ponderada se as idades variarem muito)
-    // Aqui assumimos que o estrato tem idades próximas, usamos a média.
+    // Índice de Sítio consolidado do estrato
     final mediaIdade = talhoes.map((t) => t.idadeAnos ?? 0).reduce((a, b) => a + b) / talhoes.length;
     final double indiceDeSitio = _calculateSiteIndex(alturaDominante, mediaIdade);
     
-     final distribuicao = getDistribuicaoDiametrica(arvoresVivas);
+    final distribuicao = getDistribuicaoDiametrica(arvoresVivas);
 
     List<String> insights = [];
     
-    // --- ALTERAÇÃO AQUI: Listando os nomes ---
-    // Pega os nomes, ordena alfabeticamente para ficar organizado e junta com vírgulas
+    // Lista os nomes dos talhões em ordem alfabética para o relatório
     final nomesDosTalhoes = talhoes.map((t) => t.nome).toList()..sort();
     final listaFormatada = nomesDosTalhoes.join(', ');
 
     insights.add("Análise consolidada de ${talhoes.length} talhões.");
-    insights.add("Composição: $listaFormatada."); // <--- Nova linha com a lista
-    // ------------------------------------------
-
+    insights.add("Composição: $listaFormatada."); 
     insights.add("Área total do estrato: ${areaTotalEstrato.toStringAsFixed(2)} ha.");
 
     return TalhaoAnalysisResult(
@@ -895,6 +896,7 @@ class AnalysisService {
       totalParcelasAmostradas: todasParcelas.length,
       mediaCap: mediaCap,
       mediaAltura: mediaAltura,
+      // Usa as médias ponderadas calculadas no início do método
       areaBasalPorHectare: areaBasalPorHectareEstrato,
       volumePorHectare: volumePorHectareEstrato,
       arvoresPorHectare: arvoresPorHectareEstrato,

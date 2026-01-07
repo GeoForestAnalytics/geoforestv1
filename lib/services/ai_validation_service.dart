@@ -122,7 +122,7 @@ class AiValidationService {
         "c": a.cap,
         "h": a.altura ?? 0,
         "hd": a.alturaDano ?? 0, // Fundamental para a regra de Quebradas
-        "cod": a.codigo.name
+        "cod": a.codigo
       }).toList()
     };
   }

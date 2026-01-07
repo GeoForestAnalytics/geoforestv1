@@ -5,10 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
-import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
-import 'package:geoforestv1/models/cubagem_secao_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
@@ -381,38 +379,45 @@ class SyncService {
   }
 
   Future<void> _uploadParcela(firestore.DocumentReference docRef, Parcela parcela) async {
-      final firestoreBatch = _firestore.batch();
-      final parcelaMap = parcela.toMap();
-      final prefs = await SharedPreferences.getInstance();
-      parcelaMap['nomeLider'] = parcela.nomeLider ?? prefs.getString('nome_lider');
-      parcelaMap['lastModified'] = firestore.FieldValue.serverTimestamp();
-      firestoreBatch.set(docRef, parcelaMap, firestore.SetOptions(merge: true));
-      final arvores = await _parcelaRepository.getArvoresDaParcela(parcela.dbId!);
-      for (final arvore in arvores) {
-        final arvoreMap = arvore.toMap();
-        arvoreMap['lastModified'] = firestore.FieldValue.serverTimestamp();
-        final arvoreRef = docRef.collection('arvores').doc(arvore.id.toString());
-        firestoreBatch.set(arvoreRef, arvoreMap);
-      }
-      await firestoreBatch.commit();
-  }
+    // 1. Busca as árvores que estão no SQLite local
+    final arvores = await _parcelaRepository.getArvoresDaParcela(parcela.dbId!);
+    
+    // 2. Cria um objeto completo (Parcela + Árvores)
+    final parcelaCompleta = parcela.copyWith(arvores: arvores);
+    
+    // 3. Converte para Mapa (o seu toMap() deve incluir a lista de árvores)
+    final parcelaMap = parcelaCompleta.toMap();
+
+    // 4. Adiciona metadados de sincronização
+    final prefs = await SharedPreferences.getInstance();
+    parcelaMap['nomeLider'] = parcela.nomeLider ?? prefs.getString('nome_lider');
+    parcelaMap['lastModified'] = firestore.FieldValue.serverTimestamp();
+
+    // 5. Envia em uma única operação de escrita
+    await docRef.set(parcelaMap, firestore.SetOptions(merge: true));
+    
+    debugPrint("--- [SYNC SUCCESS] Parcela ${parcela.idParcela} enviada com ${arvores.length} árvores em 1 escrita.");
+}
   
   Future<void> _uploadCubagem(firestore.DocumentReference docRef, CubagemArvore cubagem) async {
-      final firestoreBatch = _firestore.batch();
-      final cubagemMap = cubagem.toMap();
-      final prefs = await SharedPreferences.getInstance();
-      cubagemMap['nomeLider'] = cubagem.nomeLider ?? prefs.getString('nome_lider');
-      cubagemMap['lastModified'] = firestore.FieldValue.serverTimestamp();
-      firestoreBatch.set(docRef, cubagemMap, firestore.SetOptions(merge: true));
-      final secoes = await _cubagemRepository.getSecoesPorArvoreId(cubagem.id!);
-      for (final secao in secoes) {
-        final secaoMap = secao.toMap();
-        secaoMap['lastModified'] = firestore.FieldValue.serverTimestamp();
-        final secaoRef = docRef.collection('secoes').doc(secao.id.toString());
-        firestoreBatch.set(secaoRef, secaoMap);
-      }
-      await firestoreBatch.commit();
-  }
+    // 1. Busca as seções no SQLite local
+    final secoes = await _cubagemRepository.getSecoesPorArvoreId(cubagem.id!);
+    
+    // 2. Anexa as seções ao objeto
+    final cubagemCompleta = cubagem.copyWith(secoes: secoes);
+    
+    // 3. Converte tudo para Mapa (incluindo as seções)
+    final cubagemMap = cubagemCompleta.toMap();
+
+    final prefs = await SharedPreferences.getInstance();
+    cubagemMap['nomeLider'] = cubagem.nomeLider ?? prefs.getString('nome_lider');
+    cubagemMap['lastModified'] = firestore.FieldValue.serverTimestamp();
+
+    // 4. Envia como documento único
+    await docRef.set(cubagemMap, firestore.SetOptions(merge: true));
+    
+    debugPrint("--- [SYNC SUCCESS] Cubagem ${cubagem.identificador} enviada com ${secoes.length} seções em 1 escrita.");
+}
   
   Future<void> _upsert(DatabaseExecutor txn, String table, Map<String, dynamic> data, String primaryKey, {String? secondaryKey}) async {
       List<dynamic> whereArgs = [data[primaryKey]];
@@ -540,94 +545,86 @@ class SyncService {
   }
   
   Future<void> _downloadParcelasDaNuvem(String licenseId, List<int> talhaoIds) async {
-    if (talhaoIds.isEmpty) return;
-    for (var chunk in talhaoIds.slices(10)) {
-        final querySnapshot = await _firestore.collection('clientes').doc(licenseId).collection('dados_coleta').where('talhaoId', whereIn: chunk).get();
-        if (querySnapshot.docs.isEmpty) continue;
-        
-        final db = await _dbHelper.database;
-        for (final docSnapshot in querySnapshot.docs) {
-          final dadosDaNuvem = docSnapshot.data();
-          final parcelaDaNuvem = Parcela.fromMap(dadosDaNuvem);
-          
-          await db.transaction((txn) async {
-            try {
-              final parcelaLocalResult = await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1);
-
-              if (parcelaLocalResult.isNotEmpty && parcelaLocalResult.first['isSynced'] == 0) {
-                // Aqui podemos adicionar uma lógica similar: se nuvem é "concluída" e local é "pendente", baixa.
-                final statusLocal = parcelaLocalResult.first['status']?.toString().toLowerCase();
-                final statusNuvem = parcelaDaNuvem.status.name.toLowerCase();
-                
-                if (statusLocal != 'concluida' && statusNuvem == 'concluida') {
-                   // Permite o download para atualizar
-                } else {
-                   debugPrint("PULANDO DOWNLOAD da parcela ${parcelaDaNuvem.idParcela} pois existem alterações locais não sincronizadas.");
-                   return;
-                }
-              }
-              
-              final pMap = parcelaDaNuvem.toMap();
-              pMap['isSynced'] = 1;
-              await _upsert(txn, 'parcelas', pMap, 'uuid');
-              
-              final idLocal = (await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1)).map((map) => Parcela.fromMap(map)).first.dbId!;
-              
-              await txn.delete('arvores', where: 'parcelaId = ?', whereArgs: [idLocal]);
-              
-              await _sincronizarArvores(txn, docSnapshot, idLocal);
-
-            } catch (e, s) {
-              debugPrint("Erro CRÍTICO ao sincronizar parcela ${parcelaDaNuvem.uuid}: $e\n$s");
-            }
-          });
-        }
-    }
-  }
+  if (talhaoIds.isEmpty) return;
   
-  Future<void> _sincronizarArvores(DatabaseExecutor txn, firestore.DocumentSnapshot docSnapshot, int idParcelaLocal) async {
-      final arvoresSnapshot = await docSnapshot.reference.collection('arvores').get();
-      if (arvoresSnapshot.docs.isNotEmpty) {
-        for (final doc in arvoresSnapshot.docs) {
-          final arvore = Arvore.fromMap(doc.data());
-          final aMap = arvore.toMap();
-          aMap['parcelaId'] = idParcelaLocal;
-          await txn.insert('arvores', aMap, conflictAlgorithm: ConflictAlgorithm.replace);
-        }
-      }
-  }
-  
-  Future<void> _downloadCubagensDaNuvem(String licenseId, List<int> talhaoIds) async {
-    if (talhaoIds.isEmpty) return;
-    for (var chunk in talhaoIds.slices(10)) {
-      final querySnapshot = await _firestore.collection('clientes').doc(licenseId).collection('dados_cubagem').where('talhaoId', whereIn: chunk).get();
-      if (querySnapshot.docs.isEmpty) continue;
+  for (var chunk in talhaoIds.slices(10)) {
+    final querySnapshot = await _firestore
+        .collection('clientes')
+        .doc(licenseId)
+        .collection('dados_coleta')
+        .where('talhaoId', whereIn: chunk)
+        .get();
+
+    if (querySnapshot.docs.isEmpty) continue;
+    
+    final db = await _dbHelper.database;
+    for (final docSnapshot in querySnapshot.docs) {
+      final dadosDaNuvem = docSnapshot.data();
       
-      final db = await _dbHelper.database;
-      for (final docSnapshot in querySnapshot.docs) {
-        final dadosDaNuvem = docSnapshot.data();
-        final cubagemDaNuvem = CubagemArvore.fromMap(dadosDaNuvem);
-        await db.transaction((txn) async {
-          try {
-            final cMap = cubagemDaNuvem.toMap();
-            cMap['isSynced'] = 1;
-            await _upsert(txn, 'cubagens_arvores', cMap, 'id');
-            await txn.delete('cubagens_secoes', where: 'cubagemArvoreId = ?', whereArgs: [cubagemDaNuvem.id]);
-            final secoesSnapshot = await docSnapshot.reference.collection('secoes').get();
-            if (secoesSnapshot.docs.isNotEmpty) {
-              for (final doc in secoesSnapshot.docs) {
-                final secao = CubagemSecao.fromMap(doc.data());
-                secao.cubagemArvoreId = cubagemDaNuvem.id; 
-                await txn.insert('cubagens_secoes', secao.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-              }
+      // O fromMap aqui já converte a lista de árvores do JSON automaticamente!
+      final parcelaDaNuvem = Parcela.fromMap(dadosDaNuvem);
+      
+      await db.transaction((txn) async {
+        try {
+          // Verifica se há alteração local pendente
+          final local = await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1);
+          if (local.isNotEmpty && local.first['isSynced'] == 0) {
+            // Se o servidor está concluído e o local não, aceita a versão do servidor
+            if (local.first['status'] != 'concluida' && parcelaDaNuvem.status == StatusParcela.concluida) {
+               // prossegue para atualizar
+            } else {
+               return; // Pula download para não sobrescrever mudança local
             }
-          } catch (e, s) {
-            debugPrint("Erro CRÍTICO ao sincronizar cubagem ${cubagemDaNuvem.id}: $e\n$s");
           }
-        });
-      }
+          
+          // Salva ou Atualiza no SQLite usando o Repositório
+          // O saveFullColeta já limpa as árvores antigas e insere as novas do objeto
+          await _parcelaRepository.saveFullColeta(parcelaDaNuvem, parcelaDaNuvem.arvores);
+          
+          // Marca como sincronizado no banco local
+          await txn.update('parcelas', {'isSynced': 1}, where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid]);
+
+        } catch (e) {
+          debugPrint("Erro ao processar download da parcela ${parcelaDaNuvem.uuid}: $e");
+        }
+      });
     }
   }
+}
+  
+    
+  Future<void> _downloadCubagensDaNuvem(String licenseId, List<int> talhaoIds) async {
+  if (talhaoIds.isEmpty) return;
+  
+  for (var chunk in talhaoIds.slices(10)) {
+    final querySnapshot = await _firestore
+        .collection('clientes')
+        .doc(licenseId)
+        .collection('dados_cubagem')
+        .where('talhaoId', whereIn: chunk)
+        .get();
+
+    if (querySnapshot.docs.isEmpty) continue;
+    
+    final db = await _dbHelper.database;
+    for (final docSnapshot in querySnapshot.docs) {
+      // O fromMap da CubagemArvore já vai ler a lista 'secoes' do JSON
+      final cubagemDaNuvem = CubagemArvore.fromMap(docSnapshot.data());
+
+      await db.transaction((txn) async {
+        try {
+          // Salva no SQLite local (o salvarCubagemCompleta já trata a limpeza das seções antigas)
+          await _cubagemRepository.salvarCubagemCompleta(cubagemDaNuvem, cubagemDaNuvem.secoes);
+          
+          // Marca como sincronizado localmente
+          await txn.update('cubagens_arvores', {'isSynced': 1}, where: 'id = ?', whereArgs: [cubagemDaNuvem.id]);
+        } catch (e) {
+          debugPrint("Erro ao processar download da cubagem ${cubagemDaNuvem.id}: $e");
+        }
+      });
+    }
+  }
+}
   
   Future<void> atualizarStatusProjetoNaFirebase(String projetoId, String novoStatus) async {
     final user = _auth.currentUser;

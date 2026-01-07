@@ -161,6 +161,24 @@ class DatabaseHelper {
       )
     ''');
 
+    // Adicione esta execução no seu _onCreate ou faça uma migração para a versão 49
+    await db.execute('''
+      CREATE TABLE regras_codigos (
+      id INTEGER PRIMARY KEY,   -- O ID 101, 102...
+      projetoId INTEGER,
+      sigla TEXT,               -- A, B, CA, Normal...
+      descricao TEXT,
+      obrigaFuste TEXT,         -- S, N, .
+      obrigaCap TEXT,           -- S, N, ., C
+      obrigaAltura TEXT, 
+      obrigaAlturaDano TEXT,       -- S, N, ., C, #
+      obrigaHipso TEXT,         -- S, N
+      permiteDominante TEXT,    -- S, N
+      listaCompativeis TEXT,    -- Para validar códigos simultâneos
+      FOREIGN KEY (projetoId) REFERENCES projetos (id) ON DELETE CASCADE
+      )
+    ''');
+
     await db.execute('''
       CREATE TABLE ${DbCubagensArvores.tableName} (
         ${DbCubagensArvores.id} INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -1,4 +1,4 @@
-// lib/services/validation_service.dart
+// lib/services/validation_service.dart (VERSÃO FINAL DINÂMICA - SEM ENUMS)
 
 import 'dart:math';
 import 'package:collection/collection.dart';
@@ -19,7 +19,7 @@ class ValidationIssue {
   final String mensagem;
   final int? parcelaId;
   final int? cubagemId;
-  final int? arvoreId; // ID da árvore para o "Pulo Direto"
+  final int? arvoreId; 
   final String identificador;
 
   ValidationIssue({
@@ -50,6 +50,11 @@ class FullValidationReport {
 
 class ValidationService {
   
+  // --- CONFIGURAÇÃO DE IDS DO EXCEL ---
+  final String _idNormal = '101';
+  final String _idMultipla = '103';
+  final List<String> _idsNaoProdutivos = ['107', '104', '105', '114'];
+
   /// Converte os resultados brutos da IA para a lista de problemas clicáveis
   List<ValidationIssue> mapIaErrorsToIssues(
     List<Map<String, dynamic>> iaErros, 
@@ -62,7 +67,7 @@ class ValidationService {
         tipo: 'Análise IA',
         mensagem: erro['msg'] ?? 'Inconsistência detectada pela IA.',
         parcelaId: parcela.dbId,
-        arvoreId: erro['id'], // Aqui o ID que a IA devolveu faz a mágica
+        arvoreId: erro['id'], 
         identificador: idRelatorio,
       );
     }).toList();
@@ -70,7 +75,9 @@ class ValidationService {
 
   ValidationResult validateParcela(List<Arvore> arvores) {
     final List<String> warnings = [];
-    final vivas = arvores.where((a) => a.codigo != Codigo.Falha && a.codigo != Codigo.Caida && a.cap > 0).toList();
+    
+    // Filtra árvores que não são falhas/mortas e têm CAP
+    final vivas = arvores.where((a) => !_idsNaoProdutivos.contains(a.codigo) && a.cap > 0).toList();
     
     if (vivas.length < 5) return ValidationResult(isValid: true, warnings: []);
 
@@ -81,7 +88,7 @@ class ValidationService {
 
     for (final arvore in vivas) {
       if ((arvore.cap - mediaCap).abs() > 3 * desvioPadraoCap) {
-        warnings.add("L:${arvore.linha} P:${arvore.posicaoNaLinha}: CAP de ${arvore.cap}cm é um outlier (Média: ${mediaCap.toStringAsFixed(1)}cm).");
+        warnings.add("L:${arvore.linha} P:${arvore.posicaoNaLinha}: CAP de ${arvore.cap}cm é um outlier.");
       }
       
       final singleRes = validateSingleTree(arvore);
@@ -95,19 +102,21 @@ class ValidationService {
   ValidationResult validateSingleTree(Arvore arvore) {
     final List<String> warnings = [];
     
-    if (arvore.codigo == Codigo.Normal && arvore.codigo2 != null) {
-      warnings.add("Árvore 'Normal' com código secundário (${arvore.codigo2!.name}).");
+    // Validação de Código Secundário para árvores normais
+    if (arvore.codigo == _idNormal && arvore.codigo2 != null && arvore.codigo2!.isNotEmpty) {
+      warnings.add("Árvore 'Normal' não deveria possuir código secundário.");
     }
 
-    if (arvore.codigo != Codigo.Falha && arvore.codigo != Codigo.Caida) {
-      if (arvore.cap <= 3.0) warnings.add("CAP (${arvore.cap} cm) muito baixo.");
-      if (arvore.cap > 450.0) warnings.add("CAP (${arvore.cap} cm) improvável. Verifique digitação.");
+    // Validação de CAP em códigos que permitem medida
+    if (!_idsNaoProdutivos.contains(arvore.codigo)) {
+      if (arvore.cap <= 3.0 && arvore.cap > 0) warnings.add("CAP (${arvore.cap} cm) muito baixo.");
+      if (arvore.cap > 450.0) warnings.add("CAP (${arvore.cap} cm) improvável.");
     }
 
     if (arvore.altura != null && arvore.altura! > 70) warnings.add("Altura (${arvore.altura}m) extremamente rara.");
 
     if (arvore.altura != null && arvore.cap > 150 && arvore.altura! < 8) {
-      warnings.add("CAP alto (${arvore.cap}cm) para altura baixa (${arvore.altura}m).");
+      warnings.add("CAP alto para altura baixa (${arvore.altura}m).");
     }
 
     if (arvore.altura != null && arvore.alturaDano != null && arvore.altura! > 0 && arvore.alturaDano! >= arvore.altura!) {
@@ -126,7 +135,6 @@ class ValidationService {
     final List<ValidationIssue> allIssues = [];
     int arvoresContadas = 0;
 
-    // Proteção: Processa apenas se tiver dbId
     final parcelasValidas = parcelas.where((p) => p.dbId != null).toList();
 
     for (final parcela in parcelasValidas) {
@@ -184,10 +192,11 @@ class ValidationService {
 
     posicoesAgrupadas.forEach((pos, fustes) {
       if (fustes.length > 1) {
-        if (!fustes.any((a) => a.codigo == Codigo.Multipla)) {
+        // Verifica se pelo menos um fuste tem o código de múltipla (103)
+        if (!fustes.any((a) => a.codigo == _idMultipla)) {
           issues.add(ValidationIssue(tipo: 'Duplicata', mensagem: 'Cova duplicada sem código Múltipla.', parcelaId: parcela.dbId, arvoreId: fustes.first.id, identificador: idRelatorio));
         }
-      } else if (fustes.first.codigo == Codigo.Multipla) {
+      } else if (fustes.first.codigo == _idMultipla) {
          issues.add(ValidationIssue(tipo: 'Código', mensagem: 'Marcada como Múltipla mas só tem 1 fuste.', parcelaId: parcela.dbId, arvoreId: fustes.first.id, identificador: idRelatorio));
       }
     });

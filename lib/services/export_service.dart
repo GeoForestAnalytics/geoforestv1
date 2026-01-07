@@ -187,14 +187,38 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
         String key = '${a.linha}-${a.posicaoNaLinha}';
         fusteCounter[key] = (fusteCounter[key] ?? 0) + 1;
         rows.add([
-          p.atividadeTipo ?? 'IPC', liderDaColeta, payload.nomesAjudantes, p.dbId, p.idFazenda, p.nomeFazenda, 
-          p.up, p.nomeTalhao, formatValue(talhaoData['areaHa'], nf2), talhaoData['especie'], 
-          talhaoData['espacamento'], formatValue(talhaoData['idadeAnos'], nf1), p.idParcela, 
-          nf2.format(areaInclinada), nf2.format(p.areaMetrosQuadrados), formatValue(p.lado1, nf2), 
-          formatValue(p.lado2, nf2), formatValue(p.declividade, nf2), p.observacao, 
-          easting, northing, p.dataColeta?.toIso8601String(), p.status.name, 
-          a.linha, a.posicaoNaLinha, fusteCounter[key], a.codigo.name, a.codigo2?.name, 
-          formatValue(a.cap, nf1), formatValue(a.altura, nf1), formatValue(a.alturaDano, nf1), a.dominante ? 'Sim' : 'Não'
+          p.atividadeTipo ?? 'IPC', 
+          liderDaColeta, 
+          payload.nomesAjudantes, 
+          p.dbId, 
+          p.idFazenda, 
+          p.nomeFazenda, 
+          p.up, 
+          p.nomeTalhao, 
+          formatValue(talhaoData['areaHa'], nf2), 
+          talhaoData['especie'], 
+          talhaoData['espacamento'], 
+          formatValue(talhaoData['idadeAnos'], nf1), 
+          p.idParcela, 
+          nf2.format(areaInclinada), 
+          nf2.format(p.areaMetrosQuadrados), 
+          formatValue(p.lado1, nf2), 
+          formatValue(p.lado2, nf2), 
+          formatValue(p.declividade, nf2), 
+          p.observacao, 
+          easting, 
+          northing, 
+          p.dataColeta?.toIso8601String(), 
+          p.status.name, 
+          a.linha, 
+          a.posicaoNaLinha, 
+          fusteCounter[key], 
+          a.codigo,      // <--- CORRIGIDO: Removido .name
+          a.codigo2,     // <--- CORRIGIDO: Removido .name e o "?" extra
+          formatValue(a.cap, nf1), 
+          formatValue(a.altura, nf1), 
+          formatValue(a.alturaDano, nf1), 
+          a.dominante ? 'Sim' : 'Não'
         ]);
       }
     }
@@ -715,10 +739,18 @@ class ExportService {
         final covas = <String>{};
         for (var a in arvores) { covas.add('${a.linha}-${a.posicaoNaLinha}'); }
         
-        final fustes = arvores.where((a) => a.codigo != Codigo.Falha && a.codigo != Codigo.Caida).length;
-        final falhas = arvores.where((a) => a.codigo == Codigo.Falha).length;
+        // --- IDs DE REFERÊNCIA DO SEU EXCEL ---
+        const String idNormal = '101';
+        const String idFalha = '107';
+        final List<String> idsSemVolume = ['107', '114', '104', '105'];
+
+        // CORREÇÃO: Lógica de contagem usando as Strings
+        final fustes = arvores.where((a) => !idsSemVolume.contains(a.codigo)).length;
+        final falhas = arvores.where((a) => a.codigo == idFalha).length;
+        
+        // Códigos especiais são os que não são Normal (101) e nem Falha (107)
         final codigosEspeciais = arvores.where((a) => 
-            a.codigo != Codigo.Normal && a.codigo != Codigo.Falha && a.codigo != Codigo.Caida
+            a.codigo != idNormal && a.codigo != idFalha && !idsSemVolume.contains(a.codigo)
         ).length;
 
         allColetasData.add({

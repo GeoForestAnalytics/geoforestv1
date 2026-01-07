@@ -1,4 +1,4 @@
-// lib/pages/amostra/inventario_page.dart (VERSÃO COM SUPORTE A PULO DE ERRO IA)
+// lib/pages/amostra/inventario_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
@@ -8,11 +8,11 @@ import 'package:geoforestv1/widgets/arvore_dialog.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:geoforestv1/pages/dashboard/dashboard_page.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
-import 'package:collection/collection.dart'; // Import necessário para firstWhereOrNull
+import 'package:collection/collection.dart'; 
 
 class InventarioPage extends StatefulWidget {
   final Parcela parcela;
-  final int? targetArvoreId; // <--- NOVO: ID alvo para o pulo direto
+  final int? targetArvoreId; 
 
   const InventarioPage({super.key, required this.parcela, this.targetArvoreId});
 
@@ -42,15 +42,12 @@ class _InventarioPageState extends State<InventarioPage> {
     _arvoresColetadas = widget.parcela.arvores; 
     _dataLoadingFuture = _configurarStatusDaTela();
 
-    // --- LÓGICA DO PULO DIRETO ---
     if (widget.targetArvoreId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Busca a árvore na lista pelo ID que veio da Auditoria
         final arvoreAlvo = _arvoresColetadas.firstWhereOrNull(
           (a) => a.id == widget.targetArvoreId
         );
 
-        // Se encontrar e não estiver em modo leitura, abre o formulário
         if (arvoreAlvo != null && !_isReadOnly) {
           _abrirFormularioParaEditar(arvoreAlvo);
         }
@@ -248,7 +245,7 @@ class _InventarioPageState extends State<InventarioPage> {
         cap: 0,
         linha: ultimoFusteSalvo.linha,
         posicaoNaLinha: ultimoFusteSalvo.posicaoNaLinha,
-        codigo: Codigo.Multipla,
+        codigo: '103', // <--- CORREÇÃO: Usando '103' (Multipla) como String
       );
       Future.delayed(const Duration(milliseconds: 50), () => _adicionarNovaArvore(
         arvoreInicial: proximoFusteTemplate, 
@@ -320,7 +317,7 @@ class _InventarioPageState extends State<InventarioPage> {
         cap: 0,
         linha: proximaLinha,
         posicaoNaLinha: proximaPosicao,
-        codigo: Codigo.Multipla,
+        codigo: '103', // <--- CORREÇÃO: Usando '103' como String
       );
     }
 
@@ -329,6 +326,7 @@ class _InventarioPageState extends State<InventarioPage> {
       barrierDismissible: false,
       builder: (context) => ArvoreDialog(
         arvoreParaEditar: arvoreTemplate ?? arvoreInicial,
+        projetoId: _parcelaAtual.projetoId ?? 0, // <--- CORREÇÃO: Passando o projetoId
         linhaAtual: arvoreInicial?.linha ?? proximaLinha,
         posicaoNaLinhaAtual: arvoreInicial?.posicaoNaLinha ?? proximaPosicao,
         isAdicionandoFuste: isFusteAdicional,
@@ -349,6 +347,7 @@ class _InventarioPageState extends State<InventarioPage> {
       barrierDismissible: false,
       builder: (context) => ArvoreDialog(
         arvoreParaEditar: arvore,
+        projetoId: _parcelaAtual.projetoId ?? 0, // <--- CORREÇÃO: Passando o projetoId
         linhaAtual: arvore.linha,
         posicaoNaLinhaAtual: arvore.posicaoNaLinha,
       ),
@@ -364,7 +363,8 @@ class _InventarioPageState extends State<InventarioPage> {
       arvore.dominante = false;
     }
     final int numeroDeDominantes = (_parcelaAtual.areaMetrosQuadrados / 100).floor();
-    final arvoresCandidatas = _arvoresColetadas.where((a) => a.codigo == Codigo.Normal).toList();
+    // <--- CORREÇÃO: Comparando código com String '101' (Normal)
+    final arvoresCandidatas = _arvoresColetadas.where((a) => a.codigo == '101').toList();
     if (arvoresCandidatas.length <= numeroDeDominantes) {
       for (var arvore in arvoresCandidatas) {
         arvore.dominante = true;
@@ -489,7 +489,6 @@ class _InventarioPageState extends State<InventarioPage> {
                           itemBuilder: (context, index) {
                             final arvore = listaExibida[index];
                             
-                            // --- LÓGICA DE DESTAQUE DO ERRO ---
                             final bool isTarget = arvore.id == widget.targetArvoreId;
 
                             return Slidable(
@@ -512,7 +511,6 @@ class _InventarioPageState extends State<InventarioPage> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
                                   decoration: BoxDecoration(
-                                    // A cor muda para vermelho claro se for o alvo do erro
                                     color: isTarget 
                                         ? Colors.red.shade100 
                                         : arvore.dominante 
@@ -527,7 +525,8 @@ class _InventarioPageState extends State<InventarioPage> {
                                       _DataCell(arvore.cap > 0 ? arvore.cap.toStringAsFixed(1) : '-', flex: 20),
                                       _DataCell(arvore.altura?.toStringAsFixed(1) ?? '-', flex: 20),
                                       _DataCell(
-                                        '${arvore.codigo.name[0].toUpperCase()}${arvore.codigo2 != null ? ", ${arvore.codigo2!.name[0].toUpperCase()}" : ""}',
+                                        // <--- CORREÇÃO: Removido o .name (pois agora é String)
+                                        arvore.codigo,
                                         flex: 30, 
                                         isBold: true
                                       ),
@@ -561,12 +560,14 @@ class _InventarioPageState extends State<InventarioPage> {
     }
     final int totalCovas = covas.length;
 
-    final int totalNormal = _arvoresColetadas.where((a) => a.codigo == Codigo.Normal).length;
-    final int contagemAlturaNormal = _arvoresColetadas.where((a) => a.codigo == Codigo.Normal && a.altura != null && a.altura! > 0).length;
+    // <--- CORREÇÃO: Comparando código com String '101'
+    final int totalNormal = _arvoresColetadas.where((a) => a.codigo == '101').length;
+    final int contagemAlturaNormal = _arvoresColetadas.where((a) => a.codigo == '101' && a.altura != null && a.altura! > 0).length;
     final double porcentagem = (totalNormal > 0) ? (contagemAlturaNormal / totalNormal) * 100 : 0.0;
     
     final int contagemAlturaDominante = _arvoresColetadas.where((a) => a.dominante && a.altura != null && a.altura! > 0).length;
-    final int contagemAlturaOutros = _arvoresColetadas.where((a) => a.codigo != Codigo.Normal && a.altura != null && a.altura! > 0).length;
+    // <--- CORREÇÃO: Comparando código com String '101'
+    final int contagemAlturaOutros = _arvoresColetadas.where((a) => a.codigo != '101' && a.altura != null && a.altura! > 0).length;
 
     return Card(
       margin: const EdgeInsets.all(8),

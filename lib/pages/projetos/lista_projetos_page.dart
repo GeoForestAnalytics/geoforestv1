@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:geoforestv1/services/import/excel_import_service.dart'; // <--- Novo import
 
 // Imports do projeto
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
@@ -344,52 +345,82 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   Future<void> _iniciarImportacao(Projeto projeto) async {
+    // 1. Seleciona o arquivo (Agora aceita xlsx e csv)
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['csv'],
+      allowedExtensions: ['xlsx', 'csv'],
     );
 
     if (result == null || result.files.single.path == null) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Importação cancelada.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Importação cancelada.')));
       return;
     }
 
-    if (!mounted) return;
+    final filePath = result.files.single.path!;
+    final bool isExcel = filePath.toLowerCase().endsWith('.xlsx');
 
+    if (!mounted) return;
     ProgressDialog.show(context, "Processando arquivo...");
 
     try {
-      final file = File(result.files.single.path!);
-      final csvContent = await file.readAsString();
+      if (isExcel) {
+        // --- LÓGICA PARA EXCEL (XLSX) ---
+        final user = FirebaseAuth.instance.currentUser;
+        final String nomeResponsavel = user?.displayName ?? 'Gerente';
 
-      final message = await _importRepository.importarCsvUniversal(
-          csvContent: csvContent, projetoIdAlvo: projeto.id!);
-
-      if (mounted) {
-        ProgressDialog.hide(context);
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Resultado da Importação'),
-            content: SingleChildScrollView(child: Text(message)),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('OK'))
-            ],
-          ),
+        final excelService = ExcelImportService();
+        final importResult = await excelService.importarProjetoXlsx(
+          filePath: filePath,
+          projetoId: projeto.id!,
+          nomeResponsavel: nomeResponsavel,
         );
-        Navigator.of(context).pop();
+
+        if (mounted) {
+          ProgressDialog.hide(context);
+          await showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Resultado da Importação'),
+              content: Text(importResult.mensagem),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))
+              ],
+            ),
+          );
+        }
+      } else {
+        // --- LÓGICA PARA CSV (ANTIGA) ---
+        final file = File(filePath);
+        final csvContent = await file.readAsString();
+        final message = await _importRepository.importarCsvUniversal(
+            csvContent: csvContent, projetoIdAlvo: projeto.id!);
+
+        if (mounted) {
+          ProgressDialog.hide(context);
+          await showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Resultado da Importação'),
+              content: SingleChildScrollView(child: Text(message)),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))
+              ],
+            ),
+          );
+        }
       }
+      
+      // Fecha o menu de importação e atualiza a lista
+      if (mounted) {
+         // Navigator.of(context).pop(); // Remova se não estiver dentro de um bottomSheet
+         _checkUserRoleAndLoadProjects();
+      }
+
     } catch (e) {
       if (mounted) {
         ProgressDialog.hide(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Erro ao importar: $e'),
-              backgroundColor: Colors.red),
+          SnackBar(content: Text('Erro ao importar: $e'), backgroundColor: Colors.red),
         );
       }
     }

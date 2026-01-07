@@ -1,130 +1,105 @@
-// test/services/validation_service_test.dart
+// test/services/validation_service_test.dart (VERSÃO CORRIGIDA - SEM ENUMS)
 
-// 1. Importa a biblioteca de testes do Flutter.
 import 'package:flutter_test/flutter_test.dart';
-
-// 2. Importa as classes que vamos testar.
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/services/validation_service.dart';
 
-// A função 'main' é o ponto de entrada para os testes neste arquivo.
 void main() {
   
-  // 'group' agrupa testes relacionados. Facilita a leitura dos resultados.
   group('ValidationService - validateSingleTree', () {
     
-    // Instancia o serviço que queremos testar.
     final validationService = ValidationService();
 
-    // 'test' define um caso de teste individual.
     test('deve retornar válido para uma árvore com dados normais', () {
-      // ARRANGE: Preparamos os dados de entrada.
       final arvoreNormal = Arvore(
         cap: 45.5,
         altura: 28.0,
         linha: 1,
         posicaoNaLinha: 1,
-        codigo: Codigo.Normal,
+        codigo: '101', // ID do Excel para 'Normal'
       );
 
-      // ACT: Executamos o método que queremos testar.
       final result = validationService.validateSingleTree(arvoreNormal);
 
-      // ASSERT: Verificamos se o resultado é o esperado.
-      // 'expect' é a função que faz a verificação.
       expect(result.isValid, isTrue);
       expect(result.warnings, isEmpty);
     });
 
     test('deve retornar inválido e um aviso para CAP muito baixo', () {
-      // ARRANGE
       final arvoreCapBaixo = Arvore(
-        cap: 4.0, // <-- Valor problemático
+        cap: 2.0, // Valor abaixo do limite de 3.0
         altura: 25.0,
         linha: 1,
         posicaoNaLinha: 2,
-        codigo: Codigo.Normal,
+        codigo: '101',
       );
 
-      // ACT
       final result = validationService.validateSingleTree(arvoreCapBaixo);
 
-      // ASSERT
       expect(result.isValid, isFalse);
       expect(result.warnings, isNotEmpty);
-      expect(result.warnings.first, contains('CAP de 4.0 cm é muito baixo'));
+      expect(result.warnings.first, contains('muito baixo'));
     });
 
     test('deve retornar inválido e um aviso para CAP muito alto', () {
-      // ARRANGE
       final arvoreCapAlto = Arvore(
-        cap: 500.0, // <-- Valor problemático
+        cap: 500.0, // Valor acima do limite de 450.0
         altura: 30.0,
         linha: 2,
         posicaoNaLinha: 1,
-        codigo: Codigo.Normal,
+        codigo: '101',
       );
 
-      // ACT
       final result = validationService.validateSingleTree(arvoreCapAlto);
 
-      // ASSERT
       expect(result.isValid, isFalse);
       expect(result.warnings, isNotEmpty);
-      expect(result.warnings.first, contains('CAP de 500.0 cm é fisicamente improvável'));
+      expect(result.warnings.first, contains('improvável'));
     });
 
     test('deve retornar inválido e um aviso para Altura muito alta', () {
-      // ARRANGE
       final arvoreAlturaAlta = Arvore(
         cap: 120.0,
-        altura: 80.0, // <-- Valor problemático
+        altura: 80.0, // Acima do limite de 70m
         linha: 3,
         posicaoNaLinha: 5,
-        codigo: Codigo.Normal,
+        codigo: '101',
       );
 
-      // ACT
       final result = validationService.validateSingleTree(arvoreAlturaAlta);
 
-      // ASSERT
       expect(result.isValid, isFalse);
       expect(result.warnings, isNotEmpty);
-      expect(result.warnings.first, contains('Altura de 80.0m é extremamente rara'));
+      expect(result.warnings.first, contains('extremamente rara'));
     });
     
     test('deve retornar inválido para relação CAP/Altura incomum', () {
-      // ARRANGE
       final arvoreIncomum = Arvore(
-        cap: 160.0, // <-- CAP alto
-        altura: 8.0, // <-- Altura baixa
+        cap: 160.0, 
+        altura: 5.0, // CAP muito alto para altura muito baixa
         linha: 4,
         posicaoNaLinha: 1,
-        codigo: Codigo.Normal,
+        codigo: '101',
       );
 
-      // ACT
       final result = validationService.validateSingleTree(arvoreIncomum);
 
-      // ASSERT
       expect(result.isValid, isFalse);
       expect(result.warnings, isNotEmpty);
-      expect(result.warnings.first, contains('Relação CAP/Altura incomum'));
+      expect(result.warnings.first, contains('CAP alto para altura baixa'));
     });
 
     test('deve retornar válido para código Falha com CAP 0', () {
-      // ARRANGE: Para 'Falha', CAP 0 é o esperado e não deve gerar aviso.
+      // 107 = ID do Excel para 'Falha'
       final arvoreFalha = Arvore(
         cap: 0.0,
         linha: 5,
         posicaoNaLinha: 1,
-        codigo: Codigo.Falha,
+        codigo: '107', 
       );
 
-      // ACT
       final result = validationService.validateSingleTree(arvoreFalha);
 
-      // ASSERT
       expect(result.isValid, isTrue);
       expect(result.warnings, isEmpty);
     });

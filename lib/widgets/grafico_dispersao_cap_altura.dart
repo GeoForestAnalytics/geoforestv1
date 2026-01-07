@@ -1,11 +1,10 @@
-// lib/widgets/grafico_dispersao_cap_altura.dart (VERSÃO CORRIGIDA - SEM OVERFLOW)
+// lib/widgets/grafico_dispersao_cap_altura.dart (VERSÃO FINAL DINÂMICA - SEM OVERFLOW)
 
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:collection/collection.dart';
 
-// Enum para controlar o que é exibido no eixo Y
 enum EixoYDispersao { alturaTotal, alturaDano }
 
 class GraficoDispersaoCapAltura extends StatefulWidget {
@@ -18,44 +17,45 @@ class GraficoDispersaoCapAltura extends StatefulWidget {
 }
 
 class _GraficoDispersaoCapAlturaState extends State<GraficoDispersaoCapAltura> {
-  // Estado para controlar os filtros
-  late Set<Codigo> _codigosVisiveis;
-  late List<Codigo> _codigosUnicos;
+  // Agora usamos String para os códigos
+  late Set<String> _codigosVisiveis;
+  late List<String> _codigosUnicos;
   EixoYDispersao _eixoYSelecionado = EixoYDispersao.alturaTotal;
 
   @override
   void initState() {
     super.initState();
-    // Encontra todos os códigos únicos presentes nos dados e os ativa por padrão
+    // Extrai todos os códigos únicos (Strings) das árvores fornecidas
     _codigosUnicos = widget.arvores.map((a) => a.codigo).toSet().toList();
-    _codigosUnicos.sort((a, b) => a.name.compareTo(b.name));
+    _codigosUnicos.sort();
     _codigosVisiveis = _codigosUnicos.toSet();
   }
 
-  // Cores Neon/Vibrantes para o modo escuro
-  Color _getColorForCodigo(Codigo codigo) {
+  // Mapeamento de cores baseado nos IDs da sua planilha Excel
+  Color _getColorForCodigo(String codigo) {
     switch (codigo) {
-      case Codigo.Normal: return Colors.blue; 
-      case Codigo.Falha: return Colors.redAccent;
-      case Codigo.MortaOuSeca: return Colors.grey;
-      case Codigo.Bifurcada: return Colors.purpleAccent;
-      case Codigo.Quebrada: return Colors.orangeAccent;
-      case Codigo.Caida: return Colors.brown;
-      case Codigo.Multipla: return Colors.yellowAccent;
-      case Codigo.Dominada: return Colors.cyanAccent;
-      default: return Colors.tealAccent;
+      case '101': return Colors.blue;          // Normal
+      case '107': return Colors.redAccent;    // Falha
+      case '114': return Colors.grey;         // Morta
+      case '102':                             // Bifurcada A
+      case '103': return Colors.purpleAccent; // Bifurcada B
+      case '117': return Colors.orangeAccent; // Quebrada
+      case '104':                             // Caída
+      case '105': return Colors.brown;        // Caída Raiz
+      case '106': return Colors.cyanAccent;   // Dominada
+      default: 
+        // Para qualquer outro código vindo do Excel, gera uma cor baseada no texto
+        return Colors.primaries[codigo.hashCode % Colors.primaries.length];
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // --- CORES DO TEMA ---
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
     final Color cardBackgroundColor = isDark ? const Color(0xFF1E293B) : Colors.white;
     final Color corTextoEixo = isDark ? Colors.white54 : Colors.black54;
 
-    // Filtra as árvores
+    // Filtra as árvores para o gráfico
     final arvoresFiltradas = widget.arvores.where((arvore) {
       final hasData = arvore.cap > 0 &&
           (_eixoYSelecionado == EixoYDispersao.alturaTotal
@@ -73,24 +73,20 @@ class _GraficoDispersaoCapAlturaState extends State<GraficoDispersaoCapAltura> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- CABEÇALHO CORRIGIDO (SEM OVERFLOW) ---
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Expanded força o texto a ocupar só o espaço disponível
                 Expanded(
                   child: Text(
                     'Dispersão CAP vs. Altura', 
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: isDark ? Colors.white : Colors.black87,
-                      fontSize: 18, // Tamanho levemente reduzido para segurança
+                      fontSize: 18,
                     ),
-                    overflow: TextOverflow.ellipsis, // Adiciona ... se for muito longo
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Dropdown compacto
                 DropdownButton<EixoYDispersao>(
                   value: _eixoYSelecionado,
                   dropdownColor: cardBackgroundColor,
@@ -99,12 +95,10 @@ class _GraficoDispersaoCapAlturaState extends State<GraficoDispersaoCapAltura> {
                   style: TextStyle(
                     color: isDark ? Colors.cyanAccent : Colors.blue, 
                     fontWeight: FontWeight.bold,
-                    fontSize: 12, // Fonte menor para caber
+                    fontSize: 12,
                   ),
                   onChanged: (EixoYDispersao? newValue) {
-                    if (newValue != null) {
-                      setState(() => _eixoYSelecionado = newValue);
-                    }
+                    if (newValue != null) setState(() => _eixoYSelecionado = newValue);
                   },
                   items: const [
                     DropdownMenuItem(value: EixoYDispersao.alturaTotal, child: Text("Alt. Total")),
@@ -113,65 +107,53 @@ class _GraficoDispersaoCapAlturaState extends State<GraficoDispersaoCapAltura> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             
-            // FILTROS DE CÓDIGO
+            // Filtros de Códigos (Chips Dinâmicos)
             Wrap(
               spacing: 6.0,
-              runSpacing: 6.0, // Adicionado espaçamento vertical para evitar colisão
+              runSpacing: 4.0,
               children: _codigosUnicos.map((codigo) {
                 final isSelected = _codigosVisiveis.contains(codigo);
                 final color = _getColorForCodigo(codigo);
                 return FilterChip(
-                  label: Text(codigo.name),
+                  label: Text(codigo),
                   labelStyle: TextStyle(
                     fontSize: 10,
-                    color: isSelected 
-                        ? (isDark ? Colors.black : Colors.white) 
-                        : (isDark ? Colors.white54 : Colors.black54),
+                    color: isSelected ? (isDark ? Colors.black : Colors.white) : (isDark ? Colors.white54 : Colors.black54),
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
                   ),
                   selected: isSelected,
                   onSelected: (selected) {
                     setState(() {
-                      if (selected) {
-                        _codigosVisiveis.add(codigo);
-                      } else {
-                        _codigosVisiveis.remove(codigo);
-                      }
+                      if (selected) _codigosVisiveis.add(codigo);
+                      else _codigosVisiveis.remove(codigo);
                     });
                   },
                   backgroundColor: Colors.transparent,
                   selectedColor: color,
-                  shape: StadiumBorder(
-                    side: BorderSide(
-                      color: isSelected ? Colors.transparent : (isDark ? Colors.white24 : Colors.black12)
-                    )
-                  ),
                   showCheckmark: false,
-                  padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
                   visualDensity: VisualDensity.compact,
                 );
               }).toList(),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             
-            // GRÁFICO
+            // O Gráfico
             AspectRatio(
-              aspectRatio: 1.3,
+              aspectRatio: 1.4,
               child: arvoresFiltradas.isEmpty
-                  ? const Center(child: Text("Nenhum dado para exibir."))
+                  ? const Center(child: Text("Selecione os códigos para visualizar."))
                   : ScatterChart(
                       ScatterChartData(
                         scatterSpots: arvoresFiltradas.mapIndexed((index, arvore) {
                           return ScatterSpot(
-                            arvore.cap, // Eixo X
-                            _eixoYSelecionado == EixoYDispersao.alturaTotal
-                                ? arvore.altura!
-                                : arvore.alturaDano!, // Eixo Y
+                            arvore.cap, 
+                            _eixoYSelecionado == EixoYDispersao.alturaTotal ? arvore.altura! : arvore.alturaDano!,
                             dotPainter: FlDotCirclePainter(
-                              radius: 8, 
-                              color: _getColorForCodigo(arvore.codigo).withOpacity(0.5), 
+                              radius: 6, 
+                              color: _getColorForCodigo(arvore.codigo).withOpacity(0.6), 
                               strokeWidth: 0,
                             ),
                           );
@@ -181,55 +163,37 @@ class _GraficoDispersaoCapAlturaState extends State<GraficoDispersaoCapAltura> {
                           show: true,
                           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          
                           bottomTitles: AxisTitles(
                             sideTitles: SideTitles(
                               showTitles: true,
                               reservedSize: 30,
                               getTitlesWidget: (value, meta) => Padding(
                                 padding: const EdgeInsets.only(top: 6.0),
-                                child: Text(
-                                  value.toInt().toString(),
-                                  style: TextStyle(color: corTextoEixo, fontSize: 10),
-                                ),
+                                child: Text(value.toInt().toString(), style: TextStyle(color: corTextoEixo, fontSize: 10)),
                               ),
                             ),
                           ),
-                          
                           leftTitles: AxisTitles(
                             sideTitles: SideTitles(
                               showTitles: true,
                               reservedSize: 30,
-                              getTitlesWidget: (value, meta) => Text(
-                                value.toInt().toString(),
-                                style: TextStyle(color: corTextoEixo, fontSize: 10),
-                              ),
+                              getTitlesWidget: (value, meta) => Text(value.toInt().toString(), style: TextStyle(color: corTextoEixo, fontSize: 10)),
                             ),
                           ),
                         ),
-                        
                         gridData: const FlGridData(show: false),
                         borderData: FlBorderData(show: false),
-                        
                         scatterTouchData: ScatterTouchData(
                           enabled: true,
                           handleBuiltInTouches: true,
                           touchTooltipData: ScatterTouchTooltipData(
                             getTooltipColor: (_) => const Color(0xFF0F172A),
                             getTooltipItems: (touchedSpot) {
-                              final spots = arvoresFiltradas.mapIndexed((index, arvore) {
-                                return ScatterSpot(
-                                  arvore.cap,
-                                  _eixoYSelecionado == EixoYDispersao.alturaTotal ? arvore.altura! : arvore.alturaDano!,
-                                );
-                              }).toList();
-                              
-                              final spotIndex = spots.indexWhere((spot) => spot.x == touchedSpot.x && spot.y == touchedSpot.y);
-                              if (spotIndex < 0) return null;
-                              
-                              final arvoreTocada = arvoresFiltradas[spotIndex];
+                              // Busca a árvore exata que foi tocada para mostrar no balão
+                              final arvoreTocada = arvoresFiltradas.firstWhereOrNull((a) => a.cap == touchedSpot.x);
+                              if (arvoreTocada == null) return null;
                               return ScatterTooltipItem(
-                                '${arvoreTocada.codigo.name}\nCAP: ${arvoreTocada.cap}\nAlt: ${touchedSpot.y}',
+                                'Código: ${arvoreTocada.codigo}\nCAP: ${arvoreTocada.cap}\nAlt: ${touchedSpot.y}',
                                 textStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                               );
                             },

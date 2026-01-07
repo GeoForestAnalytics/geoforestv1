@@ -12,7 +12,7 @@ enum TipoAtividade {
   ifq12("IFQ - 12 Meses"),
   ifs("Inventário de Sobrevivência e Qualidade"),
   bio("Inventario Biomassa");
-  const TipoAtividade(this.descricao);
+    const TipoAtividade(this.descricao);
   final String descricao;
 }
 

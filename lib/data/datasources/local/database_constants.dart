@@ -109,6 +109,18 @@ class DbArvores {
   static const String lastModified = 'lastModified';
 }
 
+class DbConfigCodigos {
+  static const String tableName = 'config_codigos';
+  static const String id = 'id'; // 101, 102...
+  static const String projetoId = 'projetoId';
+  static const String codigoLabel = 'codigoLabel'; // A, B, CA...
+  static const String descricao = 'descricao';
+  static const String fusteObrigatorio = 'fuste'; // S, N
+  static const String capObrigatorio = 'cap'; // S, N, C
+  static const String alturaObrigatoria = 'altura'; // S, N, C, #
+  static const String dominantePermitido = 'dominante'; // S, N
+}
+
 class DbCubagensArvores {
   static const String tableName = 'cubagens_arvores';
   static const String id = 'id';
