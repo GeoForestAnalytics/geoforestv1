@@ -379,24 +379,20 @@ class SyncService {
   }
 
   Future<void> _uploadParcela(firestore.DocumentReference docRef, Parcela parcela) async {
-    // 1. Busca as árvores que estão no SQLite local
-    final arvores = await _parcelaRepository.getArvoresDaParcela(parcela.dbId!);
-    
-    // 2. Cria um objeto completo (Parcela + Árvores)
-    final parcelaCompleta = parcela.copyWith(arvores: arvores);
-    
-    // 3. Converte para Mapa (o seu toMap() deve incluir a lista de árvores)
-    final parcelaMap = parcelaCompleta.toMap();
+  // 1. Busca as árvores no SQLite local
+  final arvores = await _parcelaRepository.getArvoresDaParcela(parcela.dbId!);
+  
+  // 2. Anexa as árvores ao objeto (O toMap da parcela agora já inclui a lista de árvores)
+  final parcelaCompleta = parcela.copyWith(arvores: arvores);
+  final parcelaMap = parcelaCompleta.toMap();
 
-    // 4. Adiciona metadados de sincronização
-    final prefs = await SharedPreferences.getInstance();
-    parcelaMap['nomeLider'] = parcela.nomeLider ?? prefs.getString('nome_lider');
-    parcelaMap['lastModified'] = firestore.FieldValue.serverTimestamp();
+  final prefs = await SharedPreferences.getInstance();
+  parcelaMap['nomeLider'] = parcela.nomeLider ?? prefs.getString('nome_lider');
+  parcelaMap['lastModified'] = firestore.FieldValue.serverTimestamp();
 
-    // 5. Envia em uma única operação de escrita
-    await docRef.set(parcelaMap, firestore.SetOptions(merge: true));
-    
-    debugPrint("--- [SYNC SUCCESS] Parcela ${parcela.idParcela} enviada com ${arvores.length} árvores em 1 escrita.");
+  // 3. Envia tudo em 1 única escrita
+  await docRef.set(parcelaMap, firestore.SetOptions(merge: true));
+  debugPrint("--- [SYNC] Parcela ${parcela.idParcela} enviada com sucesso (Compactada).");
 }
   
   Future<void> _uploadCubagem(firestore.DocumentReference docRef, CubagemArvore cubagem) async {
@@ -546,52 +542,21 @@ class SyncService {
   
   Future<void> _downloadParcelasDaNuvem(String licenseId, List<int> talhaoIds) async {
   if (talhaoIds.isEmpty) return;
-  
   for (var chunk in talhaoIds.slices(10)) {
-    final querySnapshot = await _firestore
-        .collection('clientes')
-        .doc(licenseId)
-        .collection('dados_coleta')
-        .where('talhaoId', whereIn: chunk)
-        .get();
+    final querySnapshot = await _firestore.collection('clientes').doc(licenseId)
+        .collection('dados_coleta').where('talhaoId', whereIn: chunk).get();
 
     if (querySnapshot.docs.isEmpty) continue;
-    
     final db = await _dbHelper.database;
     for (final docSnapshot in querySnapshot.docs) {
-      final dadosDaNuvem = docSnapshot.data();
-      
-      // O fromMap aqui já converte a lista de árvores do JSON automaticamente!
-      final parcelaDaNuvem = Parcela.fromMap(dadosDaNuvem);
-      
+      final parcelaDaNuvem = Parcela.fromMap(docSnapshot.data());
       await db.transaction((txn) async {
-        try {
-          // Verifica se há alteração local pendente
-          final local = await txn.query('parcelas', where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid], limit: 1);
-          if (local.isNotEmpty && local.first['isSynced'] == 0) {
-            // Se o servidor está concluído e o local não, aceita a versão do servidor
-            if (local.first['status'] != 'concluida' && parcelaDaNuvem.status == StatusParcela.concluida) {
-               // prossegue para atualizar
-            } else {
-               return; // Pula download para não sobrescrever mudança local
-            }
-          }
-          
-          // Salva ou Atualiza no SQLite usando o Repositório
-          // O saveFullColeta já limpa as árvores antigas e insere as novas do objeto
-          await _parcelaRepository.saveFullColeta(parcelaDaNuvem, parcelaDaNuvem.arvores);
-          
-          // Marca como sincronizado no banco local
-          await txn.update('parcelas', {'isSynced': 1}, where: 'uuid = ?', whereArgs: [parcelaDaNuvem.uuid]);
-
-        } catch (e) {
-          debugPrint("Erro ao processar download da parcela ${parcelaDaNuvem.uuid}: $e");
-        }
+         // O saveFullColeta já trata as árvores que agora vêm dentro do objeto parcela
+         await _parcelaRepository.saveFullColeta(parcelaDaNuvem, parcelaDaNuvem.arvores);
       });
     }
   }
-}
-  
+}  
     
   Future<void> _downloadCubagensDaNuvem(String licenseId, List<int> talhaoIds) async {
   if (talhaoIds.isEmpty) return;
