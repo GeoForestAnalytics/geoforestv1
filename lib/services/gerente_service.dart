@@ -119,6 +119,23 @@ class GerenteService {
       queryBuilder: (collection) => collection.where('projetoId', isEqualTo: projetoId),
     );
   }
+  
+  Stream<List<Parcela>> getParcelasGlobalStream({required List<String> licenseIds}) {
+  return _getAggregatedStream<Parcela>(
+    licenseIds: licenseIds,
+    collectionName: 'dados_coleta',
+    fromMap: Parcela.fromMap,
+    // REMOVEMOS o queryBuilder que filtrava por projetoId
+  );
+}
+
+Stream<List<CubagemArvore>> getCubagensGlobalStream({required List<String> licenseIds}) {
+  return _getAggregatedStream<CubagemArvore>(
+    licenseIds: licenseIds,
+    collectionName: 'dados_cubagem',
+    fromMap: CubagemArvore.fromMap,
+  );
+}
 
   Stream<List<CubagemArvore>> getCubagensDoProjetoStream({
     required List<String> licenseIds,

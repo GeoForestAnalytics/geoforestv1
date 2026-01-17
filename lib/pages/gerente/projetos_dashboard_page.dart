@@ -29,7 +29,11 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<GerenteProvider>().iniciarMonitoramentoEstrutural;
+      // 1. Carrega nomes de projetos e talhões (estrutura)
+      context.read<GerenteProvider>().iniciarMonitoramentoEstrutural();
+      
+      // 2. CARREGA OS DADOS REAIS (Visão Global) para o Dashboard funcionar
+      context.read<GerenteProvider>().carregarVisaoGlobalGerente();
     });
   }
 

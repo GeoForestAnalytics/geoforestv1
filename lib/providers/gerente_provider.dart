@@ -1,5 +1,3 @@
-// lib/providers/gerente_provider.dart (VERSÃO COM LAZY LOADING)
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,6 +13,7 @@ import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/services/gerente_service.dart';
 import 'package:geoforestv1/services/licensing_service.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:collection/collection.dart'; // Importante para o firstWhereOrNull
 
 class GerenteProvider with ChangeNotifier {
   final GerenteService _gerenteService = GerenteService();
@@ -24,58 +23,43 @@ class GerenteProvider with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final LicensingService _licensingService = LicensingService();
 
-  // Streams
   StreamSubscription? _dadosColetaSubscription;
   StreamSubscription? _dadosCubagemSubscription;
   StreamSubscription? _dadosDiarioSubscription;
 
-  // Dados Transacionais (PESADOS - Carregados sob demanda)
   List<Parcela> _parcelasSincronizadas = [];
   List<CubagemArvore> _cubagensSincronizadas = [];
-  
-  // Dados Globais (Médios - Mantidos globais para o Dashboard de Operações)
   List<DiarioDeCampo> _diariosSincronizados = [];
 
-  // Dados Estruturais (LEVES - Carregados no início)
   List<Projeto> _projetos = [];
   List<Atividade> _atividades = [];
   List<Talhao> _talhoes = [];
 
-  // Mapas Auxiliares
   Map<int, int> _talhaoToProjetoMap = {};
   Map<int, int> _talhaoToAtividadeMap = {};
   Map<int, String> _talhaoIdToNomeMap = {};
   Map<String, String> _fazendaIdToNomeMap = {};
 
-  // Estado
   bool _isLoading = false;
   String? _error;
-  int? _projetoSelecionadoId; // Rastreia qual projeto está na memória
+  int? _projetoSelecionadoId;
 
-  // Getters
   bool get isLoading => _isLoading;
   String? get error => _error;
   List<Projeto> get projetos => _projetos;
   List<Atividade> get atividades => _atividades;
   List<Talhao> get talhoes => _talhoes;
-  
-  // Estes getters agora retornam apenas dados do projeto selecionado
   List<Parcela> get parcelasSincronizadas => _parcelasSincronizadas;
   List<CubagemArvore> get cubagensSincronizadas => _cubagensSincronizadas;
-  
   List<DiarioDeCampo> get diariosSincronizados => _diariosSincronizados;
-  
   Map<int, int> get talhaoToProjetoMap => _talhaoToProjetoMap;
   Map<int, int> get talhaoToAtividadeMap => _talhaoToAtividadeMap;
-  
-  // Getter para saber qual projeto está carregado
   int? get projetoCarregadoId => _projetoSelecionadoId;
 
   GerenteProvider() {
     initializeDateFormatting('pt_BR', null);
   }
 
-  /// Busca licenças delegadas (mantido igual)
   Future<Set<String>> _getDelegatedLicenseIds() async {
     final projetosLocais = await _projetoRepository.getTodosOsProjetosParaGerente();
     return projetosLocais
@@ -84,8 +68,7 @@ class GerenteProvider with ChangeNotifier {
         .toSet();
   }
 
-  /// ETAPA 1: CARGA ESTRUTURAL (Leve)
-  /// Chamado no initState do Dashboard ou Home. Carrega apenas nomes e IDs.
+  /// CARGA ESTRUTURAL (Nomes e IDs)
   Future<void> iniciarMonitoramentoEstrutural() async {
     _isLoading = true;
     _error = null;
@@ -95,22 +78,18 @@ class GerenteProvider with ChangeNotifier {
       final user = _auth.currentUser;
       if (user == null) throw Exception("Usuário não autenticado.");
 
-      // 1. Carrega Estrutura Local (SQLite) ou Nuvem
       _projetos = await _projetoRepository.getTodosOsProjetosParaGerente();
       _projetos.sort((a, b) => a.nome.compareTo(b.nome));
-      
       _atividades = await _atividadeRepository.getTodasAsAtividades();
       _talhoes = await _talhaoRepository.getTodosOsTalhoes();
       
       await _buildAuxiliaryMaps();
 
-      // 2. Prepara Licenças para monitoramento de Diários
       final licenseDoc = await _licensingService.findLicenseDocumentForUser(user);
       final ownLicenseId = licenseDoc?.id;
       final delegatedLicenseIds = await _getDelegatedLicenseIds();
       final allLicenseIds = {if(ownLicenseId != null) ownLicenseId, ...delegatedLicenseIds}.toList();
 
-      // 3. Monitora Diários (Mantido global pois é usado no Dashboard de Operações)
       _dadosDiarioSubscription?.cancel();
       _dadosDiarioSubscription = _gerenteService.getDadosDiarioStream(licenseIds: allLicenseIds).listen(
         (listaDeDiarios) {
@@ -122,7 +101,6 @@ class GerenteProvider with ChangeNotifier {
 
       _isLoading = false;
       notifyListeners();
-
     } catch (e) {
       _error = "Erro ao carregar estrutura: $e";
       _isLoading = false;
@@ -130,21 +108,10 @@ class GerenteProvider with ChangeNotifier {
     }
   }
 
-  /// ETAPA 2: CARGA SOB DEMANDA (Pesada)
-  /// Chamado quando o usuário seleciona um projeto no Dropdown.
-  Future<void> carregarDadosDoProjeto(int projetoId) async {
-    // Se já está carregado, não faz nada
-    if (_projetoSelecionadoId == projetoId) return;
-
+  /// VISÃO GLOBAL (Para Dashboards e Rankings)
+  Future<void> carregarVisaoGlobalGerente() async {
     _isLoading = true;
-    
-    // 1. LIMPEZA DA MEMÓRIA
-    _parcelasSincronizadas = [];
-    _cubagensSincronizadas = [];
-    _dadosColetaSubscription?.cancel();
-    _dadosCubagemSubscription?.cancel();
-    _projetoSelecionadoId = projetoId;
-    
+    _projetoSelecionadoId = null; // Limpa seleção específica
     notifyListeners();
 
     try {
@@ -156,92 +123,101 @@ class GerenteProvider with ChangeNotifier {
       final delegatedLicenseIds = await _getDelegatedLicenseIds();
       final allLicenseIds = {if(ownLicenseId != null) ownLicenseId, ...delegatedLicenseIds}.toList();
 
-      debugPrint(">>> Carregando dados pesados APENAS para o projeto ID: $projetoId");
+      debugPrint(">>> [MODO GESTÃO] Carregando dados globais de todas as equipes");
 
-      // 2. Stream de Parcelas (Filtrado pelo ID do Projeto no Firestore)
-      _dadosColetaSubscription = _gerenteService.getParcelasDoProjetoStream(
-        licenseIds: allLicenseIds, 
-        projetoId: projetoId
-      ).listen((listaDeParcelas) async {
-        
-        // Mapeamento de nomes (Enrichment)
-        _parcelasSincronizadas = listaDeParcelas.map((p) {
-          final nomeFazenda = _fazendaIdToNomeMap[p.idFazenda] ?? p.nomeFazenda;
-          final nomeTalhao = _talhaoIdToNomeMap[p.talhaoId] ?? p.nomeTalhao;
-          // O projetoId já vem filtrado, mas garantimos
-          final projId = p.projetoId ?? projetoId; 
-          
+      _dadosColetaSubscription?.cancel();
+      _dadosCubagemSubscription?.cancel();
+
+      // Stream Global de Parcelas com Mapeamento de Nomes
+      _dadosColetaSubscription = _gerenteService.getParcelasGlobalStream(licenseIds: allLicenseIds).listen((lista) {
+        _parcelasSincronizadas = lista.map((p) {
           final atividadeId = _talhaoToAtividadeMap[p.talhaoId];
-          // Encontra o tipo da atividade
-          final tipoAtividade = atividadeId != null 
-              ? _atividades.firstWhere((a) => a.id == atividadeId, orElse: () => Atividade(projetoId: 0, tipo: '', descricao: '', dataCriacao: DateTime.now())).tipo 
-              : null;
+          final tipoAtividade = _atividades.firstWhereOrNull((a) => a.id == atividadeId)?.tipo;
 
           return p.copyWith(
-            nomeFazenda: nomeFazenda, 
-            nomeTalhao: nomeTalhao,
-            projetoId: projId,
+            nomeFazenda: _fazendaIdToNomeMap[p.idFazenda] ?? p.nomeFazenda,
+            nomeTalhao: _talhaoIdToNomeMap[p.talhaoId] ?? p.nomeTalhao,
             atividadeTipo: tipoAtividade,
           );
         }).toList();
-
-        _isLoading = false;
-        notifyListeners();
-      }, onError: (e) {
-        _error = "Erro ao baixar parcelas: $e";
         _isLoading = false;
         notifyListeners();
       });
 
-      // 3. Stream de Cubagens (Filtrado pelos Talhões do Projeto)
-      // Primeiro, descobrimos quais talhões pertencem a este projeto
-      final atividadesDoProjetoIds = _atividades
-          .where((a) => a.projetoId == projetoId)
-          .map((a) => a.id)
-          .toSet();
-      
-      final talhoesDoProjetoIds = _talhoes
-          .where((t) => atividadesDoProjetoIds.contains(t.fazendaAtividadeId))
-          .map((t) => t.id!)
-          .toList();
-
-      if (talhoesDoProjetoIds.isNotEmpty) {
-        _dadosCubagemSubscription = _gerenteService.getCubagensDoProjetoStream(
-          licenseIds: allLicenseIds, 
-          talhoesIds: talhoesDoProjetoIds // Filtro aplicado aqui
-        ).listen((listaDeCubagens) {
-          _cubagensSincronizadas = listaDeCubagens;
-          notifyListeners();
-        }, onError: (e) => debugPrint("Erro ao baixar cubagens: $e"));
-      } else {
-        _cubagensSincronizadas = [];
+      // Stream Global de Cubagens
+      _dadosCubagemSubscription = _gerenteService.getCubagensGlobalStream(licenseIds: allLicenseIds).listen((lista) {
+        _cubagensSincronizadas = lista;
         notifyListeners();
-      }
+      });
 
     } catch (e) {
-      _error = "Erro ao carregar projeto: $e";
+      _error = "Erro na visão global: $e";
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  /// Limpa os dados pesados da memória (útil ao sair do dashboard)
-  void limparProjetoSelecionado() {
-    _dadosColetaSubscription?.cancel();
-    _dadosCubagemSubscription?.cancel();
+  /// VISÃO FOCADA (Lazy Loading para Coleta)
+  Future<void> carregarDadosDoProjeto(int projetoId) async {
+    if (_projetoSelecionadoId == projetoId) return;
+
+    _isLoading = true;
     _parcelasSincronizadas = [];
     _cubagensSincronizadas = [];
-    _projetoSelecionadoId = null;
+    _dadosColetaSubscription?.cancel();
+    _dadosCubagemSubscription?.cancel();
+    _projetoSelecionadoId = projetoId;
     notifyListeners();
+
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
+
+      final licenseDoc = await _licensingService.findLicenseDocumentForUser(user);
+      final ownLicenseId = licenseDoc?.id;
+      final delegatedLicenseIds = await _getDelegatedLicenseIds();
+      final allLicenseIds = {if(ownLicenseId != null) ownLicenseId, ...delegatedLicenseIds}.toList();
+
+      _dadosColetaSubscription = _gerenteService.getParcelasDoProjetoStream(
+        licenseIds: allLicenseIds, 
+        projetoId: projetoId
+      ).listen((listaDeParcelas) {
+        _parcelasSincronizadas = listaDeParcelas.map((p) {
+          final atividadeId = _talhaoToAtividadeMap[p.talhaoId];
+          final tipoAtividade = _atividades.firstWhereOrNull((a) => a.id == atividadeId)?.tipo;
+          return p.copyWith(
+            nomeFazenda: _fazendaIdToNomeMap[p.idFazenda] ?? p.nomeFazenda, 
+            nomeTalhao: _talhaoIdToNomeMap[p.talhaoId] ?? p.nomeTalhao,
+            atividadeTipo: tipoAtividade,
+          );
+        }).toList();
+        _isLoading = false;
+        notifyListeners();
+      });
+
+      final atividadesDoProjetoIds = _atividades.where((a) => a.projetoId == projetoId).map((a) => a.id).toSet();
+      final talhoesDoProjetoIds = _talhoes.where((t) => atividadesDoProjetoIds.contains(t.fazendaAtividadeId)).map((t) => t.id!).toList();
+
+      if (talhoesDoProjetoIds.isNotEmpty) {
+        _dadosCubagemSubscription = _gerenteService.getCubagensDoProjetoStream(
+          licenseIds: allLicenseIds, 
+          talhoesIds: talhoesDoProjetoIds
+        ).listen((listaDeCubagens) {
+          _cubagensSincronizadas = listaDeCubagens;
+          notifyListeners();
+        });
+      }
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  // Mantido igual para auxiliar nos nomes
   Future<void> _buildAuxiliaryMaps() async {
-    _talhoes = await _talhaoRepository.getTodosOsTalhoes();
-    _talhaoToProjetoMap = { for (var talhao in _talhoes) if (talhao.id != null && talhao.projetoId != null) talhao.id!: talhao.projetoId! };
-    _talhaoToAtividadeMap = { for (var talhao in _talhoes) if (talhao.id != null) talhao.id!: talhao.fazendaAtividadeId };
-    _talhaoIdToNomeMap = { for (var talhao in _talhoes) if (talhao.id != null) talhao.id!: talhao.nome };
-    _fazendaIdToNomeMap = { for (var talhao in _talhoes) if (talhao.fazendaId.isNotEmpty && talhao.fazendaNome != null) talhao.fazendaId: talhao.fazendaNome! };
+    _talhaoToProjetoMap = { for (var t in _talhoes) if (t.id != null && t.projetoId != null) t.id!: t.projetoId! };
+    _talhaoToAtividadeMap = { for (var t in _talhoes) if (t.id != null) t.id!: t.fazendaAtividadeId };
+    _talhaoIdToNomeMap = { for (var t in _talhoes) if (t.id != null) t.id!: t.nome };
+    _fazendaIdToNomeMap = { for (var t in _talhoes) if (t.fazendaId.isNotEmpty && t.fazendaNome != null) t.fazendaId: t.fazendaNome! };
   }
 
   @override
