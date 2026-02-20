@@ -274,25 +274,47 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     int currentIndex = startIndex;
     bool continuarEditando = true;
 
-    while (continuarEditando && currentIndex < _secoes.length) {
+    while (continuarEditando && currentIndex >= 0 && currentIndex < _secoes.length) {
       final result = await showDialog<SecaoDialogResult>(
         context: context,
         barrierDismissible: false,
-        builder: (context) => CubagemSecaoDialog(secaoParaEditar: _secoes[currentIndex]),
+        builder: (context) => CubagemSecaoDialog(
+          secaoParaEditar: _secoes[currentIndex],
+          isPrimeira: currentIndex == 0,
+          isUltima: currentIndex == _secoes.length - 1,
+        ),
       );
 
       if (result != null) {
         if(mounted) setState(() => _secoes[currentIndex] = result.secao);
-        if (result.irParaProximaSecao) {
-          currentIndex++;
-        } else {
-          continuarEditando = false;
+        
+        // Lógica de navegação
+        switch (result.navigation) {
+          case SecaoNavigation.proxima:
+            if (currentIndex < _secoes.length - 1) {
+              currentIndex++; // Vai para a próxima
+            } else {
+              continuarEditando = false; // Era a última, fecha
+            }
+            break;
+            
+          case SecaoNavigation.anterior:
+            if (currentIndex > 0) {
+              currentIndex--; // Volta para a anterior
+            }
+            break;
+            
+          case SecaoNavigation.salvarEFechar:
+            continuarEditando = false;
+            break;
         }
       } else {
+        // Clicou fora ou em cancelar
         continuarEditando = false;
       }
     }
   }
+  
   String? _validadorObrigatorio(String? v) {
     if (v == null || v.trim().isEmpty) return 'Campo obrigatório';
     return null;
@@ -330,9 +352,12 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
       ],
     );
   }
+
+  // --- COLE ISSO ANTES DO BUILD ---
+  
   
   // O método `build` continua o mesmo.
-  @override
+ @override
   Widget build(BuildContext context) {
     final metodoFinal = widget.arvoreParaEditar?.metodoCubagem ?? widget.metodo;
 
@@ -344,6 +369,8 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
             const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white)))
           else ...[
             IconButton(icon: const Icon(Icons.save), tooltip: 'Salvar Cubagem', onPressed: () => _salvarCubagem(irParaProxima: false)),
+            
+            // Botão "Salvar e Próxima" no topo (Apenas para cubagem avulsa nova)
             if (widget.arvoreParaEditar?.id == null)
               IconButton(icon: const Icon(Icons.save_alt), tooltip: 'Salvar e Próxima', onPressed: () => _salvarCubagem(irParaProxima: true)),
           ]
@@ -356,6 +383,8 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ... (Mantenha todo o código dos TextFormFields e Gráfico aqui) ...
+              
               Text('Dados da Árvore', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 16),
               TextFormField(controller: _idFazendaController, enabled: false, decoration: const InputDecoration(labelText: 'ID da Fazenda (Automático)', border: OutlineInputBorder())),
@@ -437,8 +466,10 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
                     ),
                   ),
                 ),
+
               const Divider(height: 32, thickness: 2),
               Text('Preencher Medidas das Seções', style: Theme.of(context).textTheme.headlineSmall),
+              
               _secoes.isEmpty
                   ? const Center(child: Padding(padding: EdgeInsets.all(16.0), child: Text('Clique em "Gerar Seções" acima.')))
                   : ListView.builder(
@@ -462,7 +493,8 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
                         );
                       },
                     ),
-            ],
+              
+            ], // Fecha o children da Column
           ),
         ),
       ),

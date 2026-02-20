@@ -22,6 +22,8 @@ dependencies:
   ml_linalg: ^13.12.6
   stats: ^3.0.0
   math_expressions: ^2.6.0
+  mockito: ^5.0.0 # Para testes de lógica matemática
+  build_runner: ^2.3.3 # Para geração de código em testes
 
   # --- MAPA E GEOMETRIA ---
   flutter_map: ^8.2.1

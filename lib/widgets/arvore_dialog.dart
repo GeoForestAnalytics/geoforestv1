@@ -560,12 +560,13 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                           
                           const Spacer(),
                           
-                          if (!widget.isEditing && !permiteFuste)
+                          if (!widget.isEditing) 
                             Row(
                               children: [
-                                const Text("Fim de linha?"),
+                                const Text("Fim de linha?", style: TextStyle(fontWeight: FontWeight.bold)),
                                 Switch(
                                   value: _fimDeLinha,
+                                  activeColor: const Color.fromARGB(255, 10, 82, 177), // Destaque em vermelho para chamar atenção
                                   onChanged: (v) => setState(() => _fimDeLinha = v),
                                 ),
                               ],

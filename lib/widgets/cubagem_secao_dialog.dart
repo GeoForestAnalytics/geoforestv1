@@ -1,25 +1,29 @@
-// lib/widgets/cubagem_secao_dialog.dart (VERSÃO CORRIGIDA COM SALVAR E PRÓXIMA)
-
 import 'package:flutter/material.dart';
 import '../models/cubagem_secao_model.dart';
 
-// NOVA CLASSE DE RESULTADO para o diálogo de seção
+// Enum para controlar a direção da navegação
+enum SecaoNavigation { salvarEFechar, proxima, anterior }
+
 class SecaoDialogResult {
   final CubagemSecao secao;
-  final bool irParaProximaSecao;
+  final SecaoNavigation navigation;
 
   SecaoDialogResult({
     required this.secao,
-    this.irParaProximaSecao = false,
+    required this.navigation,
   });
 }
 
 class CubagemSecaoDialog extends StatefulWidget {
   final CubagemSecao secaoParaEditar;
+  final bool isPrimeira; // Para desabilitar o botão "Anterior" se for a primeira
+  final bool isUltima;   // Para mudar o texto do "Próxima" se for a última
 
   const CubagemSecaoDialog({
     super.key,
     required this.secaoParaEditar,
+    this.isPrimeira = false,
+    this.isUltima = false,
   });
 
   @override
@@ -48,8 +52,7 @@ class _CubagemSecaoDialogState extends State<CubagemSecaoDialog> {
     super.dispose();
   }
 
-  // Modificar _salvar para aceitar um parâmetro 'irParaProximaSecao'
-  void _salvar({required bool irParaProximaSecao}) {
+  void _salvar(SecaoNavigation navigation) {
     if (_formKey.currentState!.validate()) {
       final secaoAtualizada = CubagemSecao(
         id: widget.secaoParaEditar.id,
@@ -59,15 +62,16 @@ class _CubagemSecaoDialogState extends State<CubagemSecaoDialog> {
         casca1_mm: double.tryParse(_casca1Controller.text.replaceAll(',', '.')) ?? 0,
         casca2_mm: double.tryParse(_casca2Controller.text.replaceAll(',', '.')) ?? 0,
       );
-      // Retorna o novo SecaoDialogResult
-      Navigator.of(context).pop(SecaoDialogResult(secao: secaoAtualizada, irParaProximaSecao: irParaProximaSecao));
+      
+      Navigator.of(context).pop(SecaoDialogResult(
+        secao: secaoAtualizada, 
+        navigation: navigation
+      ));
     }
   }
   
   String? _validadorObrigatorio(String? v) {
-    if (v == null || v.trim().isEmpty) {
-      return 'Obrigatório';
-    }
+    if (v == null || v.trim().isEmpty) return 'Obrigatório';
     return null;
   }
 
@@ -86,37 +90,68 @@ class _CubagemSecaoDialogState extends State<CubagemSecaoDialog> {
                 autofocus: true,
                 decoration: const InputDecoration(labelText: 'Circunferência (cm)'),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                validator: _validadorObrigatorio, // Circunferência continua obrigatória
+                validator: _validadorObrigatorio,
               ),
               const SizedBox(height: 8),
-              TextFormField(
-                controller: _casca1Controller,
-                decoration: const InputDecoration(labelText: 'Espessura Casca 1 (mm)'),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                // <<< REMOVA O VALIDADOR DAQUI >>>
-                // validator: _validadorObrigatorio, 
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _casca2Controller,
-                decoration: const InputDecoration(labelText: 'Espessura Casca 2 (mm)'),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                // <<< E REMOVA O VALIDADOR DAQUI >>>
-                // validator: _validadorObrigatorio,
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _casca1Controller,
+                      decoration: const InputDecoration(labelText: 'Casca 1 (mm)'),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _casca2Controller,
+                      decoration: const InputDecoration(labelText: 'Casca 2 (mm)'),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
       ),
+      actionsAlignment: MainAxisAlignment.center,
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-        // Botão "Confirmar" (apenas salva e fecha)
-        FilledButton(onPressed: () => _salvar(irParaProximaSecao: false), child: const Text('Confirmar')),
-        // NOVO Botão "Salvar e Próxima"
-        FilledButton(
-          onPressed: () => _salvar(irParaProximaSecao: true),
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey), // Cor diferente para destacar
-          child: const Text('Salvar e Próxima'),
+        // Linha 1: Navegação (Anterior / Próxima)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton.icon(
+              onPressed: widget.isPrimeira ? null : () => _salvar(SecaoNavigation.anterior),
+              icon: const Icon(Icons.arrow_back_ios, size: 16),
+              label: const Text('Anterior'),
+            ),
+            Directionality(
+              textDirection: TextDirection.rtl,
+              child: TextButton.icon(
+                onPressed: () => _salvar(SecaoNavigation.proxima),
+                icon: const Icon(Icons.arrow_back_ios, size: 16), // Seta para direita por causa do RTL
+                label: Text(widget.isUltima ? 'Salvar' : 'Próxima'),
+              ),
+            ),
+          ],
+        ),
+        const Divider(),
+        // Linha 2: Ações Principais
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(), 
+              child: const Text('Cancelar', style: TextStyle(color: Colors.red))
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () => _salvar(SecaoNavigation.salvarEFechar), 
+              child: const Text('Confirmar e Fechar')
+            ),
+          ],
         ),
       ],
     );
