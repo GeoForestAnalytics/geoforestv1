@@ -7,7 +7,8 @@ class AppConfig {
   // ou Firebase Remote Config para maior segurança
   
   // ReCaptcha Site Key (usado no Firebase App Check para Web)
-  // Esta é uma chave pública, mas ainda assim deve ser configurável
+  // Esta é uma chave pública, então não tem tanto problema ficar aqui, 
+  // mas manter no ambiente é uma boa prática.
   static const String recaptchaSiteKey = String.fromEnvironment(
     'RECAPTCHA_SITE_KEY',
     defaultValue: '6LdafxgsAAAAAInBOeFOrNJR3l-4gUCzdry_XELi',
@@ -16,13 +17,13 @@ class AppConfig {
   // OpenWeatherMap API Key
   static const String openWeatherApiKey = String.fromEnvironment(
     'OPENWEATHER_API_KEY',
-    defaultValue: '44c419e21659fd02589ddc5f3be43f89',
+    defaultValue: '', // CORREÇÃO: Deixado vazio para segurança!
   );
   
   // Mapbox Access Token
   static const String mapboxAccessToken = String.fromEnvironment(
     'MAPBOX_ACCESS_TOKEN',
-    defaultValue: 'pk.eyJ1IjoiZ2VvZm9yZXN0YXBwIiwiYSI6ImNtY2FyczBwdDAxZmYybHB1OWZlbG1pdW0ifQ.5HeYC0moMJ8dzZzVXKTPrg',
+    defaultValue: '', // Perfeito!
   );
   
   // Timeouts para operações de rede
@@ -33,4 +34,3 @@ class AppConfig {
   static const int maxSyncAttempts = 100;
   static const int maxSyncRetries = 3;
 }
-
