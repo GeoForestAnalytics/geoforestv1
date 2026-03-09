@@ -1,3 +1,7 @@
+// ================================================================================
+// Arquivo: lib\widgets\arvore_dialog.dart
+// ================================================================================
+
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/especie_model.dart';
@@ -69,13 +73,8 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   
   final _especieRepository = EspecieRepository();
 
-  // Lista dinâmica vinda do CSV
   List<CodigoFlorestal> _codigosDisponiveis = [];
-  
-  // Regra selecionada PRINCIPAL (Objeto CodigoFlorestal)
   CodigoFlorestal? _regraAtual; 
-  
-  // --- MUDANÇA 1: Lista de siglas para múltiplos códigos secundários ---
   List<String> _siglasSecundariasSelecionadas = []; 
 
   bool _isLoadingCodigos = true;
@@ -114,25 +113,20 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         _codigosDisponiveis = dados;
         _isLoadingCodigos = false;
         
-        // --- INICIALIZAÇÃO DOS CÓDIGOS SALVOS ---
         if (widget.arvoreParaEditar != null) {
            final cod1 = widget.arvoreParaEditar!.codigo;
-           final cod2String = widget.arvoreParaEditar!.codigo2; // Ex: "A,B"
+           final cod2String = widget.arvoreParaEditar!.codigo2; 
            
-           // Tenta encontrar o objeto do Código 1
            try {
              _regraAtual = _codigosDisponiveis.firstWhere((c) => c.sigla == cod1);
            } catch (_) {
              _regraAtual = _codigosDisponiveis.isNotEmpty ? _codigosDisponiveis.first : null;
            }
 
-           // --- MUDANÇA 2: Parse da String para Lista ---
            if (cod2String != null && cod2String.isNotEmpty) {
-             // Separa por vírgula e remove espaços
              _siglasSecundariasSelecionadas = cod2String.split(',').map((e) => e.trim()).toList();
            }
         } else {
-           // Novo cadastro: Padrão (Geralmente o primeiro da lista, 'N')
            _regraAtual = _codigosDisponiveis.isNotEmpty ? _codigosDisponiveis.first : null;
         }
         
@@ -141,30 +135,30 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     }
   }
 
-  // --- FILTRO INTELIGENTE PARA O CÓDIGO SECUNDÁRIO ---
   List<CodigoFlorestal> get _codigosSecundariosDisponiveis {
     return _codigosDisponiveis.where((c) {
-      // 1. Não pode ser igual ao código principal selecionado
       if (_regraAtual != null && c.sigla == _regraAtual!.sigla) return false;
-      
       final sigla = c.sigla.toUpperCase();
-
-      // 2. Não pode ser um código estrutural (Normal, Falha, Caída)
       const naoPodeSerSecundario = ['N', 'F', 'CA']; 
       if (naoPodeSerSecundario.contains(sigla)) return false;
-
-      // 3. Regra extra de segurança
       if (c.capBloqueado) return false;
-
       return true;
     }).toList();
+  }
+
+  // --- REGRAS DE NEGÓCIO ---
+  bool get _isPrimeiroFuste => !widget.isAdicionandoFuste;
+
+  bool get _bloquearConclusao {
+    if (_regraAtual == null) return false;
+    if (widget.isEditing) return false; 
+    return _regraAtual!.exigeMultiplosFustes && _isPrimeiroFuste;
   }
 
   void _onCodigoChanged(CodigoFlorestal? novoCodigo) {
     if (novoCodigo == null) return;
     setState(() {
       _regraAtual = novoCodigo;
-      // Se mudar o código principal, remove ele da lista de secundários se estiver lá
       _siglasSecundariasSelecionadas.remove(novoCodigo.sigla);
       _aplicarRegrasAosCampos();
     });
@@ -195,9 +189,9 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     final picker = ImagePicker();
     final XFile? photo = await picker.pickImage(
       source: ImageSource.camera, 
-      imageQuality: 70, 
-      maxWidth: 1200,   
-      maxHeight: 1200,   
+      imageQuality: 50, // Qualidade reduzida para rapidez
+      maxWidth: 1000,   
+      maxHeight: 1000,   
     );
     
     if (photo == null) return;
@@ -207,8 +201,8 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     try {
       final linha = _linhaController.text.isEmpty ? "0" : _linhaController.text;
       final pos = _posicaoController.text.isEmpty ? "0" : _posicaoController.text;
-      final String metadados = "Projeto: ${widget.projetoNome} | Fazenda: ${widget.fazendaNome} | Talhao: ${widget.talhaoNome} | Parcela: ${widget.idParcela} | L:$linha P:$pos";
-      final nomeArquivo = "TREE_${widget.talhaoNome}_P${widget.idParcela}_L${linha}_P${pos}_${DateTime.now().millisecondsSinceEpoch}";
+      final String metadados = "Projeto: ${widget.projetoNome} | Talhao: ${widget.talhaoNome} | L:$linha P:$pos";
+      final nomeArquivo = "TREE_${widget.talhaoNome}_L${linha}_P${pos}_${DateTime.now().millisecondsSinceEpoch}";
 
       await ImageUtils.carimbarMetadadosESalvar(
         pathOriginal: photo.path,
@@ -227,10 +221,8 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     }
   }
   
-  // --- MUDANÇA 3: Função para mostrar o Dialog de Multi-Seleção ---
   Future<void> _mostrarDialogoMultiplaEscolha() async {
     final List<CodigoFlorestal> opcoes = _codigosSecundariosDisponiveis;
-    
     await showDialog(
       context: context,
       builder: (ctx) {
@@ -257,19 +249,13 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                             _siglasSecundariasSelecionadas.remove(cod.sigla);
                           }
                         });
-                        // Atualiza a tela principal também
                         this.setState(() {});
                       },
                     );
                   },
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("OK"),
-                )
-              ],
+              actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK"))],
             );
           },
         );
@@ -291,11 +277,9 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   void _submit({bool proxima = false, bool mesmoFuste = false, bool atualizarEProximo = false, bool atualizarEAnterior = false}) {
     if (_formKey.currentState!.validate()) {
       
-      if (widget.isBio) {
-        if (_especieController.text.trim().isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Espécie é obrigatória.'), backgroundColor: Colors.red));
-          return;
-        }
+      if (widget.isBio && _especieController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Espécie é obrigatória.'), backgroundColor: Colors.red));
+        return;
       }
 
       final double cap = double.tryParse(_capController.text.replaceAll(',', '.')) ?? 0.0;
@@ -304,22 +288,17 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
       final int linha = int.tryParse(_linhaController.text) ?? widget.linhaAtual;
       final int posicao = int.tryParse(_posicaoController.text) ?? widget.posicaoNaLinhaAtual;
 
-      // Obtém a String (Sigla) dos códigos selecionados
       String codigoParaSalvar = _regraAtual?.sigla ?? "N";
-      
-      // --- MUDANÇA 4: Juntar os códigos secundários numa String ---
-      // Exemplo: se selecionou 'T' e 'V', vira "T,V"
       String? codigo2ParaSalvar;
       if (_siglasSecundariasSelecionadas.isNotEmpty) {
-        _siglasSecundariasSelecionadas.sort(); // Opcional: ordenar alfabeticamente
+        _siglasSecundariasSelecionadas.sort();
         codigo2ParaSalvar = _siglasSecundariasSelecionadas.join(',');
       }
 
-      // Regra de Dominante (Se o código for H, salva como N mas marca flag)
       bool isDominante = (widget.arvoreParaEditar?.dominante ?? false);
       if (codigoParaSalvar.toUpperCase() == 'H') {
          isDominante = true;
-         codigoParaSalvar = "N"; // Salva como Normal
+         codigoParaSalvar = "N"; 
       }
 
       final arvore = Arvore(
@@ -330,16 +309,15 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         especie: _especieController.text.trim(), 
         linha: linha,
         posicaoNaLinha: posicao,
-        
-        codigo: codigoParaSalvar, // String
-        codigo2: codigo2ParaSalvar, // String (agora pode ser "A,B")
-        
+        codigo: codigoParaSalvar, 
+        codigo2: codigo2ParaSalvar, 
         fimDeLinha: _fimDeLinha,
         dominante: isDominante,
         photoPaths: _fotosArvore, 
         lastModified: DateTime.now(),
       );
 
+      // Lógica de retorno baseada nos botões
       Navigator.of(context).pop(DialogResult(
         arvore: arvore,
         irParaProxima: proxima,
@@ -348,6 +326,18 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         atualizarEAnterior: atualizarEAnterior,
       ));
     }
+  }
+
+  // Helper para InputDecoration compacto
+  InputDecoration _compactInput(String label, {IconData? icon, String? suffix}) {
+    return InputDecoration(
+      labelText: label,
+      isDense: true, // Reduz altura
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      border: const OutlineInputBorder(),
+      suffixText: suffix,
+      prefixIcon: icon != null ? Icon(icon, size: 18) : null,
+    );
   }
 
   @override
@@ -359,254 +349,315 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     bool alturaHabilitada = !(_regraAtual?.alturaBloqueada ?? false);
     bool mostraDano = _regraAtual?.requerAlturaDano ?? false;
     bool alturaObrigatoria = _regraAtual?.alturaObrigatoria ?? false;
-    bool permiteFuste = (_regraAtual?.permiteMultifuste ?? true) || widget.isAdicionandoFuste;
+    
+    // Visibilidade do botão Adic. Fuste
+    bool permiteFuste = widget.isAdicionandoFuste || (_regraAtual?.exigeMultiplosFustes ?? false);
 
     return Dialog(
-      insetPadding: const EdgeInsets.all(16.0),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
+      // Padding minúsculo para usar quase toda a largura e evitar rolagem
+      insetPadding: const EdgeInsets.all(8.0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        // Altura restrita para garantir que caiba acima do teclado
+        constraints: const BoxConstraints(maxHeight: 500), 
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                widget.isEditing
-                    ? 'Editar Árvore L${_linhaController.text}/P${_posicaoController.text}'
-                    : 'Adicionar Árvore L${_linhaController.text}/P${_posicaoController.text}',
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              if (widget.isBio)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Text("Inventário BIO (Nativa)", 
-                    textAlign: TextAlign.center, 
-                    style: TextStyle(color: Colors.green[700], fontSize: 12, fontWeight: FontWeight.bold)
-                  ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // TÍTULO COMPACTO
+                Text(
+                  widget.isEditing
+                      ? 'Editando L${_linhaController.text}/P${_posicaoController.text}'
+                      : 'Nova Árvore L${_linhaController.text}/P${_posicaoController.text}',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
-              const SizedBox(height: 20),
-              
-              if (_isLoadingCodigos)
-                const Center(child: CircularProgressIndicator())
-              else
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: 10),
+
+                // LINHA 1: LINHA | POSIÇÃO
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _linhaController,
+                        decoration: _compactInput('Linha'),
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _posicaoController,
+                        decoration: _compactInput('Posição'),
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // LINHA 2: CÓDIGO PRINCIPAL
+                 if (!_isLoadingCodigos)
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: _linhaController,
-                              decoration: const InputDecoration(labelText: 'Linha'),
-                              keyboardType: TextInputType.number,
-                              textAlign: TextAlign.center,
-                              validator: (v) => (v == null || v.isEmpty) ? 'Inválido' : null,
+                      // CÓDIGO 1 (PRINCIPAL)
+                      Expanded(
+                        child: DropdownButtonFormField<CodigoFlorestal>(
+                          value: _regraAtual,
+                          isExpanded: true,
+                          // Encurtei o texto para "Cód. 1" para caber melhor lado a lado
+                          decoration: _compactInput('Cód. 1'), 
+                          items: _codigosDisponiveis.map((cod) {
+                            return DropdownMenuItem(
+                              value: cod,
+                              child: Text(
+                                "${cod.sigla} - ${cod.descricao}", 
+                                style: const TextStyle(fontSize: 13), // Fonte levemente menor
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: _onCodigoChanged,
+                        ),
+                      ),
+                      
+                      const SizedBox(width: 8), // Espaçamento entre os dois
+
+                      // CÓDIGO 2 (SECUNDÁRIO)
+                      Expanded(
+                        child: InkWell(
+                          onTap: _mostrarDialogoMultiplaEscolha,
+                          child: InputDecorator(
+                            // Encurtei para "Cód. 2"
+                            decoration: _compactInput('Cód. 2', suffix: '▼'),
+                            child: Text(
+                              _siglasSecundariasSelecionadas.isEmpty 
+                                  ? 'Nenhum' 
+                                  : _siglasSecundariasSelecionadas.join(', '),
+                              style: const TextStyle(fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1, // Garante que não quebre linha
                             ),
                           ),
-                          const SizedBox(width: 24),
-                          Expanded(
-                            child: TextFormField(
-                              controller: _posicaoController,
-                              decoration: const InputDecoration(labelText: 'Posição'),
-                              keyboardType: TextInputType.number,
-                              textAlign: TextAlign.center,
-                              validator: (v) => (v == null || v.isEmpty) ? 'Inválido' : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                
+                const SizedBox(height: 8),
+
+                // CAMPO BIO (SE NECESSÁRIO)
+                if (widget.isBio) ...[
+                  Autocomplete<Especie>(
+                    optionsBuilder: (textValue) async {
+                      if (textValue.text.length < 2) return const Iterable<Especie>.empty();
+                      return await _especieRepository.buscarPorNome(textValue.text);
+                    },
+                    displayStringForOption: (Especie o) => o.nomeComum,
+                    onSelected: (selection) => _especieController.text = selection.nomeComum,
+                    fieldViewBuilder: (ctx, ctrl, node, onComplete) {
+                      if (_especieController.text.isNotEmpty && ctrl.text.isEmpty) ctrl.text = _especieController.text;
+                      ctrl.addListener(() => _especieController.text = ctrl.text);
+                      return TextFormField(
+                        controller: ctrl,
+                        focusNode: node,
+                        onEditingComplete: onComplete,
+                        decoration: _compactInput('Espécie', icon: Icons.spa),
+                        validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                // LINHA 4: CAP | ALTURA (AGORA JUNTOS)
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _capController,
+                        enabled: capHabilitado,
+                        autofocus: true, // Foco aqui para agilizar
+                        decoration: _compactInput('CAP', suffix: 'cm').copyWith(
+                          fillColor: !capHabilitado ? Colors.grey[200] : null,
+                          filled: !capHabilitado,
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        validator: (v) => (capHabilitado && (v == null || v.isEmpty)) ? '!' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _alturaController,
+                        enabled: alturaHabilitada,
+                        decoration: _compactInput('Altura', suffix: alturaObrigatoria ? '* m' : 'm').copyWith(
+                          fillColor: !alturaHabilitada ? Colors.grey[200] : null,
+                          filled: !alturaHabilitada,
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        validator: (v) => (alturaObrigatoria && (v == null || v.isEmpty)) ? '!' : null,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                // ALTURA DE DANO (CONDICIONAL)
+                if (mostraDano) ...[
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _alturaDanoController,
+                    decoration: _compactInput('Alt. Dano (m) *', icon: Icons.warning),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null,
+                  ),
+                ],
+
+                const SizedBox(height: 10),
+
+                // LINHA 5: FOTO E FIM DE LINHA
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Botão Foto Compacto
+                    InkWell(
+                      onTap: _capturarFoto,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            _processandoFoto 
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.camera_alt, size: 20),
+                            const SizedBox(width: 6),
+                            Text(_fotosArvore.isNotEmpty ? "${_fotosArvore.length} Foto(s)" : "Foto"),
+                          ],
+                        ),
+                      ),
+                    ),
+                    
+                    // Switch Fim de Linha
+                    if (!widget.isEditing && !permiteFuste)
+                      Row(
+                        children: [
+                          const Text("Fim de linha? ", style: TextStyle(fontSize: 12)),
+                          SizedBox(
+                            height: 24,
+                            child: Switch(
+                              value: _fimDeLinha,
+                              onChanged: (v) => setState(() => _fimDeLinha = v),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      
-                      // 1. DROPDOWN PRINCIPAL (Todas as opções do CSV)
-                      DropdownButtonFormField<CodigoFlorestal>(
-                        value: _regraAtual,
-                        isExpanded: true,
-                        decoration: const InputDecoration(labelText: 'Código 1 (Principal)'),
-                        items: _codigosDisponiveis.map((cod) {
-                          return DropdownMenuItem(
-                            value: cod,
-                            child: Text("${cod.sigla} - ${cod.descricao}", overflow: TextOverflow.ellipsis),
-                          );
-                        }).toList(),
-                        onChanged: _onCodigoChanged,
-                      ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      // --- MUDANÇA 5: NOVO SELETOR MÚLTIPLO ---
-                      InkWell(
-                        onTap: _mostrarDialogoMultiplaEscolha,
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Códigos Secundários',
-                            border: OutlineInputBorder(),
-                            suffixIcon: Icon(Icons.arrow_drop_down),
-                          ),
-                          child: Text(
-                            _siglasSecundariasSelecionadas.isEmpty 
-                                ? 'Nenhum' 
-                                : _siglasSecundariasSelecionadas.join(', '),
-                            style: const TextStyle(fontSize: 16),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 16),
+                  ],
+                ),
 
-                      if (widget.isBio)
-                        Autocomplete<Especie>(
-                          optionsBuilder: (textValue) async {
-                            if (textValue.text.length < 2) return const Iterable<Especie>.empty();
-                            return await _especieRepository.buscarPorNome(textValue.text);
-                          },
-                          displayStringForOption: (Especie o) => o.nomeComum,
-                          onSelected: (selection) => _especieController.text = selection.nomeComum,
-                          fieldViewBuilder: (ctx, ctrl, node, onComplete) {
-                            if (_especieController.text.isNotEmpty && ctrl.text.isEmpty) ctrl.text = _especieController.text;
-                            ctrl.addListener(() => _especieController.text = ctrl.text);
-                            return TextFormField(
-                              controller: ctrl,
-                              focusNode: node,
-                              onEditingComplete: onComplete,
-                              decoration: const InputDecoration(
-                                labelText: 'Espécie *', 
-                                prefixIcon: Icon(Icons.spa, color: Colors.green)
-                              ),
-                              validator: (v) => (widget.isBio && (v == null || v.isEmpty)) ? 'Obrigatório' : null,
-                            );
-                          },
-                        ),
+                const SizedBox(height: 16),
 
-                      if (widget.isBio) const SizedBox(height: 16),
-                      
-                      TextFormField(
-                        controller: _capController,
-                        enabled: capHabilitado,
-                        decoration: InputDecoration(
-                          labelText: 'CAP (cm)',
-                          filled: !capHabilitado,
-                          fillColor: Colors.grey[200],
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        validator: (v) {
-                          if (capHabilitado && (v == null || v.isEmpty)) return 'Obrigatório';
-                          return null;
-                        },
-                      ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      TextFormField(
-                        controller: _alturaController,
-                        enabled: alturaHabilitada,
-                        decoration: InputDecoration(
-                          labelText: 'Altura Total (m)', 
-                          suffixText: alturaObrigatoria ? '*' : '',
-                          filled: !alturaHabilitada,
-                          fillColor: Colors.grey[200],
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        validator: (v) {
-                          if (alturaObrigatoria && (v == null || v.isEmpty)) {
-                            return 'Altura Obrigatória';
-                          }
-                          return null;
-                        },
-                      ),
-
-                      if (mostraDano)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 16.0),
-                          child: TextFormField(
-                            controller: _alturaDanoController,
-                            decoration: const InputDecoration(
-                              labelText: 'Altura do Dano/Bifurcação (m) *',
-                              border: OutlineInputBorder(),
-                              suffixIcon: Icon(Icons.warning_amber_rounded, color: Colors.orange)
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório para este código' : null,
-                          ),
-                        ),
-
-                      const SizedBox(height: 16),
-
+                // ============================================================
+                // GRID DE BOTÕES (2 LINHAS) - CONFORME SEU DESENHO
+                // ============================================================
+                if (widget.isEditing)
+                  // MODO EDIÇÃO (Botões de Navegação)
+                  Column(
+                    children: [
                       Row(
                         children: [
-                          _processandoFoto 
-                            ? const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 10),
-                                child: SizedBox(
-                                  width: 30, 
-                                  height: 30, 
-                                  child: CircularProgressIndicator(strokeWidth: 3)
-                                ),
-                              )
-                            : IconButton(
-                                onPressed: _capturarFoto,
-                                icon: const Icon(Icons.camera_alt, color: Color(0xFF023853), size: 40),
-                                tooltip: "Tirar foto da árvore",
+                          Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar"))),
+                          const SizedBox(width: 8),
+                          Expanded(child: ElevatedButton(onPressed: () => _submit(), child: const Text("Atualizar"))),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(child: TextButton(onPressed: () => _submit(atualizarEAnterior: true), child: const Text("< Anterior"))),
+                          const SizedBox(width: 8),
+                          Expanded(child: TextButton(onPressed: () => _submit(atualizarEProximo: true), child: const Text("Próximo >"))),
+                        ],
+                      )
+                    ],
+                  )
+                else
+                  // MODO INSERÇÃO (Layout do seu desenho)
+                  Column(
+                    children: [
+                      // LINHA A: Cancelar | Salvar e Próximo
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                              child: const Text("Cancelar"),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton(
+                              // Se estiver bloqueado pela regra, mostra mensagem, senão submete
+                              onPressed: _bloquearConclusao 
+                                ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Insira o 2º fuste antes de avançar.'), backgroundColor: Colors.orange))
+                                : () => _submit(proxima: true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _bloquearConclusao ? Colors.grey : theme.colorScheme.primary,
+                                foregroundColor: theme.colorScheme.onPrimary,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
-                          
-                          if (_fotosArvore.isNotEmpty && !_processandoFoto)
-                            Text("${_fotosArvore.length} foto(s)", 
-                              style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)
+                              child: const Text("Salvar/Próximo"),
                             ),
-                          
-                          const Spacer(),
-                          
-                          if (!widget.isEditing) 
-                            Row(
-                              children: [
-                                const Text("Fim de linha?", style: TextStyle(fontWeight: FontWeight.bold)),
-                                Switch(
-                                  value: _fimDeLinha,
-                                  activeColor: const Color.fromARGB(255, 10, 82, 177), // Destaque em vermelho para chamar atenção
-                                  onChanged: (v) => setState(() => _fimDeLinha = v),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // LINHA B: Salvar | Adic. Fuste
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              // Salvar e fechar (sem ir para próxima)
+                              onPressed: _bloquearConclusao
+                                ? null // Desabilita se precisa de fuste
+                                : () => _submit(proxima: false), 
+                              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                              child: const Text("Salvar"),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Botão Adic. Fuste (Só habilitado se permitido/necessário)
+                          Expanded(
+                            child: IgnorePointer(
+                              ignoring: !permiteFuste,
+                              child: ElevatedButton(
+                                onPressed: () => _submit(mesmoFuste: true),
+                                style: ElevatedButton.styleFrom(
+                                  // Se bloqueado a conclusão, destaca este botão (Vermelho Claro) para o usuário clicar
+                                  backgroundColor: _bloquearConclusao ? Colors.red.shade100 : (permiteFuste ? Colors.blue.shade50 : Colors.grey.shade200),
+                                  foregroundColor: _bloquearConclusao ? Colors.red.shade900 : Colors.blue.shade900,
+                                  elevation: 0,
+                                  side: _bloquearConclusao ? BorderSide(color: Colors.red.shade400) : null,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
                                 ),
-                              ],
+                                child: Text("Adic. Fuste", style: TextStyle(color: permiteFuste ? null : Colors.grey)),
+                              ),
                             ),
+                          ),
                         ],
                       ),
                     ],
                   ),
-                ),
-              
-              const SizedBox(height: 24),
-              
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 8.0,
-                runSpacing: 8.0,
-                children: widget.isEditing
-                    ? [
-                        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-                        TextButton(onPressed: () => _submit(atualizarEAnterior: true), child: const Text('Anterior')),
-                        ElevatedButton(onPressed: () => _submit(), child: const Text('Atualizar')),
-                        TextButton(onPressed: () => _submit(atualizarEProximo: true), child: const Text('Próximo')),
-                      ]
-                    : [
-                        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-                        
-                        if (permiteFuste)
-                           OutlinedButton(onPressed: () => _submit(mesmoFuste: true), child: const Text('Adic. Fuste')),
-                        
-                        ElevatedButton(
-                          onPressed: () => _submit(proxima: true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary, 
-                            foregroundColor: theme.colorScheme.onPrimary
-                          ),
-                          child: const Text('Salvar e Próximo'),
-                        ),
-                      ],
-              )
-            ],
+              ],
+            ),
           ),
         ),
       ),

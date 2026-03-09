@@ -1,25 +1,25 @@
 Sigla;Descricao;Fuste;CAP;Altura;Hipsometrica;Extra_Dano;Dominante
-N;Normal;.;S;.;S;N;S
-A;Bifurcada acima do CAP;.;S;.;N;.;N
+N;Normal;N;S;.;S;N;S
+A;Bifurcada acima do CAP;N;S;.;N;S;N
 B;Bifurcada abaixo do CAP;S;S;.;N;.;N
 CA;Caida ou Deitada;N;N;N;N;N;N
 CR;Caida Raiz / Vento;N;N;N;N;N;N
-D;Dominada;.;.;.;N;N;N
+D;Dominada;N;.;.;N;N;N
 F;Falha;N;N;N;N;N;N
-G;Geada;.;.;.;N;N;N
-I;Pragas ou Doencas;.;S;.;N;.;N
-J;Ataque Macaco (Janela);.;S;.;N;.;N
-K;Ataque Macaco (Anel);.;S;.;N;.;N
-L;Vespa da Madeira;.;S;.;N;.;N
-M;Morta ou Seca;.;S;.;N;.;N
-P;Ponteira Seca;.;S;.;N;.;N
-Q;Quebrada;.;S;.;N;.;N
-R;Rebrota;S;S;.;N;.;N
-S;Atacada por Formiga;.;S;.;N;.;N
-T;Torta;.;S;.;N;.;N
-U;Fox Tail;.;S;.;N;.;N
-DS;MarcadaDesbaste;.;S;.;S;N;S
-V;Inclinada pelo Vento;.;S;N;N;N;N
-W;Deitada pelo Vento;.;S;N;N;N;N
-X;Ferida na Base;.;S;.;N;.;N
+G;Geada;N;.;.;N;N;N
+I;Pragas ou Doencas;N;S;.;N;S;N
+J;Ataque Macaco (Janela);N;S;.;N;S;N
+K;Ataque Macaco (Anel);N;S;.;N;S;N
+L;Vespa da Madeira;N;S;.;N;.;N
+M;Morta ou Seca;N;S;.;N;.;N
+P;Ponteira Seca;N;S;.;N;S;N
+Q;Quebrada;N;S;.;N;S;N
+R;Rebrota;.;S;.;N;.;N
+S;Atacada por Formiga;N;S;.;N;S;N
+T;Torta;N;S;.;N;S;N
+U;Fox Tail;N;S;.;N;S;N
+DS;MarcadaDesbaste;N;S;.;S;N;S
+V;Inclinada pelo Vento;N;S;N;N;N;N
+W;Deitada pelo Vento;N;S;N;N;N;N
+X;Ferida na Base;N;S;.;N;S;N
 O;Outros;.;S;.;N;.;N

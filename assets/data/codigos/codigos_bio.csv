@@ -1,17 +1,17 @@
 Sigla;Descricao;Fuste;CAP;Altura;Hipsometrica;Extra_Dano;Dominante
-N;Normal;.;S;S;.;.;.
-M;Morta;.;S;S;.;.;.
-I;Ingresso;.;S;S;.;.;.
+N;Normal;N;S;S;.;.;.
+M;Morta;N;S;S;.;.;.
+I;Ingresso;N;S;S;.;.;.
 BF;Bifurcada abaixo de 1.3 m;S;S;S;.;.;.
-GraE;Graminea exotica;.;N;S;.;.;.
-GraN;Graminea nativa;.;N;S;.;.;.
-SolE;Solo exposto;.;N;S;.;.;.
-Arb;Porte arbusto;.;S;S;.;.;.
-P2;Arvore peso 2;.;S;S;.;.;.
-D3S;Defeito terco superior;.;S;S;.;.;.
-D3M;Defeito terco medio;.;S;S;.;.;.
-D3I;Defeito terco inferior;.;S;S;.;.;.
-Sub;Sub Amostra;.;.;.;.;.;.
-SuE;Substituicao de Etiqueta;.;S;S;.;.;.
-GPS;Codigo GPS;.;N;N;N;S;N
-Ava;Amostra Vazia;.;N;N;N;.;N
+GraE;Graminea exotica;N;N;S;.;.;.
+GraN;Graminea nativa;N;N;S;.;.;.
+SolE;Solo exposto;N;N;S;.;.;.
+Arb;Porte arbusto;N;S;S;.;.;.
+P2;Arvore peso 2;N;S;S;.;.;.
+D3S;Defeito terco superior;N;S;S;.;.;.
+D3M;Defeito terco medio;N;S;S;.;.;.
+D3I;Defeito terco inferior;N;S;S;.;.;.
+Sub;Sub Amostra;N;.;.;.;.;.
+SuE;Substituicao de Etiqueta;N;S;S;.;.;.
+GPS;Codigo GPS;N;N;N;N;S;N
+Ava;Amostra Vazia;N;N;N;N;.;N

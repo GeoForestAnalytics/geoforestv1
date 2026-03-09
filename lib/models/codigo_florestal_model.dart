@@ -1,17 +1,17 @@
-// Arquivo: lib/models/codigo_florestal_model.dart
+// ================================================================================
+// Arquivo: lib\models\codigo_florestal_model.dart
+// ================================================================================
 
 class CodigoFlorestal {
   final String sigla;
   final String descricao;
   
   // Strings puras do CSV
-  final String _fuste;
+  final String _fuste;        // Coluna C da sua imagem
   final String _cap;
   final String _altura;
   final String _hipsometria; 
   final String _extraDan;
-  // A coluna Dominante no CSV será ignorada ou usada apenas para saber
-  // se a árvore é "candidata" (ex: Morta nunca vira dominante).
   final String _dominante; 
 
   CodigoFlorestal({
@@ -37,7 +37,7 @@ class CodigoFlorestal {
     return CodigoFlorestal(
       sigla: getCol(0),
       descricao: getCol(1),
-      fuste: getCol(2),
+      fuste: getCol(2), // LÊ A COLUNA C AQUI
       cap: getCol(3),
       altura: getCol(4),
       hipsometria: getCol(5),
@@ -46,7 +46,7 @@ class CodigoFlorestal {
     );
   }
 
-  // --- REGRAS DE NEGÓCIO (S, N, .) ---
+  // --- REGRAS DE NEGÓCIO ---
 
   // CAP
   bool get capObrigatorio => _cap == 'S';
@@ -55,21 +55,24 @@ class CodigoFlorestal {
   // Altura Total
   bool get alturaObrigatoria => _altura == 'S';
   bool get alturaBloqueada => _altura == 'N';
-  // O ponto (.) significa opcional, então não é nem obrigatório nem bloqueado
 
   // Altura do Dano (Extra Dano)
-  // Se for 'S', habilita o campo e obriga preencher
   bool get requerAlturaDano => _extraDan == 'S';
 
-  // Fuste
-  bool get permiteMultifuste => _fuste != 'N'; // Se for N, bloqueia o botão "Adic Fuste"
+  // Fuste (AQUI ESTÁ A LÓGICA DA SUA PLANILHA)
+  // 'N' = Bloqueia botão adicionar fuste (ex: Falha, Caída)
+  // 'S' = Exige múltiplos fustes (ex: Bifurcada Abaixo)
+  // '.' = Permite fuste, mas não exige (ex: Normal, caso tenha erro de campo)
+  
+  bool get permiteMultifuste => _fuste != 'N'; 
+  
+  // NOVA REGRA: Se na planilha estiver 'S', o app vai travar o botão salvar no 1º fuste
+  bool get exigeMultiplosFustes => _fuste == 'S'; 
 
-  // Hipsometria (Para cálculos futuros)
+  // Hipsometria
   bool get entraNaCurva => _hipsometria == 'S';
   
-  // Dominante (Candidata)
-  // Árvores mortas, caídas ou falhas geralmente têm 'N' aqui no CSV.
-  // Isso impede o algoritmo de elegê-las como dominante mesmo se tiverem CAP alto (erro de digitação)
+  // Dominante
   bool get podeSerDominante => _dominante != 'N';
 
   @override

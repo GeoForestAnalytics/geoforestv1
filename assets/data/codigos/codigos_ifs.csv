@@ -1,6 +1,6 @@
-Sigla	Descricao	Fuste	CAP	Altura	Hipsometrica	Extra_Dano	Dominante
-V	Normal	.	.	.	.	.	.
-M	Morta ou Seca	.	.	.	.	.	.
-F	Falha	N	N	.	.	.	.
-G	Geada	.	.	.	.	.	.
-O	Outros	.	.	.	.	.	.
+Sigla;Descricao;Fuste;CAP;Altura;Hipsometrica;Extra_Dano;Dominante
+V;Normal;N;.;.;.;.;.
+M;Morta ou Seca;N;.;.;.;.;.
+F;Falha;N;N;.;.;.;.
+G;Geada;N;.;.;.;.;.
+O;Outros;.;.;.;.;.;.
