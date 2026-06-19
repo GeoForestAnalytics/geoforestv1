@@ -31,7 +31,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 63, // Mantemos a versão 63
+      version: 65,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -142,6 +142,7 @@ class DatabaseHelper {
         ${DbParcelas.declividade} REAL,
         arvores TEXT,
         ${DbParcelas.lastModified} TEXT NOT NULL,
+        ${DbParcelas.tipoMedidaCAP} TEXT,
         FOREIGN KEY (${DbParcelas.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
       )
     ''');
@@ -168,6 +169,9 @@ class DatabaseHelper {
         ${DbArvores.capAuditoria} REAL,
         ${DbArvores.alturaAuditoria} REAL,
         ${DbArvores.lastModified} TEXT NOT NULL,
+        ${DbArvores.tipoMedidaCAP} TEXT,
+        ${DbArvores.medidaSuta1} REAL,
+        ${DbArvores.medidaSuta2} REAL,
         FOREIGN KEY (${DbArvores.parcelaId}) REFERENCES ${DbParcelas.tableName} (${DbParcelas.id}) ON DELETE CASCADE
       )
     ''');
@@ -657,7 +661,28 @@ class DatabaseHelper {
               debugPrint("Erro ao adicionar coluna fotos_avarias: $e");
             }
           }
-          break;      
+          break;
+        case 64:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V64 (Suporte a Suta no inventário) <<<");
+          for (final coluna in [DbArvores.tipoMedidaCAP, DbArvores.medidaSuta1, DbArvores.medidaSuta2]) {
+            if (!await _columnExists(db, DbArvores.tableName, coluna)) {
+              try {
+                final tipoSql = coluna == DbArvores.tipoMedidaCAP ? 'TEXT' : 'REAL';
+                await db.execute('ALTER TABLE ${DbArvores.tableName} ADD COLUMN $coluna $tipoSql');
+                debugPrint("Coluna $coluna adicionada em ARVORES.");
+              } catch (e) { debugPrint("Erro ao adicionar coluna $coluna: $e"); }
+            }
+          }
+          break;
+        case 65:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V65 (Tipo de medição CAP/DAP por parcela) <<<");
+          if (!await _columnExists(db, DbParcelas.tableName, DbParcelas.tipoMedidaCAP)) {
+            try {
+              await db.execute('ALTER TABLE ${DbParcelas.tableName} ADD COLUMN ${DbParcelas.tipoMedidaCAP} TEXT');
+              debugPrint("Coluna ${DbParcelas.tipoMedidaCAP} adicionada em PARCELAS.");
+            } catch (e) { debugPrint("Erro ao adicionar coluna ${DbParcelas.tipoMedidaCAP}: $e"); }
+          }
+          break;
       }
     }
   }

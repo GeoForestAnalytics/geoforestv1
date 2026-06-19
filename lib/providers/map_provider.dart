@@ -1,9 +1,15 @@
 // lib/providers/map_provider.dart
 
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdfrx/pdfrx.dart';
+import 'package:proj4dart/proj4dart.dart' as proj4;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
@@ -52,6 +58,7 @@ class MapProvider with ChangeNotifier {
 
   MapProvider() {
     _optimizerService = ActivityOptimizerService(dbHelper: _dbHelper);
+    _loadSavedPdfPath();
   }
 
   // Getters
@@ -68,19 +75,30 @@ class MapProvider with ChangeNotifier {
   // <<< INÍCIO DAS NOVAS ADIÇÕES >>>
 
   SamplePoint? _goToTarget; // Armazena a amostra de destino no modo "Ir para"
-  
+  bool _followingIniciadoPeloGoTo = false; // Controla se fomos nós que ligamos o GPS ao entrar no "Ir para"
+
   SamplePoint? get goToTarget => _goToTarget;
   bool get isGoToModeActive => _goToTarget != null;
 
-  /// Inicia o modo de navegação "Ir para" (linha reta).
+  /// Inicia o modo de navegação "Ir para" (linha reta), garantindo que o GPS
+  /// fique acompanhando continuamente mesmo que o usuário não tenha apertado
+  /// o botão "Minha Localização" antes.
   void startGoTo(SamplePoint target) {
     _goToTarget = target;
+    if (!_isFollowingUser) {
+      toggleFollowingUser();
+      _followingIniciadoPeloGoTo = true;
+    }
     notifyListeners(); // Avisa a UI que o modo mudou
   }
 
   /// Para o modo de navegação "Ir para".
   void stopGoTo() {
     _goToTarget = null;
+    if (_followingIniciadoPeloGoTo && _isFollowingUser) {
+      toggleFollowingUser();
+    }
+    _followingIniciadoPeloGoTo = false;
     notifyListeners(); // Avisa a UI que o modo mudou
   }
 
@@ -126,6 +144,394 @@ class MapProvider with ChangeNotifier {
   }
 
   // <<< FIM DAS NOVAS ADIÇÕES >>>
+
+  // --- PDF de Referência (Overlay Georreferenciado) ---
+  String? _importedPdfPath;
+  String? _pdfTilesDir;
+  LatLngBounds? _pdfOverlayBounds;
+  double _pdfOverlayOpacity = 0.7;
+  bool _showPdfOverlay = false;
+
+  String? get importedPdfPath => _importedPdfPath;
+  String? get pdfTilesDir => _pdfTilesDir;
+  LatLngBounds? get pdfOverlayBounds => _pdfOverlayBounds;
+  double get pdfOverlayOpacity => _pdfOverlayOpacity;
+  bool get showPdfOverlay => _showPdfOverlay;
+
+  Future<void> _loadSavedPdfPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedPath = prefs.getString('pdf_overlay_path');
+    final swLat = prefs.getDouble('pdf_sw_lat');
+    final swLon = prefs.getDouble('pdf_sw_lon');
+    final neLat = prefs.getDouble('pdf_ne_lat');
+    final neLon = prefs.getDouble('pdf_ne_lon');
+
+    if (savedPath != null && await File(savedPath).exists() &&
+        swLat != null && swLon != null && neLat != null && neLon != null) {
+      final bounds = LatLngBounds(LatLng(swLat, swLon), LatLng(neLat, neLon));
+      final pdfId = '${savedPath.hashCode.abs().toRadixString(16)}_v2';
+      final tempDir = await getTemporaryDirectory();
+      final tilesDir = '${tempDir.path}/geoforest_pdf_tiles/$pdfId';
+      if (await File('$tilesDir/.done').exists()) {
+        _importedPdfPath = savedPath;
+        _pdfTilesDir = tilesDir;
+        _pdfOverlayBounds = bounds;
+        _showPdfOverlay = true;
+        notifyListeners();
+      } else {
+        await prefs.remove('pdf_overlay_path');
+      }
+    } else if (savedPath != null) {
+      await prefs.remove('pdf_overlay_path');
+    }
+  }
+
+  // Helpers de conversão tile ↔ lat/lon (Web Mercator)
+  int _lonToTileX(double lon, int z) => ((lon + 180.0) / 360.0 * (1 << z)).floor();
+  int _latToTileY(double lat, int z) {
+    final r = lat * math.pi / 180.0;
+    return ((1.0 - math.log(math.tan(r) + 1.0 / math.cos(r)) / math.pi) / 2.0 * (1 << z)).floor();
+  }
+  double _tileXToLon(int tx, int z) => tx / (1 << z) * 360.0 - 180.0;
+  double _tileYToLat(int ty, int z) {
+    final n = math.pi * (1.0 - 2.0 * ty / (1 << z));
+    return 180.0 / math.pi * math.atan(0.5 * (math.exp(n) - math.exp(-n)));
+  }
+
+  // Mercator Y usada para calcular fullH e py corretamente (projeção Web Mercator)
+  double _latToMercY(double lat) {
+    final r = lat * math.pi / 180.0;
+    return math.log(math.tan(math.pi / 4.0 + r / 2.0));
+  }
+
+  Future<String> _generatePdfTiles(String filePath, LatLngBounds bounds) async {
+    final pdfId = '${filePath.hashCode.abs().toRadixString(16)}_v2';
+    final tempDir = await getTemporaryDirectory();
+    final tilesDir = '${tempDir.path}/geoforest_pdf_tiles/$pdfId';
+    final markerFile = File('$tilesDir/.done');
+    if (await markerFile.exists()) return tilesDir;
+
+    await Directory(tilesDir).create(recursive: true);
+
+    final minLon = bounds.west;
+    final maxLon = bounds.east;
+    final minLat = bounds.south;
+    final maxLat = bounds.north;
+
+    final mercYMax = _latToMercY(maxLat);
+    final mercYMin = _latToMercY(minLat);
+
+    final doc = await PdfDocument.openFile(filePath);
+    try {
+      final page = doc.pages[0];
+
+      for (int z = 13; z <= 17; z++) {
+        // fullW: baseado na longitude (linear em Mercator) ✓
+        final fullW = (maxLon - minLon) / 360.0 * (1 << z) * 256.0;
+        // fullH: baseado na projeção Mercator do intervalo de latitude ✓
+        final fullH = (mercYMax - mercYMin) / (2 * math.pi) * (1 << z) * 256.0;
+
+        final x0 = _lonToTileX(minLon, z);
+        final x1 = _lonToTileX(maxLon, z);
+        final y0 = _latToTileY(maxLat, z);
+        final y1 = _latToTileY(minLat, z);
+
+        for (int tx = x0; tx <= x1; tx++) {
+          for (int ty = y0; ty <= y1; ty++) {
+            final lonL = _tileXToLon(tx, z);
+            final latT = _tileYToLat(ty, z);
+            final mercYT = _latToMercY(latT);
+            // px: longitude é linear em Mercator ✓
+            final px = ((lonL - minLon) / (maxLon - minLon) * fullW).round();
+            // py: usa Mercator Y para projeção correta (sem deformação) ✓
+            final py = ((mercYMax - mercYT) / (mercYMax - mercYMin) * fullH).round();
+
+            final img = await page.render(
+              x: px,
+              y: py,
+              width: 256,
+              height: 256,
+              fullWidth: fullW,
+              fullHeight: fullH,
+              backgroundColor: 0x00000000,
+            );
+
+            if (img != null) {
+              final uiImg = await img.createImage();
+              final bd = await uiImg.toByteData(format: ui.ImageByteFormat.png);
+              uiImg.dispose();
+              if (bd != null) {
+                final tileDir = Directory('$tilesDir/$z');
+                await tileDir.create(recursive: true);
+                await File('$tilesDir/$z/${tx}_$ty.png').writeAsBytes(bd.buffer.asUint8List());
+              }
+            }
+            await Future.delayed(Duration.zero);
+          }
+        }
+      }
+      await markerFile.writeAsString('done');
+    } finally {
+      await doc.dispose();
+    }
+    return tilesDir;
+  }
+
+  /// Tenta extrair as coordenadas geográficas embutidas no PDF (formato GeoPDF/Adobe).
+  Future<LatLngBounds?> _tryExtractPdfGeoBounds(String filePath) async {
+    try {
+      final bytes = await File(filePath).readAsBytes();
+      // Converte para string ignorando bytes binários (>127)
+      final content = String.fromCharCodes(bytes.map((b) => b < 128 ? b : 32));
+
+      final match = RegExp(r'/GPTS\s*\[([^\]]+)\]').firstMatch(content);
+      if (match == null) return null;
+
+      final nums = match
+          .group(1)!
+          .trim()
+          .split(RegExp(r'[\s,]+'))
+          .where((s) => s.isNotEmpty)
+          .map(double.parse)
+          .toList();
+
+      if (nums.length < 8) return null;
+
+      // Formato GPTS: [lat1 lon1 lat2 lon2 lat3 lon3 lat4 lon4]
+      final lats = [for (int i = 0; i < nums.length; i += 2) nums[i]];
+      final lons = [for (int i = 1; i < nums.length; i += 2) nums[i]];
+
+      final south = lats.reduce((a, b) => a < b ? a : b);
+      final north = lats.reduce((a, b) => a > b ? a : b);
+      final west = lons.reduce((a, b) => a < b ? a : b);
+      final east = lons.reduce((a, b) => a > b ? a : b);
+
+      // Sanidade: valores válidos de lat/lon
+      if (south < -90 || north > 90 || west < -180 || east > 180) return null;
+      if (north - south < 0.0001 || east - west < 0.0001) return null;
+
+      return LatLngBounds(LatLng(south, west), LatLng(north, east));
+    } catch (e) {
+      debugPrint('Auto-extract PDF geo bounds failed: $e');
+      return null;
+    }
+  }
+
+  Future<void> importPdfOverlay(BuildContext context) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+    if (result == null || result.files.single.path == null) return;
+    if (!context.mounted) return;
+
+    final filePath = result.files.single.path!;
+
+    // Tenta extrair coordenadas automaticamente
+    _setLoading(true);
+    LatLngBounds? autoBounds;
+    try {
+      autoBounds = await _tryExtractPdfGeoBounds(filePath);
+    } catch (_) {}
+    _setLoading(false);
+
+    LatLngBounds bounds;
+
+    if (autoBounds != null) {
+      bounds = autoBounds;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Coordenadas lidas automaticamente do PDF!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } else {
+      // Fallback: pede as coordenadas manualmente
+      if (!context.mounted) return;
+      final boundsData = await _showPdfBoundsDialog(context);
+      if (boundsData == null) return;
+
+      final zone = boundsData['zone'] as int;
+      final epsg = 31978 + (zone - 18);
+      final projUTM = proj4.Projection.get('EPSG:$epsg') ??
+          proj4.Projection.parse(proj4Definitions[epsg]!);
+      final projWGS84 = proj4.Projection.get('EPSG:4326')!;
+
+      final sw = projUTM.transform(projWGS84,
+          proj4.Point(x: boundsData['swE'] as double, y: boundsData['swN'] as double));
+      final ne = projUTM.transform(projWGS84,
+          proj4.Point(x: boundsData['neE'] as double, y: boundsData['neN'] as double));
+
+      bounds = LatLngBounds(LatLng(sw.y, sw.x), LatLng(ne.y, ne.x));
+    }
+
+    _setLoading(true);
+    try {
+      final tilesDir = await _generatePdfTiles(filePath, bounds);
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('pdf_overlay_path', filePath);
+      await prefs.setDouble('pdf_sw_lat', bounds.south);
+      await prefs.setDouble('pdf_sw_lon', bounds.west);
+      await prefs.setDouble('pdf_ne_lat', bounds.north);
+      await prefs.setDouble('pdf_ne_lon', bounds.east);
+
+      _importedPdfPath = filePath;
+      _pdfTilesDir = tilesDir;
+      _pdfOverlayBounds = bounds;
+      _showPdfOverlay = true;
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao processar PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<Map<String, dynamic>?> _showPdfBoundsDialog(BuildContext context) {
+    final swECtrl = TextEditingController();
+    final swNCtrl = TextEditingController();
+    final neECtrl = TextEditingController();
+    final neNCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    int selectedZone = 22;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Coordenadas do Mapa PDF'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Copie os valores numéricos das margens do mapa PDF.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    value: selectedZone,
+                    decoration: const InputDecoration(labelText: 'Zona UTM Sul'),
+                    items: List.generate(8, (i) => i + 18)
+                        .map((z) => DropdownMenuItem(value: z, child: Text('Zona ${z}S')))
+                        .toList(),
+                    onChanged: (v) => setState(() => selectedZone = v!),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Canto SW — inferior esquerdo',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: swECtrl,
+                        decoration: const InputDecoration(labelText: 'Leste (E)', hintText: '713500'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) => v == null || v.isEmpty ? 'Obrigatório' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: swNCtrl,
+                        decoration: const InputDecoration(labelText: 'Norte (N)', hintText: '7406000'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) => v == null || v.isEmpty ? 'Obrigatório' : null,
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 16),
+                  const Text('Canto NE — superior direito',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: neECtrl,
+                        decoration: const InputDecoration(labelText: 'Leste (E)', hintText: '721500'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) => v == null || v.isEmpty ? 'Obrigatório' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: neNCtrl,
+                        decoration: const InputDecoration(labelText: 'Norte (N)', hintText: '7411500'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) => v == null || v.isEmpty ? 'Obrigatório' : null,
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(ctx, {
+                    'swE': double.parse(swECtrl.text.replaceAll(',', '.')),
+                    'swN': double.parse(swNCtrl.text.replaceAll(',', '.')),
+                    'neE': double.parse(neECtrl.text.replaceAll(',', '.')),
+                    'neN': double.parse(neNCtrl.text.replaceAll(',', '.')),
+                    'zone': selectedZone,
+                  });
+                }
+              },
+              child: const Text('Confirmar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void togglePdfOverlay() {
+    _showPdfOverlay = !_showPdfOverlay;
+    notifyListeners();
+  }
+
+  void setPdfOpacity(double opacity) {
+    _pdfOverlayOpacity = opacity;
+    notifyListeners();
+  }
+
+  Future<void> clearPdfOverlay() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('pdf_overlay_path');
+    await prefs.remove('pdf_sw_lat');
+    await prefs.remove('pdf_sw_lon');
+    await prefs.remove('pdf_ne_lat');
+    await prefs.remove('pdf_ne_lon');
+    if (_pdfTilesDir != null) {
+      final dir = Directory(_pdfTilesDir!);
+      if (await dir.exists()) await dir.delete(recursive: true);
+    }
+    _importedPdfPath = null;
+    _pdfTilesDir = null;
+    _pdfOverlayBounds = null;
+    _showPdfOverlay = false;
+    notifyListeners();
+  }
+  // --- Fim PDF de Referência ---
+
 
   final Map<MapLayerType, String> _tileUrls = {
     MapLayerType.ruas: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',

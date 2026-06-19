@@ -1,6 +1,6 @@
 Sigla;Descricao;Fuste;CAP;Altura;Hipsometrica;Extra_Dano;Dominante
 N;Normal;N;S;.;S;N;S
-A;Bifurcada acima do CAP;N;S;.;N;S;N
+A;Bifurcada acima do CAP;N;S;.;N;N;N
 B;Bifurcada abaixo do CAP;S;S;.;N;.;N
 CA;Caida ou Deitada;N;N;N;N;N;N
 CR;Caida Raiz / Vento;N;N;N;N;N;N
@@ -15,7 +15,7 @@ M;Morta ou Seca;N;S;.;N;.;N
 P;Ponteira Seca;N;S;.;N;S;N
 Q;Quebrada;N;S;.;N;S;N
 R;Rebrota;.;S;.;N;.;N
-S;Atacada por Formiga;N;S;.;N;S;N
+S;Atacada por Formiga;N;S;.;N;N;N
 T;Torta;N;S;.;N;S;N
 U;Fox Tail;N;S;.;N;S;N
 DS;MarcadaDesbaste;N;S;.;S;N;S

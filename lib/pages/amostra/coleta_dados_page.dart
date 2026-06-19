@@ -52,6 +52,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
   DeclividadeUnidade _declividadeUnidade = DeclividadeUnidade.graus;
   String _tipoParcelaSelecionado = 'Instalação';
+  String _tipoMedidaCAPSelecionado = 'fita';
 
   Position? _posicaoAtualExibicao;
   bool _buscandoLocalizacao = false;
@@ -169,6 +170,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   void _preencherControllersComDadosAtuais() {
     final p = _parcelaAtual;
     _areaAlvoDaParcela = p.areaMetrosQuadrados;
+    _tipoMedidaCAPSelecionado = p.tipoMedidaCAP;
 
     _nomeFazendaController.text = p.nomeFazenda ?? '';
     _talhaoParcelaController.text = p.nomeTalhao ?? '';
@@ -265,6 +267,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       lado1: lado1,
       lado2: lado2,
       declividade: declividadeParaSalvarEmGraus > 0 ? declividadeParaSalvarEmGraus : null,
+      tipoMedidaCAP: _tipoMedidaCAPSelecionado,
     );
   }
 
@@ -641,6 +644,8 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
                   ),
 
                   const SizedBox(height: 16),
+                  _buildSeletorInstrumentoMedicao(),
+                  const SizedBox(height: 16),
                   _buildCalculadoraArea(areaInclinadaCalculada, areaHorizontalFinal),
                   const SizedBox(height: 16),
                   _buildColetorCoordenadas(),
@@ -707,6 +712,34 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 }
   }
 
+
+  Widget _buildSeletorInstrumentoMedicao() {
+    final bool travado = _isReadOnly || _parcelaAtual.arvores.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Instrumento de Medição da Parcela', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _tipoMedidaCAPSelecionado,
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            prefixIcon: const Icon(Icons.straighten),
+            helperText: travado
+                ? 'Bloqueado: já há árvores coletadas nesta parcela com este instrumento.'
+                : 'Define CAP (fita) ou DAP (suta) para todas as árvores desta parcela.',
+          ),
+          items: const [
+            DropdownMenuItem(value: 'fita', child: Text('Fita métrica (mede CAP)')),
+            DropdownMenuItem(value: 'suta', child: Text('Suta (mede DAP, 2 diâmetros)')),
+          ],
+          onChanged: travado ? null : (value) {
+            if (value != null) setState(() => _tipoMedidaCAPSelecionado = value);
+          },
+        ),
+      ],
+    );
+  }
 
    Widget _buildCalculadoraArea(double areaInclinada, double areaHorizontal) {
     final double areaParaExibir = (areaInclinada <= 0 && _areaAlvoDaParcela > 0)

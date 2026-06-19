@@ -179,6 +179,9 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
     'Descricao_Codigo_1',
     'Descricao_Codigo_2',
     'CAP_cm',
+    'Tipo_Medida_CAP',
+    'Suta_Diametro1_cm',
+    'Suta_Diametro2_cm',
     'Altura_m',
     'Altura_Dano_m',
     'Dominante',
@@ -255,6 +258,9 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
         null, // Codigo
         null, // Codigo 2
         null, // CAP
+        null, // Tipo_Medida_CAP
+        null, // Suta_Diametro1_cm
+        null, // Suta_Diametro2_cm
         null, // Altura
         null, // Altura Dano
         null, // Dominante
@@ -298,6 +304,9 @@ Future<String> _generateCsvParcelaDataInIsolate(_CsvParcelaPayload payload) asyn
           traduzirCodigo(a.codigo),                                   // Codigo_Arvore
           traduzirCodigo(a.codigo2),                            // Codigo_Arvore_2
           formatValue(a.cap, nf1),                    // CAP_cm
+          a.tipoMedidaCAP,                            // Tipo_Medida_CAP
+          formatValue(a.medidaSuta1, nf1),            // Suta_Diametro1_cm
+          formatValue(a.medidaSuta2, nf1),            // Suta_Diametro2_cm
           formatValue(a.altura, nf1),                 // Altura_m
           formatValue(a.alturaDano, nf1),             // Altura_Dano_m
           a.dominante ? 'Sim' : 'Não',                // Dominante

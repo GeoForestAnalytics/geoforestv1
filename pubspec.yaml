@@ -79,6 +79,7 @@ dependencies:
   flutter_image_compress: ^2.3.0
   native_exif: ^0.6.2
   printing: ^5.12.0
+  pdfrx: ^2.4.3
   
   
   

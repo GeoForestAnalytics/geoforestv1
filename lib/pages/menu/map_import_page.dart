@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geoforestv1/services/pdf_tile_provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/sample_point.dart';
@@ -262,10 +263,25 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
 
   AppBar _buildAppBar(MapProvider mapProvider) {
     final atividadeTipo = mapProvider.currentAtividade?.tipo ?? 'Planejamento';
+    final hasPdf = mapProvider.importedPdfPath != null;
 
     return AppBar(
       title: Text('Planejamento: $atividadeTipo'),
       actions: [
+        IconButton(
+          icon: Icon(
+            hasPdf ? Icons.picture_as_pdf : Icons.picture_as_pdf_outlined,
+            color: hasPdf
+                ? (mapProvider.showPdfOverlay ? Colors.orange : Colors.greenAccent)
+                : null,
+          ),
+          onPressed: hasPdf
+              ? () => context.read<MapProvider>().togglePdfOverlay()
+              : () => context.read<MapProvider>().importPdfOverlay(context),
+          tooltip: hasPdf
+              ? (mapProvider.showPdfOverlay ? 'Ocultar PDF' : 'Mostrar PDF')
+              : 'Importar PDF de Referência',
+        ),
         IconButton(
           icon: const Icon(Icons.share_outlined),
           onPressed: mapProvider.isLoading ? null : () => context.read<MapProvider>().exportarPlanoDeAmostragem(context),
@@ -285,6 +301,64 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
             onPressed: mapProvider.isLoading ? null : _handleImport,
             tooltip: 'Importar Arquivo'),
       ],
+    );
+  }
+
+  Widget _buildPdfControls(MapProvider mapProvider) {
+    if (!mapProvider.showPdfOverlay || mapProvider.pdfTilesDir == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      top: 10,
+      right: 10,
+      child: Card(
+        color: Colors.black.withValues(alpha: 0.65),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.opacity, color: Colors.white, size: 16),
+              SizedBox(
+                width: 110,
+                child: Slider(
+                  value: mapProvider.pdfOverlayOpacity,
+                  min: 0.1,
+                  max: 1.0,
+                  divisions: 9,
+                  onChanged: (v) => context.read<MapProvider>().setPdfOpacity(v),
+                ),
+              ),
+              GestureDetector(
+                onTap: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Remover PDF?'),
+                      content: const Text('O PDF de referência será removido do mapa.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancelar'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Remover'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true && mounted) {
+                    context.read<MapProvider>().clearPdfOverlay();
+                  }
+                },
+                child: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -320,9 +394,8 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
               initialCenter: const LatLng(-15.7, -47.8),
               initialZoom: 4,
               onPositionChanged: (position, hasGesture) {
-                if(hasGesture && mapProvider.isFollowingUser) {
-                  context.read<MapProvider>().toggleFollowingUser();
-                }
+                // O GPS não desliga mais por causa de um toque/arrasto acidental no
+                // mapa. Só para quando o usuário aperta o botão "Minha Localização".
               },
               onTap: (tapPosition, point) { if (isDrawing) mapProvider.addDrawnPoint(point); },
             ),
@@ -330,6 +403,19 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
               TileLayer(
                   urlTemplate: mapProvider.currentTileUrl,
                   userAgentPackageName: 'com.example.geoforestv1'),
+              if (mapProvider.showPdfOverlay &&
+                  mapProvider.pdfTilesDir != null &&
+                  mapProvider.pdfOverlayBounds != null)
+                Opacity(
+                  opacity: mapProvider.pdfOverlayOpacity,
+                  child: TileLayer(
+                    tileProvider: PdfTileProvider(tilesBasePath: mapProvider.pdfTilesDir!),
+                    tileBounds: mapProvider.pdfOverlayBounds,
+                    minNativeZoom: 13,
+                    maxNativeZoom: 17,
+                    tileDimension: 256,
+                  ),
+                ),
               if (mapProvider.polygons.isNotEmpty)
                 PolygonLayer(polygons: mapProvider.polygons),
               
@@ -432,6 +518,8 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
             ),
           
           _buildGoToInfoCard(mapProvider),
+
+          _buildPdfControls(mapProvider),
 
           if (!isDrawing)
             Positioned(

@@ -16,11 +16,11 @@ class Arvore {
   final int posicaoNaLinha;
   final bool fimDeLinha;
   bool dominante;
-  
+
   // Alterado para String
-  final String codigo; 
-  final String? codigo2; 
-  
+  final String codigo;
+  final String? codigo2;
+
   final String? codigo3;
   final String? especie;
   final int? tora;
@@ -30,41 +30,54 @@ class Arvore {
   final List<String> photoPaths;
   final DateTime? lastModified;
 
+  // Tipo de instrumento usado na medição do CAP: 'fita' (padrão) ou 'suta'.
+  final String tipoMedidaCAP;
+  // Medidas originais da suta (diâmetros perpendiculares), preservadas para auditoria/exportação.
+  final double? medidaSuta1;
+  final double? medidaSuta2;
+
   Arvore({
     this.id, required this.cap, this.altura, this.alturaDano, required this.linha,
     required this.posicaoNaLinha, this.fimDeLinha = false, this.dominante = false,
-    
+
     required this.codigo, // Obrigatório (String)
     this.codigo2,         // Opcional (String)
-    
+
     this.codigo3, this.especie, this.tora,
-    this.capAuditoria, this.alturaAuditoria, this.volume, 
-    this.photoPaths = const [], 
+    this.capAuditoria, this.alturaAuditoria, this.volume,
+    this.photoPaths = const [],
     this.lastModified,
+    this.tipoMedidaCAP = 'fita',
+    this.medidaSuta1,
+    this.medidaSuta2,
   });
 
   Arvore copyWith({
     int? id, double? cap, double? altura, double? alturaDano, int? linha,
-    int? posicaoNaLinha, bool? fimDeLinha, bool? dominante, 
-    String? codigo, 
+    int? posicaoNaLinha, bool? fimDeLinha, bool? dominante,
+    String? codigo,
     String? codigo2,
     String? codigo3, String? especie, int? tora, double? capAuditoria,
     double? alturaAuditoria, double? volume, List<String>? photoPaths,
     DateTime? lastModified,
+    String? tipoMedidaCAP, double? medidaSuta1, double? medidaSuta2,
   }) {
     return Arvore(
       id: id ?? this.id, cap: cap ?? this.cap, altura: altura ?? this.altura,
       alturaDano: alturaDano ?? this.alturaDano, linha: linha ?? this.linha,
       posicaoNaLinha: posicaoNaLinha ?? this.posicaoNaLinha,
       fimDeLinha: fimDeLinha ?? this.fimDeLinha, dominante: dominante ?? this.dominante,
-      codigo: codigo ?? this.codigo, 
+      codigo: codigo ?? this.codigo,
       codigo2: codigo2 ?? this.codigo2,
       codigo3: codigo3 ?? this.codigo3, especie: especie ?? this.especie, tora: tora ?? this.tora,
       capAuditoria: capAuditoria ?? this.capAuditoria,
       alturaAuditoria: alturaAuditoria ?? this.alturaAuditoria,
-      volume: volume ?? this.volume, 
+      volume: volume ?? this.volume,
       photoPaths: photoPaths ?? this.photoPaths,
       lastModified: lastModified ?? this.lastModified,
+      tipoMedidaCAP: tipoMedidaCAP ?? this.tipoMedidaCAP,
+      medidaSuta1: medidaSuta1 ?? this.medidaSuta1,
+      medidaSuta2: medidaSuta2 ?? this.medidaSuta2,
     );
   }
 
@@ -87,8 +100,11 @@ class Arvore {
       DbArvores.tora: tora,
       DbArvores.capAuditoria: capAuditoria,
       DbArvores.alturaAuditoria: alturaAuditoria,
-      DbArvores.photoPaths: jsonEncode(photoPaths), 
+      DbArvores.photoPaths: jsonEncode(photoPaths),
       DbArvores.lastModified: lastModified?.toIso8601String(),
+      DbArvores.tipoMedidaCAP: tipoMedidaCAP,
+      DbArvores.medidaSuta1: medidaSuta1,
+      DbArvores.medidaSuta2: medidaSuta2,
     };
   }
 
@@ -134,6 +150,9 @@ class Arvore {
       alturaAuditoria: (map[DbArvores.alturaAuditoria] as num?)?.toDouble(),
       photoPaths: paths,
       lastModified: parseDate(map[DbArvores.lastModified]),
+      tipoMedidaCAP: map[DbArvores.tipoMedidaCAP]?.toString() ?? 'fita',
+      medidaSuta1: (map[DbArvores.medidaSuta1] as num?)?.toDouble(),
+      medidaSuta2: (map[DbArvores.medidaSuta2] as num?)?.toDouble(),
     );
   }
 }

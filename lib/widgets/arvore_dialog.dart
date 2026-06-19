@@ -2,6 +2,7 @@
 // Arquivo: lib\widgets\arvore_dialog.dart
 // ================================================================================
 
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/especie_model.dart';
@@ -40,6 +41,8 @@ class ArvoreDialog extends StatefulWidget {
   final String idParcela;
   
   final String? atividadeTipo;
+  // Instrumento de medição definido no cabeçalho da amostra: 'fita' ou 'suta'. Vale para todas as árvores da parcela.
+  final String tipoMedidaCAP;
 
   const ArvoreDialog({
     super.key,
@@ -53,6 +56,7 @@ class ArvoreDialog extends StatefulWidget {
     required this.talhaoNome,
     required this.idParcela,
     this.atividadeTipo,
+    this.tipoMedidaCAP = 'fita',
   });
 
   bool get isEditing => arvoreParaEditar != null && !isAdicionandoFuste;
@@ -65,6 +69,8 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   final _formKey = GlobalKey<FormState>();
   
   final _capController = TextEditingController();
+  final _sutaD1Controller = TextEditingController();
+  final _sutaD2Controller = TextEditingController();
   final _alturaController = TextEditingController();
   final _linhaController = TextEditingController();
   final _posicaoController = TextEditingController();
@@ -94,6 +100,8 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
 
     if (widget.arvoreParaEditar != null) {
       _capController.text = (widget.arvoreParaEditar!.cap > 0) ? widget.arvoreParaEditar!.cap.toString().replaceAll('.', ',') : '';
+      _sutaD1Controller.text = widget.arvoreParaEditar!.medidaSuta1?.toString().replaceAll('.', ',') ?? '';
+      _sutaD2Controller.text = widget.arvoreParaEditar!.medidaSuta2?.toString().replaceAll('.', ',') ?? '';
       _alturaController.text = widget.arvoreParaEditar!.altura?.toString().replaceAll('.', ',') ?? '';
       _alturaDanoController.text = widget.arvoreParaEditar!.alturaDano?.toString().replaceAll('.', ',') ?? '';
       _especieController.text = widget.arvoreParaEditar!.especie ?? '';
@@ -168,7 +176,9 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     if (_regraAtual == null) return;
 
     if (_regraAtual!.capBloqueado) {
-      _capController.text = "0"; 
+      _capController.text = "0";
+      _sutaD1Controller.clear();
+      _sutaD2Controller.clear();
     } else if (_capController.text == "0") {
       _capController.clear();
     }
@@ -266,6 +276,8 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   @override
   void dispose() {
     _capController.dispose();
+    _sutaD1Controller.dispose();
+    _sutaD2Controller.dispose();
     _alturaController.dispose();
     _linhaController.dispose();
     _posicaoController.dispose();
@@ -282,7 +294,19 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         return;
       }
 
-      final double cap = double.tryParse(_capController.text.replaceAll(',', '.')) ?? 0.0;
+      double cap;
+      double? medidaSuta1;
+      double? medidaSuta2;
+      if (widget.tipoMedidaCAP == 'suta') {
+        final double d1 = double.tryParse(_sutaD1Controller.text.replaceAll(',', '.')) ?? 0.0;
+        final double d2 = double.tryParse(_sutaD2Controller.text.replaceAll(',', '.')) ?? 0.0;
+        medidaSuta1 = d1;
+        medidaSuta2 = d2;
+        final double dapMedio = (d1 + d2) / 2;
+        cap = dapMedio * pi; // Converte para CAP equivalente, mantendo compatibilidade com o resto do app
+      } else {
+        cap = double.tryParse(_capController.text.replaceAll(',', '.')) ?? 0.0;
+      }
       final double? altura = _alturaController.text.isNotEmpty ? double.tryParse(_alturaController.text.replaceAll(',', '.')) : null;
       final double? alturaDano = _alturaDanoController.text.isNotEmpty ? double.tryParse(_alturaDanoController.text.replaceAll(',', '.')) : null;
       final int linha = int.tryParse(_linhaController.text) ?? widget.linhaAtual;
@@ -313,8 +337,11 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         codigo2: codigo2ParaSalvar, 
         fimDeLinha: _fimDeLinha,
         dominante: isDominante,
-        photoPaths: _fotosArvore, 
+        photoPaths: _fotosArvore,
         lastModified: DateTime.now(),
+        tipoMedidaCAP: widget.tipoMedidaCAP,
+        medidaSuta1: medidaSuta1,
+        medidaSuta2: medidaSuta2,
       );
 
       // Lógica de retorno baseada nos botões
@@ -475,37 +502,80 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                   const SizedBox(height: 8),
                 ],
 
-                // LINHA 4: CAP | ALTURA (AGORA JUNTOS)
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _capController,
-                        enabled: capHabilitado,
-                        autofocus: true, // Foco aqui para agilizar
-                        decoration: _compactInput('CAP', suffix: 'cm').copyWith(
-                          fillColor: !capHabilitado ? Colors.grey[200] : null,
-                          filled: !capHabilitado,
+                // LINHA 4: CAP/SUTA | ALTURA (instrumento definido no cabeçalho da amostra)
+                if (widget.tipoMedidaCAP == 'suta') ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _sutaD1Controller,
+                          enabled: capHabilitado,
+                          autofocus: true,
+                          decoration: _compactInput('Diâm. 1', suffix: 'cm').copyWith(
+                            fillColor: !capHabilitado ? Colors.grey[200] : null,
+                            filled: !capHabilitado,
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          validator: (v) => (capHabilitado && (v == null || v.isEmpty)) ? '!' : null,
                         ),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        validator: (v) => (capHabilitado && (v == null || v.isEmpty)) ? '!' : null,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _alturaController,
-                        enabled: alturaHabilitada,
-                        decoration: _compactInput('Altura', suffix: alturaObrigatoria ? '* m' : 'm').copyWith(
-                          fillColor: !alturaHabilitada ? Colors.grey[200] : null,
-                          filled: !alturaHabilitada,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _sutaD2Controller,
+                          enabled: capHabilitado,
+                          decoration: _compactInput('Diâm. 2', suffix: 'cm').copyWith(
+                            fillColor: !capHabilitado ? Colors.grey[200] : null,
+                            filled: !capHabilitado,
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          validator: (v) => (capHabilitado && (v == null || v.isEmpty)) ? '!' : null,
                         ),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        validator: (v) => (alturaObrigatoria && (v == null || v.isEmpty)) ? '!' : null,
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _alturaController,
+                    enabled: alturaHabilitada,
+                    decoration: _compactInput('Altura', suffix: alturaObrigatoria ? '* m' : 'm').copyWith(
+                      fillColor: !alturaHabilitada ? Colors.grey[200] : null,
+                      filled: !alturaHabilitada,
                     ),
-                  ],
-                ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) => (alturaObrigatoria && (v == null || v.isEmpty)) ? '!' : null,
+                  ),
+                ] else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _capController,
+                          enabled: capHabilitado,
+                          autofocus: true, // Foco aqui para agilizar
+                          decoration: _compactInput('CAP', suffix: 'cm').copyWith(
+                            fillColor: !capHabilitado ? Colors.grey[200] : null,
+                            filled: !capHabilitado,
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          validator: (v) => (capHabilitado && (v == null || v.isEmpty)) ? '!' : null,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _alturaController,
+                          enabled: alturaHabilitada,
+                          decoration: _compactInput('Altura', suffix: alturaObrigatoria ? '* m' : 'm').copyWith(
+                            fillColor: !alturaHabilitada ? Colors.grey[200] : null,
+                            filled: !alturaHabilitada,
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          validator: (v) => (alturaObrigatoria && (v == null || v.isEmpty)) ? '!' : null,
+                        ),
+                      ),
+                    ],
+                  ),
                 
                 // ALTURA DE DANO (CONDICIONAL)
                 if (mostraDano) ...[
@@ -546,7 +616,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                     ),
                     
                     // Switch Fim de Linha
-                    if (!widget.isEditing && !permiteFuste)
+                    if (!widget.isEditing && !_bloquearConclusao)
                       Row(
                         children: [
                           const Text("Fim de linha? ", style: TextStyle(fontSize: 12)),

@@ -53,6 +53,8 @@ class Parcela {
   List<String> photoPaths;
   List<Arvore> arvores;
   final DateTime? lastModified;
+  // Instrumento padrão da amostra: 'fita' (CAP) ou 'suta' (DAP). Vale para todas as árvores da parcela.
+  final String tipoMedidaCAP;
 
   Parcela({
     this.dbId, String? uuid, required this.talhaoId, required this.idParcela,
@@ -64,6 +66,7 @@ class Parcela {
     this.up, this.referenciaRf, this.ciclo, this.rotacao, this.tipoParcela,
     this.formaParcela, this.lado1, this.lado2, this.declividade,
     this.photoPaths = const [], this.arvores = const [], this.lastModified,
+    this.tipoMedidaCAP = 'fita',
   }) : uuid = uuid ?? const Uuid().v4();
 
   Parcela copyWith({
@@ -74,7 +77,7 @@ class Parcela {
     String? municipio, String? estado, String? atividadeTipo, String? up,
     String? referenciaRf, String? ciclo, int? rotacao, String? tipoParcela,
     String? formaParcela, double? lado1, double? lado2, double? declividade, List<String>? photoPaths,
-    List<Arvore>? arvores, DateTime? lastModified,
+    List<Arvore>? arvores, DateTime? lastModified, String? tipoMedidaCAP,
   }) {
     return Parcela(
       dbId: dbId ?? this.dbId, uuid: uuid ?? this.uuid, talhaoId: talhaoId ?? this.talhaoId,
@@ -82,17 +85,18 @@ class Parcela {
       nomeTalhao: nomeTalhao ?? this.nomeTalhao, idParcela: idParcela ?? this.idParcela,
       areaMetrosQuadrados: areaMetrosQuadrados ?? this.areaMetrosQuadrados, observacao: observacao ?? this.observacao,
       latitude: latitude ?? this.latitude, longitude: longitude ?? this.longitude,
-      altitude: altitude ?? this.altitude, dataColeta: dataColeta ?? this.dataColeta, 
-      status: status ?? this.status, exportada: exportada ?? this.exportada, 
-      isSynced: isSynced ?? this.isSynced, nomeLider: nomeLider ?? this.nomeLider, 
-      projetoId: projetoId ?? this.projetoId, municipio: municipio ?? this.municipio, 
-      estado: estado ?? this.estado, atividadeTipo: atividadeTipo ?? this.atividadeTipo, 
+      altitude: altitude ?? this.altitude, dataColeta: dataColeta ?? this.dataColeta,
+      status: status ?? this.status, exportada: exportada ?? this.exportada,
+      isSynced: isSynced ?? this.isSynced, nomeLider: nomeLider ?? this.nomeLider,
+      projetoId: projetoId ?? this.projetoId, municipio: municipio ?? this.municipio,
+      estado: estado ?? this.estado, atividadeTipo: atividadeTipo ?? this.atividadeTipo,
       up: up ?? this.up, referenciaRf: referenciaRf ?? this.referenciaRf, ciclo: ciclo ?? this.ciclo,
       rotacao: rotacao ?? this.rotacao, tipoParcela: tipoParcela ?? this.tipoParcela,
       formaParcela: formaParcela ?? this.formaParcela, lado1: lado1 ?? this.lado1,
       lado2: lado2 ?? this.lado2, declividade: declividade ?? this.declividade,
-      photoPaths: photoPaths ?? this.photoPaths, arvores: arvores ?? this.arvores, 
+      photoPaths: photoPaths ?? this.photoPaths, arvores: arvores ?? this.arvores,
       lastModified: lastModified ?? this.lastModified,
+      tipoMedidaCAP: tipoMedidaCAP ?? this.tipoMedidaCAP,
     );
   }
 
@@ -116,7 +120,8 @@ class Parcela {
       DbParcelas.formaParcela: formaParcela, DbParcelas.lado1: lado1, DbParcelas.lado2: lado2,
       DbParcelas.declividade: declividade, DbParcelas.photoPaths: jsonEncode(photoPaths),
       'arvores': arvores.map((a) => a.toMap()).toList(), // Firestore aceita List de Map diretamente
-      DbParcelas.lastModified: lastModified?.toIso8601String()
+      DbParcelas.lastModified: lastModified?.toIso8601String(),
+      DbParcelas.tipoMedidaCAP: tipoMedidaCAP,
     };
   }
 
@@ -194,6 +199,7 @@ class Parcela {
     declividade: (map[DbParcelas.declividade] as num?)?.toDouble(),
     photoPaths: paths,
     lastModified: parseDate(map[DbParcelas.lastModified]),
+    tipoMedidaCAP: map[DbParcelas.tipoMedidaCAP]?.toString() ?? 'fita',
   );
 }
 }
