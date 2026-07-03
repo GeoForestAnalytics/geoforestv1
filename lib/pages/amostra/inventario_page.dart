@@ -622,7 +622,7 @@ class _InventarioPageState extends State<InventarioPage> {
                 _buildHeaderRow(),
                 Expanded(
                   child: _arvoresColetadas.isEmpty
-                    ? Center(child: Text(_isReadOnly ? 'Esta parcela foi finalizada sem árvores.' : 'Clique no botão "+" para adicionar a primeira árvore.', style: const TextStyle(color: Colors.grey, fontSize: 16)))
+                    ? Center(child: Text(_isReadOnly ? 'Esta parcela foi finalizada sem árvores.' : 'Clique no botão "+" para adicionar a primeira árvore.', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6), fontSize: 16)))
                     : SlidableAutoCloseBehavior(
                         child: ListView.builder(
                           padding: EdgeInsets.zero,
@@ -755,9 +755,10 @@ class _InventarioPageState extends State<InventarioPage> {
 
   Widget _buildHeaderRow() {
     final theme = Theme.of(context);
+    final baseColor = theme.textTheme.labelMedium?.color ?? theme.colorScheme.onSurface;
     final headerStyle = theme.textTheme.labelMedium?.copyWith(
       fontWeight: FontWeight.bold,
-      color: theme.colorScheme.onSurface.withOpacity(0.6),
+      color: baseColor.withOpacity(0.7),
       letterSpacing: 0.5,
     );
 
@@ -780,13 +781,14 @@ class _InventarioPageState extends State<InventarioPage> {
   }
 
   Widget _buildStatRow(String label, String value) {
+    final baseColor = Theme.of(context).textTheme.bodyMedium?.color ?? Theme.of(context).colorScheme.onSurface;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey[700])),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(label, style: TextStyle(color: baseColor.withOpacity(0.7))),
+          Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: baseColor)),
         ],
       ),
     );

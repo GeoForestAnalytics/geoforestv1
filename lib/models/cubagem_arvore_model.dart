@@ -25,6 +25,7 @@ class CubagemArvore {
   final double? longitude;
   final String? metodoCubagem;
   final String? rf;
+  final double passoFixo;
   final DateTime? dataColeta;
   final DateTime? lastModified;
   
@@ -51,6 +52,7 @@ class CubagemArvore {
     this.longitude,
     this.metodoCubagem,
     this.rf,
+    this.passoFixo = 2.0,
     this.dataColeta,
     this.lastModified,
     this.secoes = const [], // <--- NOVO: Inicializar como lista vazia
@@ -61,8 +63,9 @@ class CubagemArvore {
     String? identificador, String? classe, bool? exportada, bool? isSynced,
     String? nomeLider, double? alturaTotal, String? tipoMedidaCAP, double? valorCAP,
     double? alturaBase, String? observacao, double? latitude, double? longitude,
-    String? metodoCubagem, String? rf, DateTime? dataColeta, DateTime? lastModified,
-    List<CubagemSecao>? secoes, // <--- NOVO
+    String? metodoCubagem, String? rf, double? passoFixo,
+    DateTime? dataColeta, DateTime? lastModified,
+    List<CubagemSecao>? secoes,
   }) {
     return CubagemArvore(
       id: id ?? this.id,
@@ -84,9 +87,10 @@ class CubagemArvore {
       longitude: longitude ?? this.longitude,
       metodoCubagem: metodoCubagem ?? this.metodoCubagem,
       rf: rf ?? this.rf,
+      passoFixo: passoFixo ?? this.passoFixo,
       dataColeta: dataColeta ?? this.dataColeta,
       lastModified: lastModified ?? this.lastModified,
-      secoes: secoes ?? this.secoes, // <--- NOVO
+      secoes: secoes ?? this.secoes,
     );
   }
 
@@ -107,7 +111,8 @@ class CubagemArvore {
       DbCubagensArvores.latitude: latitude,
       DbCubagensArvores.longitude: longitude,
       DbCubagensArvores.metodoCubagem: metodoCubagem,
-      DbCubagensArvores.rf: rf,      
+      DbCubagensArvores.rf: rf,
+      DbCubagensArvores.passoFixo: passoFixo,
       DbCubagensArvores.dataColeta: dataColeta?.toIso8601String() ?? (alturaTotal > 0 ? DateTime.now().toIso8601String() : null),      
       DbCubagensArvores.exportada: exportada ? 1 : 0,
       DbCubagensArvores.isSynced: isSynced ? 1 : 0,
@@ -155,6 +160,7 @@ class CubagemArvore {
       longitude: (map[DbCubagensArvores.longitude] as num?)?.toDouble(),
       metodoCubagem: map[DbCubagensArvores.metodoCubagem],
       rf: map[DbCubagensArvores.rf],
+      passoFixo: (map[DbCubagensArvores.passoFixo] as num?)?.toDouble() ?? 2.0,
       dataColeta: parseDate(map[DbCubagensArvores.dataColeta]),
       exportada: map[DbCubagensArvores.exportada] == 1,
       isSynced: map[DbCubagensArvores.isSynced] == 1,

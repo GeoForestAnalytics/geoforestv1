@@ -46,6 +46,8 @@ class Parcela {
   final String? observacao;
   final double? latitude;
   final double? longitude;
+  final double? latitudePlanejada;
+  final double? longitudePlanejada;
   final double? altitude;
   StatusParcela status;
   bool exportada;
@@ -60,6 +62,7 @@ class Parcela {
     this.dbId, String? uuid, required this.talhaoId, required this.idParcela,
     required this.areaMetrosQuadrados, this.idFazenda, this.nomeFazenda,
     this.nomeTalhao, this.observacao, this.latitude, this.longitude,
+    this.latitudePlanejada, this.longitudePlanejada,
     this.altitude, this.dataColeta, this.status = StatusParcela.pendente,
     this.exportada = false, this.isSynced = false, this.nomeLider,
     this.projetoId, this.municipio, this.estado, this.atividadeTipo,
@@ -72,7 +75,8 @@ class Parcela {
   Parcela copyWith({
     int? dbId, String? uuid, int? talhaoId, String? idFazenda, String? nomeFazenda,
     String? nomeTalhao, String? idParcela, double? areaMetrosQuadrados, String? observacao,
-    double? latitude, double? longitude,double? altitude, DateTime? dataColeta, StatusParcela? status,
+    double? latitude, double? longitude, double? latitudePlanejada, double? longitudePlanejada,
+    double? altitude, DateTime? dataColeta, StatusParcela? status,
     bool? exportada, bool? isSynced, String? nomeLider, int? projetoId,
     String? municipio, String? estado, String? atividadeTipo, String? up,
     String? referenciaRf, String? ciclo, int? rotacao, String? tipoParcela,
@@ -85,6 +89,8 @@ class Parcela {
       nomeTalhao: nomeTalhao ?? this.nomeTalhao, idParcela: idParcela ?? this.idParcela,
       areaMetrosQuadrados: areaMetrosQuadrados ?? this.areaMetrosQuadrados, observacao: observacao ?? this.observacao,
       latitude: latitude ?? this.latitude, longitude: longitude ?? this.longitude,
+      latitudePlanejada: latitudePlanejada ?? this.latitudePlanejada,
+      longitudePlanejada: longitudePlanejada ?? this.longitudePlanejada,
       altitude: altitude ?? this.altitude, dataColeta: dataColeta ?? this.dataColeta,
       status: status ?? this.status, exportada: exportada ?? this.exportada,
       isSynced: isSynced ?? this.isSynced, nomeLider: nomeLider ?? this.nomeLider,
@@ -106,8 +112,9 @@ class Parcela {
       DbParcelas.idFazenda: idFazenda, DbParcelas.nomeFazenda: nomeFazenda, 
       DbParcelas.nomeTalhao: nomeTalhao, DbParcelas.idParcela: idParcela,
       DbParcelas.areaMetrosQuadrados: areaMetrosQuadrados, DbParcelas.observacao: observacao,
-      DbParcelas.latitude: latitude, DbParcelas.longitude: longitude, 
-      DbParcelas.altitude: altitude, 
+      DbParcelas.latitude: latitude, DbParcelas.longitude: longitude,
+      DbParcelas.latitudePlanejada: latitudePlanejada, DbParcelas.longitudePlanejada: longitudePlanejada,
+      DbParcelas.altitude: altitude,
       
       // >>> CORREÇÃO 1: Se estiver concluída mas sem data, insere data de agora <<<
       DbParcelas.dataColeta: dataColeta?.toIso8601String() ?? (status == StatusParcela.concluida ? DateTime.now().toIso8601String() : null),
@@ -167,6 +174,8 @@ class Parcela {
     observacao: map[DbParcelas.observacao],
     latitude: (map[DbParcelas.latitude] as num?)?.toDouble(),
     longitude: (map[DbParcelas.longitude] as num?)?.toDouble(),
+    latitudePlanejada: (map[DbParcelas.latitudePlanejada] as num?)?.toDouble(),
+    longitudePlanejada: (map[DbParcelas.longitudePlanejada] as num?)?.toDouble(),
     altitude: (map[DbParcelas.altitude] as num?)?.toDouble(),
     dataColeta: parseDate(map[DbParcelas.dataColeta]),
     arvores: listaArvores,

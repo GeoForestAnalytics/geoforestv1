@@ -318,7 +318,7 @@ class MapProvider with ChangeNotifier {
   }
 
   Future<void> importPdfOverlay(BuildContext context) async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
     );

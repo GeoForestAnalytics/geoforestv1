@@ -1,6 +1,8 @@
 // lib/data/repositories/import_repository.dart
 
+import 'dart:convert';
 import 'package:csv/csv.dart';
+import 'package:excel/excel.dart' hide Border;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -66,37 +68,87 @@ class ImportRepository {
     return (null, TipoImportacao.desconhecido);
   }
 
-  /// Função principal que coordena a importação.
-  Future<String> importarCsvUniversal({
-    required String csvContent,
-    required int projetoIdAlvo,
-  }) async {
-    final Projeto? projeto = await _projetoRepository.getProjetoById(projetoIdAlvo);
-    if (projeto == null) return "Erro Crítico: O projeto de destino não foi encontrado.";
-    if (csvContent.isEmpty) return "Erro: O arquivo CSV está vazio.";
-    
+  /// Lê os cabeçalhos e as linhas de dados de um arquivo CSV (texto) já decodificado.
+  (List<String>, List<Map<String, dynamic>>)? _lerLinhasCsv(String csvContent) {
+    if (csvContent.isEmpty) return null;
+
     final firstLine = csvContent.split('\n').first;
     final commaCount = ','.allMatches(firstLine).length;
     final semicolonCount = ';'.allMatches(firstLine).length;
     final tabCount = '\t'.allMatches(firstLine).length;
-    
+
     String detectedDelimiter = ';';
     if (commaCount > semicolonCount && commaCount > tabCount) detectedDelimiter = ',';
     else if (tabCount > semicolonCount && tabCount > commaCount) detectedDelimiter = '\t';
-    
+
     final List<List<dynamic>> rows = CsvToListConverter(
-      fieldDelimiter: detectedDelimiter, 
-      eol: '\n', 
+      fieldDelimiter: detectedDelimiter,
+      eol: '\n',
       allowInvalid: true
     ).convert(csvContent);
-    
-    if (rows.length < 2) return "Erro: O arquivo CSV está vazio ou contém apenas o cabeçalho.";
-    
+
+    if (rows.length < 2) return null;
+
     final headers = rows.first.map((h) => h.toString().trim().toLowerCase()).toList();
     final dataRows = rows.sublist(1)
       .where((row) => row.any((cell) => cell != null && cell.toString().trim().isNotEmpty))
       .map((row) => Map<String, dynamic>.fromIterables(headers, row))
       .toList();
+
+    return (headers, dataRows);
+  }
+
+  /// Lê os cabeçalhos e as linhas de dados da primeira aba de um arquivo XLSX.
+  (List<String>, List<Map<String, dynamic>>)? _lerLinhasXlsx(List<int> bytes) {
+    final excelFile = Excel.decodeBytes(bytes);
+    if (excelFile.tables.isEmpty) return null;
+
+    final sheet = excelFile.tables[excelFile.tables.keys.first]!;
+    final linhasPlanilha = sheet.rows;
+    if (linhasPlanilha.length < 2) return null;
+
+    final headers = linhasPlanilha.first
+      .map((cell) => (cell?.value?.toString() ?? '').trim().toLowerCase())
+      .toList();
+
+    final dataRows = linhasPlanilha.sublist(1)
+      .where((row) => row.any((cell) => cell?.value != null && cell!.value.toString().trim().isNotEmpty))
+      .map((row) {
+        final valores = row.map((cell) => cell?.value?.toString()).toList();
+        return Map<String, dynamic>.fromIterables(headers, valores);
+      })
+      .toList();
+
+    return (headers, dataRows);
+  }
+
+  /// Função principal que coordena a importação. Aceita arquivos .csv ou .xlsx.
+  Future<String> importarArquivoUniversal({
+    required List<int> bytes,
+    required String nomeArquivo,
+    required int projetoIdAlvo,
+  }) async {
+    final Projeto? projeto = await _projetoRepository.getProjetoById(projetoIdAlvo);
+    if (projeto == null) return "Erro Crítico: O projeto de destino não foi encontrado.";
+    if (bytes.isEmpty) return "Erro: O arquivo está vazio.";
+
+    final extensao = nomeArquivo.toLowerCase().split('.').last;
+    final (List<String>, List<Map<String, dynamic>>)? linhas;
+    if (extensao == 'xlsx') {
+      linhas = _lerLinhasXlsx(bytes);
+    } else {
+      String csvContent;
+      try {
+        csvContent = utf8.decode(bytes);
+      } catch (_) {
+        csvContent = latin1.decode(bytes);
+      }
+      linhas = _lerLinhasCsv(csvContent);
+    }
+
+    if (linhas == null) return "Erro: O arquivo está vazio ou contém apenas o cabeçalho.";
+    final headers = linhas.$1;
+    final dataRows = linhas.$2;
 
     try {
       final prefs = await SharedPreferences.getInstance();

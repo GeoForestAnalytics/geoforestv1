@@ -42,7 +42,7 @@ dependencies:
   path: ^1.9.0
   path_provider: ^2.1.5
   path_provider_android: ^2.2.4
-  shared_preferences: ^2.3.2
+  shared_preferences: ^2.5.5
   device_info_plus: ^11.5.0
   permission_handler: ^12.0.1
   go_router: ^14.2.0
@@ -51,12 +51,12 @@ dependencies:
   http: ^1.2.0
 
   # --- ARQUIVOS E COMPARTILHAMENTO ---
-  file_picker: ^10.2.0
+  file_picker: ^11.0.2
   share_plus: ^11.0.0
   csv: ^6.0.0
   pdf: ^3.10.8
   open_file: ^3.5.10
-  flutter_archive: ^6.0.3 # Para ZIP
+  flutter_archive: ^6.3.1 # Para ZIP
   gal: ^2.2.0 # Galeria
 
   # --- COMPONENTES VISUAIS ---
@@ -64,7 +64,7 @@ dependencies:
   flutter_speed_dial: ^7.0.0
   google_fonts: ^6.1.0
   flutter_animate: ^4.5.0
-  audioplayers: ^6.1.0
+  audioplayers: ^6.8.0
   fl_chart: ^0.69.0
   pie_chart: ^5.4.0
   url_launcher: ^6.3.2
@@ -80,6 +80,7 @@ dependencies:
   native_exif: ^0.6.2
   printing: ^5.12.0
   pdfrx: ^2.4.3
+  excel: ^4.0.6
   
   
   

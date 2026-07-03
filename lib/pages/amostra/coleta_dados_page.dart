@@ -58,6 +58,8 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   bool _buscandoLocalizacao = false;
   String? _erroLocalizacao;
   bool _salvando = false;
+  bool _gpsCapturadoNaSessao = false;
+  bool _continuouSemGps = false;
   FormaParcela _formaDaParcela = FormaParcela.retangular;
   bool _isModoEdicao = false;
   final ImagePicker _picker = ImagePicker();
@@ -376,7 +378,15 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
   Future<void> _salvarEIniciarColeta() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
+    if (!_gpsCapturadoNaSessao) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Capture a localização GPS antes de iniciar a coleta.'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+
     final parcelaParaSalvar = _construirObjetoParcelaParaSalvar();
 
     if (parcelaParaSalvar.areaMetrosQuadrados <= 0) {
@@ -412,6 +422,15 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
   Future<void> _finalizarParcelaVazia() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (!_gpsCapturadoNaSessao) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Capture a localização GPS antes de finalizar a parcela.'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -470,11 +489,21 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
   Future<void> _navegarParaInventario() async {
     if (_salvando) return;
-    
+
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    
+
+    if (_parcelaAtual.status == StatusParcela.pendente &&
+        !_gpsCapturadoNaSessao &&
+        !_continuouSemGps) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Capture a localização GPS antes de iniciar a coleta.'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+
     final parcelaParaNavegar = _construirObjetoParcelaParaSalvar();
     
     if (parcelaParaNavegar.areaMetrosQuadrados <= 0) {
@@ -516,6 +545,38 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
   }
 
+  Future<void> _continuarSemGps() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Continuar sem GPS?'),
+        content: const Text(
+          'A parcela será iniciada sem coordenada GPS atualizada. '
+          'Isso ficará visível no relatório como "sem GPS capturado".',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            child: const Text('Continuar sem GPS'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar == true && mounted) {
+      setState(() {
+        _gpsCapturadoNaSessao = true;
+        _continuouSemGps = true;
+        _erroLocalizacao = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Parcela será iniciada sem GPS capturado.'),
+        backgroundColor: Colors.orange,
+      ));
+    }
+  }
+
   Future<void> _obterLocalizacaoAtual() async {
     if (_isReadOnly) return;
     setState(() { _buscandoLocalizacao = true; _erroLocalizacao = null; });
@@ -533,6 +594,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
       
       setState(() {
         _posicaoAtualExibicao = position;
+        _gpsCapturadoNaSessao = true;
         _parcelaAtual = _parcelaAtual.copyWith(
           latitude: position.latitude,
           longitude: position.longitude,
@@ -835,9 +897,123 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
   }
 
 
+  double _calcularDistanciaMetros(double lat1, double lon1, double lat2, double lon2) {
+    const r = 6371000.0;
+    final phi1 = lat1 * math.pi / 180;
+    final phi2 = lat2 * math.pi / 180;
+    final dPhi = (lat2 - lat1) * math.pi / 180;
+    final dLambda = (lon2 - lon1) * math.pi / 180;
+    final a = math.sin(dPhi / 2) * math.sin(dPhi / 2) +
+        math.cos(phi1) * math.cos(phi2) * math.sin(dLambda / 2) * math.sin(dLambda / 2);
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
   Widget _buildColetorCoordenadas() {
     final latExibicao = _posicaoAtualExibicao?.latitude ?? _parcelaAtual.latitude;
     final lonExibicao = _posicaoAtualExibicao?.longitude ?? _parcelaAtual.longitude;
+
+    // 3 estados visuais
+    final Color corBorda;
+    final Color corIcone;
+    if (_continuouSemGps) {
+      corBorda = Colors.orange.shade400;
+      corIcone = Colors.orange.shade700;
+    } else if (!_gpsCapturadoNaSessao) {
+      corBorda = Colors.red.shade400;
+      corIcone = Colors.red.shade600;
+    } else {
+      corBorda = Colors.grey;
+      corIcone = const Color(0xFF1D4433);
+    }
+
+    double? distanciaMetros;
+    if (_gpsCapturadoNaSessao && !_continuouSemGps &&
+        _posicaoAtualExibicao != null &&
+        _parcelaAtual.latitudePlanejada != null &&
+        _parcelaAtual.longitudePlanejada != null) {
+      distanciaMetros = _calcularDistanciaMetros(
+        _posicaoAtualExibicao!.latitude,
+        _posicaoAtualExibicao!.longitude,
+        _parcelaAtual.latitudePlanejada!,
+        _parcelaAtual.longitudePlanejada!,
+      );
+    }
+
+    Widget conteudo;
+    if (_buscandoLocalizacao) {
+      conteudo = const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        CircularProgressIndicator(),
+        SizedBox(width: 16),
+        Text('Buscando GPS...'),
+      ]);
+    } else if (_erroLocalizacao != null) {
+      conteudo = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('GPS falhou: $_erroLocalizacao', style: TextStyle(color: Colors.red.shade700)),
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          OutlinedButton.icon(
+            onPressed: _obterLocalizacaoAtual,
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('Tentar novamente'),
+          ),
+          if (!_isReadOnly)
+            TextButton.icon(
+              onPressed: _continuarSemGps,
+              icon: Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade700),
+              label: Text('Continuar sem GPS', style: TextStyle(color: Colors.orange.shade700)),
+            ),
+        ]),
+      ]);
+    } else if (_continuouSemGps) {
+      conteudo = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.gps_off, size: 16, color: Colors.orange.shade700),
+          const SizedBox(width: 6),
+          Text('Sem GPS capturado', style: TextStyle(color: Colors.orange.shade800, fontWeight: FontWeight.bold)),
+        ]),
+        if (latExibicao != null) ...[
+          const SizedBox(height: 4),
+          Text('Lat: ${latExibicao.toStringAsFixed(6)}', style: TextStyle(color: Colors.grey.shade600)),
+          Text('Lon: ${lonExibicao!.toStringAsFixed(6)}', style: TextStyle(color: Colors.grey.shade600)),
+        ],
+      ]);
+    } else if (latExibicao == null) {
+      conteudo = Text(
+        'Pressione o botão ao lado para capturar o GPS.',
+        style: TextStyle(color: Colors.red.shade700),
+      );
+    } else {
+      conteudo = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Lat: ${latExibicao.toStringAsFixed(6)}',
+            style: TextStyle(fontWeight: FontWeight.bold,
+                color: _gpsCapturadoNaSessao ? null : Colors.red.shade700)),
+        Text('Lon: ${lonExibicao!.toStringAsFixed(6)}',
+            style: TextStyle(fontWeight: FontWeight.bold,
+                color: _gpsCapturadoNaSessao ? null : Colors.red.shade700)),
+        if (_posicaoAtualExibicao != null && _posicaoAtualExibicao!.accuracy > 0)
+          Text('Precisão: ±${_posicaoAtualExibicao!.accuracy.toStringAsFixed(1)}m',
+              style: TextStyle(color: Colors.grey[700])),
+        if (distanciaMetros != null) ...[
+          const SizedBox(height: 4),
+          Row(children: [
+            Icon(
+              distanciaMetros > 30 ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+              size: 14,
+              color: distanciaMetros > 30 ? Colors.orange.shade700 : Colors.green.shade600,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'Distância do ponto planejado: ${distanciaMetros.toStringAsFixed(1)} m',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: distanciaMetros > 30 ? Colors.orange.shade800 : Colors.green.shade700,
+              ),
+            ),
+          ]),
+        ],
+      ]);
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -846,23 +1022,17 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)),
-          child: Row(children: [
-            Expanded(
-              child: _buscandoLocalizacao
-                ? const Row(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Buscando...')])
-                : _erroLocalizacao != null
-                  ? Text('Erro: $_erroLocalizacao', style: const TextStyle(color: Colors.red))
-                  : (latExibicao == null)
-                    ? const Text('Nenhuma localização obtida.')
-                    : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('Lat: ${latExibicao.toStringAsFixed(6)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text('Lon: ${lonExibicao!.toStringAsFixed(6)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        if (_posicaoAtualExibicao != null && _posicaoAtualExibicao!.accuracy > 0)
-                          Text('Precisão: ±${_posicaoAtualExibicao!.accuracy.toStringAsFixed(1)}m', style: TextStyle(color: Colors.grey[700])),
-                      ]),
+          decoration: BoxDecoration(
+            border: Border.all(color: corBorda, width: 1.5),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: conteudo),
+            IconButton(
+              icon: Icon(Icons.my_location, color: corIcone),
+              onPressed: _buscandoLocalizacao || _isReadOnly ? null : _obterLocalizacaoAtual,
+              tooltip: 'Obter localização',
             ),
-            IconButton(icon: const Icon(Icons.my_location, color: Color(0xFF1D4433)), onPressed: _buscandoLocalizacao || _isReadOnly ? null : _obterLocalizacaoAtual, tooltip: 'Obter localização'),
           ]),
         ),
       ],

@@ -52,8 +52,10 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
   Position? _posicaoAtualExibicao;
   bool _buscandoLocalizacao = false;
   String? _erroLocalizacao;
-  
-  String _tipoMedidaCAP = 'fita'; 
+  bool _gpsCapturadoNaSessao = false;
+  bool _continuouSemGps = false;
+
+  String _tipoMedidaCAP = 'fita';
   List<CubagemSecao> _secoes = [];
   bool _isLoading = false;
 
@@ -120,11 +122,12 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     List<double> alturasDeMedicao = [];
 
     if (metodoParaGerar.toUpperCase().contains('RELATIVA')) {
-      alturasDeMedicao = [0.0,0.01, 0.02, 0.03, 0.04, 0.05, 0.10, 0.15, 0.20, 0.25, 0.35, 0.45, 0.50, 0.55, 0.65, 0.75, 0.85, 0.90, 0.95].map((p) => alturaTotal * p).toList();
-    } else { 
-      alturasDeMedicao = [0.0,0.1, 0.3, 0.7, 1.0, 2.0];
-      for (double h = 4.0; h < alturaTotal; h += 2.0) {
-        alturasDeMedicao.add(h);
+      alturasDeMedicao = [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.10, 0.15, 0.20, 0.25, 0.35, 0.45, 0.50, 0.55, 0.65, 0.75, 0.85, 0.90, 0.95].map((p) => alturaTotal * p).toList();
+    } else {
+      final passo = widget.arvoreParaEditar?.passoFixo ?? 2.0;
+      alturasDeMedicao = [0.0, 0.1, 0.3, 0.7, 1.0, 2.0];
+      for (double h = 2.0 + passo; h < alturaTotal; h += passo) {
+        alturasDeMedicao.add(double.parse(h.toStringAsFixed(2)));
       }
     }
     
@@ -163,8 +166,17 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
   // =============== FUNÇÃO _salvarCubagem CORRIGIDA ============
   // ==========================================================
   void _salvarCubagem({required bool irParaProxima}) async {
-    // 1. Valida o formulário principal (Altura, CAP, etc.)
     if (!_formKey.currentState!.validate()) return;
+
+    // Exige GPS na primeira coleta (árvore ainda sem dados medidos)
+    final primeiraColeta = (widget.arvoreParaEditar?.alturaTotal ?? 0) <= 0;
+    if (primeiraColeta && !_gpsCapturadoNaSessao && !_continuouSemGps) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Capture a localização GPS antes de salvar a cubagem.'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
   
     // 2. Chama a nova função de validação robusta para as seções
     final String? erroValidacao = _validarSecoes();
@@ -235,8 +247,39 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
     }
   }
 
-  // As outras funções (_obterLocalizacaoAtual, etc.) continuam as mesmas...
-    Future<void> _obterLocalizacaoAtual() async {
+  Future<void> _continuarSemGps() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Continuar sem GPS?'),
+        content: const Text(
+          'A cubagem será salva sem coordenada GPS atualizada. '
+          'Isso ficará visível no relatório.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            child: const Text('Continuar sem GPS'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar == true && mounted) {
+      setState(() {
+        _gpsCapturadoNaSessao = true;
+        _continuouSemGps = true;
+        _erroLocalizacao = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Cubagem será salva sem GPS capturado.'),
+        backgroundColor: Colors.orange,
+      ));
+    }
+  }
+
+  Future<void> _obterLocalizacaoAtual() async {
     setState(() { _buscandoLocalizacao = true; _erroLocalizacao = null; });
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -252,6 +295,7 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
       
       setState(() {
         _posicaoAtualExibicao = position;
+        _gpsCapturadoNaSessao = true;
       });
 
     } catch (e) {
@@ -322,31 +366,92 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
   Widget _buildColetorCoordenadas() {
     final latExibicao = _posicaoAtualExibicao?.latitude;
     final lonExibicao = _posicaoAtualExibicao?.longitude;
+    final primeiraColeta = (widget.arvoreParaEditar?.alturaTotal ?? 0) <= 0;
+
+    final Color corBorda;
+    final Color corIcone;
+    if (_continuouSemGps) {
+      corBorda = Colors.orange.shade400;
+      corIcone = Colors.orange.shade700;
+    } else if (primeiraColeta && !_gpsCapturadoNaSessao) {
+      corBorda = Colors.red.shade400;
+      corIcone = Colors.red.shade600;
+    } else {
+      corBorda = Colors.grey;
+      corIcone = const Color(0xFF1D4433);
+    }
+
+    Widget conteudo;
+    if (_buscandoLocalizacao) {
+      conteudo = const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        CircularProgressIndicator(),
+        SizedBox(width: 16),
+        Text('Buscando GPS...'),
+      ]);
+    } else if (_erroLocalizacao != null) {
+      conteudo = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('GPS falhou: $_erroLocalizacao', style: TextStyle(color: Colors.red.shade700)),
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          OutlinedButton.icon(
+            onPressed: _obterLocalizacaoAtual,
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('Tentar novamente'),
+          ),
+          TextButton.icon(
+            onPressed: _continuarSemGps,
+            icon: Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade700),
+            label: Text('Continuar sem GPS', style: TextStyle(color: Colors.orange.shade700)),
+          ),
+        ]),
+      ]);
+    } else if (_continuouSemGps) {
+      conteudo = Row(children: [
+        Icon(Icons.gps_off, size: 16, color: Colors.orange.shade700),
+        const SizedBox(width: 6),
+        Text('Sem GPS capturado', style: TextStyle(color: Colors.orange.shade800, fontWeight: FontWeight.bold)),
+      ]);
+    } else if (latExibicao == null) {
+      conteudo = Text(
+        primeiraColeta
+            ? 'Pressione o botão ao lado para capturar o GPS.'
+            : 'Nenhuma localização registrada.',
+        style: TextStyle(color: primeiraColeta ? Colors.red.shade700 : Colors.grey[600]),
+      );
+    } else {
+      conteudo = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Lat: ${latExibicao.toStringAsFixed(6)}',
+            style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: (primeiraColeta && !_gpsCapturadoNaSessao) ? Colors.red.shade700 : null)),
+        Text('Lon: ${lonExibicao!.toStringAsFixed(6)}',
+            style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: (primeiraColeta && !_gpsCapturadoNaSessao) ? Colors.red.shade700 : null)),
+        if (_posicaoAtualExibicao != null && _posicaoAtualExibicao!.accuracy > 0)
+          Text('Precisão: ±${_posicaoAtualExibicao!.accuracy.toStringAsFixed(1)}m',
+              style: TextStyle(color: Colors.grey[700])),
+      ]);
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Coordenadas da Árvore (Opcional)', style: Theme.of(context).textTheme.titleMedium),
+        Text('Coordenadas da Árvore', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)),
-          child: Row(children: [
-            Expanded(
-              child: _buscandoLocalizacao
-                ? const Row(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Buscando...')])
-                : _erroLocalizacao != null
-                  ? Text('Erro: $_erroLocalizacao', style: const TextStyle(color: Colors.red))
-                  : (latExibicao == null)
-                    ? const Text('Nenhuma localização obtida.')
-                    : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('Lat: ${latExibicao.toStringAsFixed(6)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text('Lon: ${lonExibicao!.toStringAsFixed(6)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        if (_posicaoAtualExibicao != null && _posicaoAtualExibicao!.accuracy > 0)
-                          Text('Precisão: ±${_posicaoAtualExibicao!.accuracy.toStringAsFixed(1)}m', style: TextStyle(color: Colors.grey[700])),
-                      ]),
+          decoration: BoxDecoration(
+            border: Border.all(color: corBorda, width: 1.5),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: conteudo),
+            IconButton(
+              icon: Icon(Icons.my_location, color: corIcone),
+              onPressed: _buscandoLocalizacao ? null : _obterLocalizacaoAtual,
+              tooltip: 'Obter localização',
             ),
-            IconButton(icon: const Icon(Icons.my_location, color: Color(0xFF1D4433)), onPressed: _buscandoLocalizacao ? null : _obterLocalizacaoAtual, tooltip: 'Obter localização'),
           ]),
         ),
       ],

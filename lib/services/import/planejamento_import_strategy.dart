@@ -90,6 +90,8 @@ class PlanejamentoImportStrategy extends BaseImportStrategy {
         declividade: double.tryParse(BaseImportStrategy.getValue(row, ['declividade', 'declividade_%'])?.replaceAll(',', '.') ?? ''),
         latitude: latitudeFinal,
         longitude: longitudeFinal,
+        latitudePlanejada: latitudeFinal,
+        longitudePlanejada: longitudeFinal,
         projetoId: projeto.id,
       );
       

@@ -55,16 +55,17 @@ class PlanejamentoCubagemImportStrategy extends BaseImportStrategy {
           }
       }
 
-      String? classeFinal = BaseImportStrategy.getValue(row, ['classe']);
-      if (classeFinal == null || classeFinal.trim() == '.') {
-        final classeA_str = BaseImportStrategy.getValue(row, ['classe_a']);
-        final classeB_str = BaseImportStrategy.getValue(row, ['classe_b']);
+      // Coluna O (classe): se for um número → passo fixo de seções; classe vem sempre de classe_A/classe_B
+      final classeRaw = BaseImportStrategy.getValue(row, ['classe']);
+      final passoFixo = double.tryParse(classeRaw?.replaceAll(',', '.') ?? '');
 
-        if (classeA_str != null && classeB_str != null) {
-          final valorA = classeA_str.replaceAll(',', '.');
-          final valorB = classeB_str.replaceAll(',', '.');
-          classeFinal = '$valorA - $valorB';
-        }
+      String? classeFinal;
+      final classeAStr = BaseImportStrategy.getValue(row, ['classe_a']);
+      final classeBStr = BaseImportStrategy.getValue(row, ['classe_b']);
+      if (classeAStr != null && classeBStr != null) {
+        classeFinal = '${classeAStr.replaceAll(',', '.')} - ${classeBStr.replaceAll(',', '.')}';
+      } else if (classeRaw != null && classeRaw.trim() != '.' && passoFixo == null) {
+        classeFinal = classeRaw;
       }
 
       final novaArvoreCubagem = CubagemArvore(
@@ -80,6 +81,7 @@ class PlanejamentoCubagemImportStrategy extends BaseImportStrategy {
         longitude: longitudeFinal,
         metodoCubagem: BaseImportStrategy.getValue(row, ['metodo']),
         rf: BaseImportStrategy.getValue(row, ['rf']),
+        passoFixo: passoFixo ?? 2.0,
         alturaTotal: 0,
         valorCAP: 0,
         alturaBase: 0,

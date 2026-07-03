@@ -65,6 +65,8 @@ class DbParcelas {
   static const String observacao = 'observacao';
   static const String latitude = 'latitude';
   static const String longitude = 'longitude';
+  static const String latitudePlanejada = 'latitudePlanejada';
+  static const String longitudePlanejada = 'longitudePlanejada';
   static const String altitude = 'altitude';
   static const String dataColeta = 'dataColeta';
   static const String status = 'status';
@@ -137,6 +139,7 @@ class DbCubagensArvores {
   static const String exportada = 'exportada';
   static const String isSynced = 'isSynced';
   static const String nomeLider = 'nomeLider';
+  static const String passoFixo = 'passoFixo';
   static const String lastModified = 'lastModified';
 }
 

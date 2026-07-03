@@ -344,9 +344,9 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   Future<void> _iniciarImportacao(Projeto projeto) async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
+    FilePickerResult? result = await FilePicker.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['csv'],
+      allowedExtensions: ['csv', 'xlsx'],
     );
 
     if (result == null || result.files.single.path == null) {
@@ -362,10 +362,10 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
 
     try {
       final file = File(result.files.single.path!);
-      final csvContent = await file.readAsString();
+      final bytes = await file.readAsBytes();
 
-      final message = await _importRepository.importarCsvUniversal(
-          csvContent: csvContent, projetoIdAlvo: projeto.id!);
+      final message = await _importRepository.importarArquivoUniversal(
+          bytes: bytes, nomeArquivo: result.files.single.name, projetoIdAlvo: projeto.id!);
 
       if (mounted) {
         ProgressDialog.hide(context);

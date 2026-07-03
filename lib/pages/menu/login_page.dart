@@ -196,10 +196,17 @@ class _LoginPageState extends State<LoginPage> {
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
                             style: TextStyle(color: corAzulEscura),
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Email',
-                              prefixIcon: Icon(Icons.email_outlined),
-                              border: OutlineInputBorder(),
+                              labelStyle: TextStyle(color: corAzulEscura.withOpacity(0.7)),
+                              prefixIcon: Icon(Icons.email_outlined, color: corAzulEscura),
+                              border: const OutlineInputBorder(),
+                              enabledBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: corAzulEscura.withOpacity(0.3)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: corAzulEscura, width: 2),
+                              ),
                             ),
                             validator: (value) {
                               /* ... seu validador ... */ return null;
@@ -212,11 +219,21 @@ class _LoginPageState extends State<LoginPage> {
                             style: TextStyle(color: corAzulEscura),
                             decoration: InputDecoration(
                               labelText: 'Senha',
-                              prefixIcon: const Icon(Icons.lock_outlined),
+                              labelStyle: TextStyle(color: corAzulEscura.withOpacity(0.7)),
+                              prefixIcon: Icon(Icons.lock_outlined, color: corAzulEscura),
+                              enabledBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: corAzulEscura.withOpacity(0.3)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: corAzulEscura, width: 2),
+                              ),
                               suffixIcon: IconButton(
-                                icon: Icon(_obscurePassword
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined),
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  color: corAzulEscura,
+                                ),
                                 onPressed: () => setState(
                                     () => _obscurePassword = !_obscurePassword),
                               ),

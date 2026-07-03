@@ -31,7 +31,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 65,
+      version: 67,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -120,6 +120,8 @@ class DatabaseHelper {
         ${DbParcelas.observacao} TEXT,
         ${DbParcelas.latitude} REAL,
         ${DbParcelas.longitude} REAL,
+        ${DbParcelas.latitudePlanejada} REAL,
+        ${DbParcelas.longitudePlanejada} REAL,
         ${DbParcelas.altitude} REAL,
         ${DbParcelas.dataColeta} TEXT NOT NULL,
         ${DbParcelas.status} TEXT NOT NULL,
@@ -197,8 +199,9 @@ class DatabaseHelper {
         ${DbCubagensArvores.dataColeta} TEXT,
         ${DbCubagensArvores.exportada} INTEGER DEFAULT 0 NOT NULL,
         ${DbCubagensArvores.isSynced} INTEGER DEFAULT 0 NOT NULL,
-        ${DbCubagensArvores.nomeLider} TEXT,        
-        secoes TEXT,        
+        ${DbCubagensArvores.nomeLider} TEXT,
+        secoes TEXT,
+        ${DbCubagensArvores.passoFixo} REAL DEFAULT 2.0,
         ${DbCubagensArvores.lastModified} TEXT NOT NULL,
         FOREIGN KEY (${DbCubagensArvores.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
       )
@@ -681,6 +684,26 @@ class DatabaseHelper {
               await db.execute('ALTER TABLE ${DbParcelas.tableName} ADD COLUMN ${DbParcelas.tipoMedidaCAP} TEXT');
               debugPrint("Coluna ${DbParcelas.tipoMedidaCAP} adicionada em PARCELAS.");
             } catch (e) { debugPrint("Erro ao adicionar coluna ${DbParcelas.tipoMedidaCAP}: $e"); }
+          }
+          break;
+        case 66:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V66 (Coordenada planejada da parcela) <<<");
+          for (final coluna in [DbParcelas.latitudePlanejada, DbParcelas.longitudePlanejada]) {
+            if (!await _columnExists(db, DbParcelas.tableName, coluna)) {
+              try {
+                await db.execute('ALTER TABLE ${DbParcelas.tableName} ADD COLUMN $coluna REAL');
+                debugPrint("Coluna $coluna adicionada em PARCELAS.");
+              } catch (e) { debugPrint("Erro ao adicionar coluna $coluna: $e"); }
+            }
+          }
+          break;
+        case 67:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V67 (Passo fixo de cubagem) <<<");
+          if (!await _columnExists(db, DbCubagensArvores.tableName, DbCubagensArvores.passoFixo)) {
+            try {
+              await db.execute('ALTER TABLE ${DbCubagensArvores.tableName} ADD COLUMN ${DbCubagensArvores.passoFixo} REAL DEFAULT 2.0');
+              debugPrint("Coluna ${DbCubagensArvores.passoFixo} adicionada em CUBAGENS_ARVORES.");
+            } catch (e) { debugPrint("Erro ao adicionar coluna ${DbCubagensArvores.passoFixo}: $e"); }
           }
           break;
       }

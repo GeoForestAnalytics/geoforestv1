@@ -2,7 +2,7 @@ Sigla;Descricao;Fuste;CAP;Altura;Hipsometrica;Extra_Dano;Dominante
 N;Normal;N;S;S;.;.;.
 M;Morta;N;S;S;.;.;.
 I;Ingresso;N;S;S;.;.;.
-BF;Bifurcada abaixo de 1.3 m;S;S;S;.;.;.
+BF;Multiplas;S;S;S;.;.;.
 GraE;Graminea exotica;N;N;S;.;.;.
 GraN;Graminea nativa;N;N;S;.;.;.
 SolE;Solo exposto;N;N;S;.;.;.
