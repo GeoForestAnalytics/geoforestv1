@@ -724,13 +724,36 @@ class _InventarioPageState extends State<InventarioPage> {
     }
     final int totalCovas = covas.length;
 
-    // Adaptação da contagem para Strings (usa "N" para normal)
-    final int totalNormal = _arvoresColetadas.where((a) => a.codigo == "N").length;
-    final int contagemAlturaNormal = _arvoresColetadas.where((a) => a.codigo == "N" && a.altura != null && a.altura! > 0).length;
+    // Determina códigos "normais" via regras do CSV:
+    // IFC/IPC/IFQ: entraNaCurva=true (Hipsometrica=S), ex: "0", "20"
+    // BIO/IFS: fallback para "N" ou "V" se nenhum tem entraNaCurva
+    final Set<String> codigosNormais = _regrasCacheadas
+        .where((r) => r.entraNaCurva)
+        .map((r) => r.sigla.toUpperCase())
+        .toSet();
+    if (codigosNormais.isEmpty) {
+      for (final fallback in ['N', 'V', '0']) {
+        if (_regrasCacheadas.any((r) => r.sigla.toUpperCase() == fallback)) {
+          codigosNormais.add(fallback);
+          break;
+        }
+      }
+    }
+
+    final int totalNormal = _arvoresColetadas
+        .where((a) => codigosNormais.contains(a.codigo.toUpperCase()))
+        .length;
+    final int contagemAlturaNormal = _arvoresColetadas
+        .where((a) => codigosNormais.contains(a.codigo.toUpperCase()) && a.altura != null && a.altura! > 0)
+        .length;
     final double porcentagem = (totalNormal > 0) ? (contagemAlturaNormal / totalNormal) * 100 : 0.0;
-    
-    final int contagemAlturaDominante = _arvoresColetadas.where((a) => a.dominante && a.altura != null && a.altura! > 0).length;
-    final int contagemAlturaOutros = _arvoresColetadas.where((a) => a.codigo != "N" && a.altura != null && a.altura! > 0).length;
+
+    final int contagemAlturaDominante = _arvoresColetadas
+        .where((a) => a.dominante && a.altura != null && a.altura! > 0)
+        .length;
+    final int contagemAlturaOutros = _arvoresColetadas
+        .where((a) => !codigosNormais.contains(a.codigo.toUpperCase()) && a.altura != null && a.altura! > 0)
+        .length;
 
     return Card(
       margin: const EdgeInsets.all(8),
@@ -744,7 +767,7 @@ class _InventarioPageState extends State<InventarioPage> {
             Text('Talhão: ${_parcelaAtual.nomeTalhao} / Parcela: ${_parcelaAtual.idParcela}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const Divider(height: 20),
             _buildStatRow('Total de Covas:', '$totalCovas'),
-            _buildStatRow('Alturas (Normais):', '$contagemAlturaNormal (${porcentagem.toStringAsFixed(0)}%)'),
+            _buildStatRow('Alturas (Normais):', '$contagemAlturaNormal/$totalNormal (${porcentagem.toStringAsFixed(0)}%)'),
             _buildStatRow('Alturas (Dominantes):', '$contagemAlturaDominante'),
             _buildStatRow('Alturas (Outros Códigos):', '$contagemAlturaOutros'),
           ],

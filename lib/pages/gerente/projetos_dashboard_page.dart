@@ -489,11 +489,14 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
     );
   }
 
-  // Grade de KPIs (2x2)
+  // Grade de KPIs (2x2 + linha de disponibilidade)
   Widget _buildKpiGrid(BuildContext context, DashboardMetricsProvider metrics) {
-    // <<< CORREÇÃO DE TAMANHO DOS CARDS >>>
-    // Usamos SizedBox com altura fixa para forçar uniformidade nas linhas
     const double cardHeight = 160.0;
+
+    final totalNuvem = metrics.parcelasFiltradas.length;
+    final paraColeta = metrics.parcelasFiltradas
+        .where((p) => p.status == StatusParcela.pendente)
+        .length;
 
     return Column(
       children: [
@@ -542,6 +545,34 @@ class _ProjetosDashboardPageState extends State<ProjetosDashboardPage> {
                   '${metrics.mediaDiariaColetas.toStringAsFixed(1)} coletas',
                   Icons.show_chart,
                   Colors.purple,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: cardHeight,
+                child: _buildKpiCard(
+                  'Total na Nuvem',
+                  totalNuvem.toString(),
+                  Icons.cloud,
+                  Colors.indigo,
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: SizedBox(
+                height: cardHeight,
+                child: _buildKpiCard(
+                  'Para Coletar',
+                  paraColeta.toString(),
+                  Icons.forest,
+                  Colors.green,
                 ),
               ),
             ),

@@ -40,14 +40,23 @@ class ProjetoRepository {
     return List.generate(maps.length, (i) => Projeto.fromMap(maps[i]));
   }
 
-  // <<< MÉTODO CORRIGIDO >>>
   Future<List<Projeto>> getTodosOsProjetosParaGerente() async {
     final db = await _dbHelper.database;
-    // Adiciona o filtro para buscar apenas projetos com status 'ativo'
     final maps = await db.query(
       DbProjetos.tableName,
       where: '${DbProjetos.status} = ?',
       whereArgs: ['ativo'],
+      orderBy: '${DbProjetos.dataCriacao} DESC',
+    );
+    return List.generate(maps.length, (i) => Projeto.fromMap(maps[i]));
+  }
+
+  Future<List<Projeto>> getProjetosFinalizados() async {
+    final db = await _dbHelper.database;
+    final maps = await db.query(
+      DbProjetos.tableName,
+      where: '${DbProjetos.status} = ?',
+      whereArgs: ['finalizado'],
       orderBy: '${DbProjetos.dataCriacao} DESC',
     );
     return List.generate(maps.length, (i) => Projeto.fromMap(maps[i]));

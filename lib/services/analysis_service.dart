@@ -542,8 +542,8 @@ class AnalysisService {
     if (arvoresVivas.isEmpty) return TalhaoAnalysisResult(warnings: ["Nenhuma árvore viva encontrada."]);
 
     // Médias
-    final double mediaCap = _calculateAverage(arvoresVivas.map((a) => a.cap).toList());
-    final double mediaAltura = _calculateAverage(arvoresVivas.map((a) => a.altura!).toList());
+    final double mediaCap = _calculateAverage(arvoresVivas.where((a) => a.cap > 0).map((a) => a.cap).toList());
+    final double mediaAltura = _calculateAverage(arvoresVivas.where((a) => (a.altura ?? 0) > 0).map((a) => a.altura!).toList());
 
     // Área Basal
     final double areaBasalTotalAmostrada = arvoresVivas.map((a) => _areaBasalPorArvore(a.cap)).fold(0.0, (a, b) => a + b);

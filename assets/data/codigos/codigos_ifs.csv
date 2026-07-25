@@ -1,6 +1,6 @@
 Sigla;Descricao;Fuste;CAP;Altura;Hipsometrica;Extra_Dano;Dominante
-V;Normal;N;.;.;.;.;.
-M;Morta ou Seca;N;.;.;.;.;.
-F;Falha;N;N;.;.;.;.
-G;Geada;N;.;.;.;.;.
-O;Outros;.;.;.;.;.;.
+V;Normal;N;N;.;.;.;.
+M;Morta ou Seca;N;N;N;.;.;.
+F;Falha;N;N;N;.;.;.
+G;Geada;N;N;N;.;.;.
+O;Outros;.;N;.;.;.;.

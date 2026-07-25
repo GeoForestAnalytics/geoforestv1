@@ -53,6 +53,7 @@ class MapProvider with ChangeNotifier {
   Position? _currentUserPosition;
   StreamSubscription<Position>? _positionStreamSubscription;
   bool _isFollowingUser = false;
+  bool _isLockedOnPdf = false;
   bool _isDrawing = false;
   final List<LatLng> _drawnPoints = [];
 
@@ -71,6 +72,21 @@ class MapProvider with ChangeNotifier {
   MapLayerType get currentLayer => _currentLayer;
   Position? get currentUserPosition => _currentUserPosition;
   bool get isFollowingUser => _isFollowingUser;
+  bool get isLockedOnPdf => _isLockedOnPdf;
+
+  void lockOnPdf() {
+    _isLockedOnPdf = true;
+    if (_isFollowingUser) {
+      _positionStreamSubscription?.cancel();
+      _isFollowingUser = false;
+    }
+    notifyListeners();
+  }
+
+  void unlockFromPdf() {
+    _isLockedOnPdf = false;
+    notifyListeners();
+  }
 
   // <<< INÍCIO DAS NOVAS ADIÇÕES >>>
 
@@ -165,13 +181,12 @@ class MapProvider with ChangeNotifier {
     final swLon = prefs.getDouble('pdf_sw_lon');
     final neLat = prefs.getDouble('pdf_ne_lat');
     final neLon = prefs.getDouble('pdf_ne_lon');
-
     if (savedPath != null && await File(savedPath).exists() &&
         swLat != null && swLon != null && neLat != null && neLon != null) {
       final bounds = LatLngBounds(LatLng(swLat, swLon), LatLng(neLat, neLon));
-      final pdfId = '${savedPath.hashCode.abs().toRadixString(16)}_v2';
-      final tempDir = await getTemporaryDirectory();
-      final tilesDir = '${tempDir.path}/geoforest_pdf_tiles/$pdfId';
+      final pdfId = '${savedPath.hashCode.abs().toRadixString(16)}_v7';
+      final supportDir = await getApplicationSupportDirectory();
+      final tilesDir = '${supportDir.path}/geoforest_pdf_tiles/$pdfId';
       if (await File('$tilesDir/.done').exists()) {
         _importedPdfPath = savedPath;
         _pdfTilesDir = tilesDir;
@@ -204,10 +219,45 @@ class MapProvider with ChangeNotifier {
     return math.log(math.tan(math.pi / 4.0 + r / 2.0));
   }
 
+  /// Detecta o BBox da área do mapa dentro da página (viewport ISO 32000-2).
+  /// Retorna [x0, y0, x1, y1] em coordenadas PDF (origem = canto inferior esquerdo).
+  /// Retorna null se não houver viewport ou se cobrir > 95% da página (sem margem relevante).
+  List<double>? _parseViewportBBox(String content, double pageW, double pageH) {
+    List<double>? largest;
+    double largestArea = 0;
+    final re = RegExp(r'<<([^<>]*)>>');
+    for (final m in re.allMatches(content)) {
+      final body = m.group(1)!;
+      if (!RegExp(r'/Type\s*/Viewport').hasMatch(body)) continue;
+      final bm = RegExp(r'/BBox\s*\[([^\]]+)\]').firstMatch(body);
+      if (bm == null) continue;
+      final nums = bm.group(1)!.trim()
+          .split(RegExp(r'[\s,]+'))
+          .where((s) => s.isNotEmpty)
+          .map(double.tryParse)
+          .whereType<double>()
+          .toList();
+      if (nums.length < 4) continue;
+      final area = (nums[2] - nums[0]) * (nums[3] - nums[1]);
+      if (area > largestArea) {
+        largestArea = area;
+        largest = nums;
+      }
+    }
+    // Ignora se viewport cobre quase a página toda (margem < 5%) — sem diferença real
+    if (largest == null) return null;
+    final pageArea = pageW * pageH;
+    final coverage = largestArea / pageArea;
+    if (coverage > 0.95) return null;
+    // Ignora viewports minúsculos (insets, legendas) — menor que 30% da página
+    if (coverage < 0.30) return null;
+    return largest;
+  }
+
   Future<String> _generatePdfTiles(String filePath, LatLngBounds bounds) async {
-    final pdfId = '${filePath.hashCode.abs().toRadixString(16)}_v2';
-    final tempDir = await getTemporaryDirectory();
-    final tilesDir = '${tempDir.path}/geoforest_pdf_tiles/$pdfId';
+    final pdfId = '${filePath.hashCode.abs().toRadixString(16)}_v7';
+    final supportDir = await getApplicationSupportDirectory();
+    final tilesDir = '${supportDir.path}/geoforest_pdf_tiles/$pdfId';
     final markerFile = File('$tilesDir/.done');
     if (await markerFile.exists()) return tilesDir;
 
@@ -217,19 +267,48 @@ class MapProvider with ChangeNotifier {
     final maxLon = bounds.east;
     final minLat = bounds.south;
     final maxLat = bounds.north;
-
     final mercYMax = _latToMercY(maxLat);
     final mercYMin = _latToMercY(minLat);
+
+    // Lê o conteúdo do PDF para detectar o viewport (área do mapa dentro da folha)
+    final pdfBytes = await File(filePath).readAsBytes();
+    final pdfContent = String.fromCharCodes(pdfBytes.map((b) => b < 128 ? b : 32));
 
     final doc = await PdfDocument.openFile(filePath);
     try {
       final page = doc.pages[0];
 
+      // Detecta onde o mapa fica dentro da página (ignora tabelas, legendas, margens)
+      final bbox = _parseViewportBBox(pdfContent, page.width, page.height);
+      if (bbox != null) {
+        debugPrint('PDF viewport detectado: BBox=${bbox.map((v) => v.toStringAsFixed(1)).join(',')} '
+            'página=${page.width.toStringAsFixed(0)}×${page.height.toStringAsFixed(0)}');
+      }
+
       for (int z = 13; z <= 17; z++) {
-        // fullW: baseado na longitude (linear em Mercator) ✓
-        final fullW = (maxLon - minLon) / 360.0 * (1 << z) * 256.0;
-        // fullH: baseado na projeção Mercator do intervalo de latitude ✓
-        final fullH = (mercYMax - mercYMin) / (2 * math.pi) * (1 << z) * 256.0;
+        // Extensão geográfica do mapa em pixels (Mercator)
+        final geoW = (maxLon - minLon) / 360.0 * (1 << z) * 256.0;
+        final geoH = (mercYMax - mercYMin) / (2 * math.pi) * (1 << z) * 256.0;
+
+        // Se o PDF tem viewport (tabela/margens fora do mapa):
+        //   fullW/fullH escalam a PÁGINA INTEIRA, não só o mapa
+        //   vpOffX/vpOffY pulam a margem esquerda/superior antes de extrair o tile
+        // Se não há viewport: página inteira = mapa, sem offset
+        final double fullW, fullH, vpOffX, vpOffY;
+        if (bbox != null) {
+          final mapFracX = (bbox[2] - bbox[0]) / page.width;
+          final mapFracY = (bbox[3] - bbox[1]) / page.height;
+          fullW = geoW / mapFracX;
+          fullH = geoH / mapFracY;
+          // Offset: posição do canto superior-esquerdo do mapa no render da página
+          vpOffX = (bbox[0] / page.width) * fullW;
+          vpOffY = ((page.height - bbox[3]) / page.height) * fullH;
+        } else {
+          fullW = geoW;
+          fullH = geoH;
+          vpOffX = 0;
+          vpOffY = 0;
+        }
 
         final x0 = _lonToTileX(minLon, z);
         final x1 = _lonToTileX(maxLon, z);
@@ -241,10 +320,14 @@ class MapProvider with ChangeNotifier {
             final lonL = _tileXToLon(tx, z);
             final latT = _tileYToLat(ty, z);
             final mercYT = _latToMercY(latT);
-            // px: longitude é linear em Mercator ✓
-            final px = ((lonL - minLon) / (maxLon - minLon) * fullW).round();
-            // py: usa Mercator Y para projeção correta (sem deformação) ✓
-            final py = ((mercYMax - mercYT) / (mercYMax - mercYMin) * fullH).round();
+
+            // Posição do tile dentro da extensão geográfica do mapa
+            final mapX = (lonL - minLon) / (maxLon - minLon) * geoW;
+            final mapY = (mercYMax - mercYT) / (mercYMax - mercYMin) * geoH;
+
+            // Posição final no render da página completa (com offset de margem)
+            final px = (vpOffX + mapX).round();
+            final py = (vpOffY + mapY).round();
 
             final img = await page.render(
               x: px,
@@ -277,44 +360,111 @@ class MapProvider with ChangeNotifier {
     return tilesDir;
   }
 
-  /// Tenta extrair as coordenadas geográficas embutidas no PDF (formato GeoPDF/Adobe).
+  /// Tenta extrair as coordenadas geográficas embutidas no PDF.
+  /// Suporta GPTS em graus decimais (lat/lon) e em metros UTM (SIRGAS 2000 / WGS84).
   Future<LatLngBounds?> _tryExtractPdfGeoBounds(String filePath) async {
     try {
       final bytes = await File(filePath).readAsBytes();
-      // Converte para string ignorando bytes binários (>127)
       final content = String.fromCharCodes(bytes.map((b) => b < 128 ? b : 32));
 
       final match = RegExp(r'/GPTS\s*\[([^\]]+)\]').firstMatch(content);
       if (match == null) return null;
 
-      final nums = match
-          .group(1)!
+      final nums = match.group(1)!
           .trim()
           .split(RegExp(r'[\s,]+'))
           .where((s) => s.isNotEmpty)
           .map(double.parse)
           .toList();
-
       if (nums.length < 8) return null;
 
-      // Formato GPTS: [lat1 lon1 lat2 lon2 lat3 lon3 lat4 lon4]
-      final lats = [for (int i = 0; i < nums.length; i += 2) nums[i]];
-      final lons = [for (int i = 1; i < nums.length; i += 2) nums[i]];
+      // Tenta interpretação geográfica (lat/lon graus decimais)
+      final evens = [for (int i = 0; i < nums.length; i += 2) nums[i]];
+      final odds  = [for (int i = 1; i < nums.length; i += 2) nums[i]];
+      final minE = evens.reduce((a, b) => a < b ? a : b);
+      final maxE = evens.reduce((a, b) => a > b ? a : b);
+      final minO = odds.reduce((a, b) => a < b ? a : b);
+      final maxO = odds.reduce((a, b) => a > b ? a : b);
 
-      final south = lats.reduce((a, b) => a < b ? a : b);
-      final north = lats.reduce((a, b) => a > b ? a : b);
-      final west = lons.reduce((a, b) => a < b ? a : b);
-      final east = lons.reduce((a, b) => a > b ? a : b);
+      if (minE >= -90 && maxE <= 90 && minO >= -180 && maxO <= 180 &&
+          maxE - minE >= 0.0001 && maxO - minO >= 0.0001) {
+        return LatLngBounds(LatLng(minE, minO), LatLng(maxE, maxO));
+      }
 
-      // Sanidade: valores válidos de lat/lon
+      // Valores em metros UTM: northings > 1.000.000 m, eastings ≤ 1.000.000 m
+      final northings = nums.where((v) => v > 1000000).toList();
+      final eastings  = nums.where((v) => v > 0 && v <= 1000000).toList();
+      if (northings.length < 2 || eastings.length < 2) return null;
+
+      final zoneNumber = _detectUtmZone(content);
+      if (zoneNumber == null) return null;
+
+      final epsg = 31978 + (zoneNumber - 18); // SIRGAS 2000 UTM Sul
+      final projStr = '+proj=utm +zone=$zoneNumber +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs';
+      final projUTM = proj4.Projection.get('EPSG:$epsg') ?? proj4.Projection.parse(projStr);
+      final projWGS84 = proj4.Projection.get('EPSG:4326')!;
+
+      final minN = northings.reduce((a, b) => a < b ? a : b);
+      final maxN = northings.reduce((a, b) => a > b ? a : b);
+      final minEasting = eastings.reduce((a, b) => a < b ? a : b);
+      final maxEasting = eastings.reduce((a, b) => a > b ? a : b);
+
+      // Converte os 4 cantos do retângulo UTM para lat/lon
+      final corners = [
+        proj4.Point(x: minEasting, y: minN),
+        proj4.Point(x: maxEasting, y: minN),
+        proj4.Point(x: minEasting, y: maxN),
+        proj4.Point(x: maxEasting, y: maxN),
+      ].map((c) => projUTM.transform(projWGS84, c)).toList();
+
+      final south = corners.map((p) => p.y).reduce((a, b) => a < b ? a : b);
+      final north = corners.map((p) => p.y).reduce((a, b) => a > b ? a : b);
+      final west  = corners.map((p) => p.x).reduce((a, b) => a < b ? a : b);
+      final east  = corners.map((p) => p.x).reduce((a, b) => a > b ? a : b);
+
       if (south < -90 || north > 90 || west < -180 || east > 180) return null;
       if (north - south < 0.0001 || east - west < 0.0001) return null;
 
+      debugPrint('PDF georef: UTM fuso ${zoneNumber}S convertido → lat[$south,$north] lon[$west,$east]');
       return LatLngBounds(LatLng(south, west), LatLng(north, east));
     } catch (e) {
       debugPrint('Auto-extract PDF geo bounds failed: $e');
       return null;
     }
+  }
+
+  /// Detecta o número do fuso UTM a partir do conteúdo do PDF.
+  int? _detectUtmZone(String content) {
+    // 1. Tag EPSG explícita — mais confiável
+    final epsgExplicit = RegExp(r'EPSG[:\s]+(\d{5,6})').firstMatch(content);
+    if (epsgExplicit != null) {
+      final code = int.tryParse(epsgExplicit.group(1)!);
+      if (code != null) {
+        if (code >= 31978 && code <= 31985) return 18 + (code - 31978); // SIRGAS 2000
+        if (code >= 32718 && code <= 32725) return 18 + (code - 32718); // WGS84
+      }
+    }
+    // 2. Número EPSG solto no conteúdo (ex: metadados embutidos)
+    for (final re in [RegExp(r'\b319(7[89]|8[0-5])\b'), RegExp(r'\b327(1[89]|2[0-5])\b')]) {
+      final m = re.firstMatch(content);
+      if (m != null) {
+        final code = int.tryParse(m.group(0)!);
+        if (code != null) {
+          if (code >= 31978 && code <= 31985) return 18 + (code - 31978);
+          if (code >= 32718 && code <= 32725) return 18 + (code - 32718);
+        }
+      }
+    }
+    // 3. Palavra-chave de fuso (ex: "UTM 22S", "Fuso 22", "Zone 22")
+    final zoneMatch = RegExp(
+      r'(?:zone|fuso|utm)\s*0?(\d{2})\s*[Ss]?',
+      caseSensitive: false,
+    ).firstMatch(content);
+    if (zoneMatch != null) {
+      final z = int.tryParse(zoneMatch.group(1)!);
+      if (z != null && z >= 18 && z <= 25) return z;
+    }
+    return null;
   }
 
   Future<void> importPdfOverlay(BuildContext context) async {
@@ -1130,6 +1280,7 @@ class MapProvider with ChangeNotifier {
       _positionStreamSubscription?.cancel();
       _isFollowingUser = false;
     } else {
+      _isLockedOnPdf = false; // GPS follow tem prioridade sobre o lock do PDF
       const locationSettings = LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 1);
       _positionStreamSubscription = Geolocator.getPositionStream(locationSettings: locationSettings).listen((Position position) {
         _currentUserPosition = position;

@@ -380,7 +380,7 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
     final currentUserPosition = mapProvider.currentUserPosition;
     final isDrawing = mapProvider.isDrawing;
 
-    if (currentUserPosition != null && mapProvider.isFollowingUser) {
+    if (currentUserPosition != null && mapProvider.isFollowingUser && !mapProvider.isLockedOnPdf) {
       _mapController.move(LatLng(currentUserPosition.latitude, currentUserPosition.longitude), _mapController.camera.zoom);
     }
 
@@ -394,8 +394,9 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
               initialCenter: const LatLng(-15.7, -47.8),
               initialZoom: 4,
               onPositionChanged: (position, hasGesture) {
-                // O GPS não desliga mais por causa de um toque/arrasto acidental no
-                // mapa. Só para quando o usuário aperta o botão "Minha Localização".
+                if (hasGesture && mapProvider.isLockedOnPdf) {
+                  mapProvider.unlockFromPdf();
+                }
               },
               onTap: (tapPosition, point) { if (isDrawing) mapProvider.addDrawnPoint(point); },
             ),
@@ -535,6 +536,24 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
                      foregroundColor: Colors.white,
                      child: Icon(mapProvider.isFollowingUser ? Icons.gps_fixed : Icons.gps_not_fixed),
                    ),
+                   if (mapProvider.showPdfOverlay && mapProvider.pdfOverlayBounds != null) ...[
+                     const SizedBox(height: 10),
+                     FloatingActionButton(
+                       onPressed: () {
+                         mapProvider.lockOnPdf();
+                         _mapController.fitCamera(CameraFit.bounds(
+                           bounds: mapProvider.pdfOverlayBounds!,
+                           padding: const EdgeInsets.all(40.0),
+                         ));
+                       },
+                       tooltip: 'Centralizar no PDF',
+                       heroTag: 'centerPdfFab',
+                       mini: true,
+                       backgroundColor: Colors.orange,
+                       foregroundColor: Colors.white,
+                       child: const Icon(Icons.picture_as_pdf),
+                     ),
+                   ],
                    const SizedBox(height: 10),
                    FloatingActionButton(
                      onPressed: () => context.read<MapProvider>().switchMapLayer(),

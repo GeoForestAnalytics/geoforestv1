@@ -43,6 +43,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   final _syncService = SyncService();
 
   List<Projeto> projetos = [];
+  List<Projeto> projetosFinalizados = [];
   bool _isLoading = true;
   bool _isSelectionMode = false;
   final Set<int> _selectedProjetos = {};
@@ -88,11 +89,13 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     });
 
     final data = await _projetoRepository.getTodosOsProjetosParaGerente();
+    final finalizados = await _projetoRepository.getProjetosFinalizados();
     final projetosVisiveis = data.where((p) => p.status != 'deletado').toList();
 
     if (mounted) {
       setState(() {
         projetos = projetosVisiveis;
+        projetosFinalizados = finalizados;
         _isLoading = false;
       });
     }
@@ -343,6 +346,40 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
     _checkUserRoleAndLoadProjects();
   }
 
+  Future<void> _finalizarProjeto(Projeto projeto) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Finalizar Projeto'),
+        content: Text(
+          'Marcar "${projeto.nome}" como Finalizado?\n\n'
+          'O projeto deixará de aparecer nas coletas e não será mais baixado para os dispositivos dos coletores. '
+          'Ele ficará visível aqui para consulta de histórico.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.green.shade700),
+            child: const Text('Finalizar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+    await _projetoRepository.updateProjeto(projeto.copyWith(status: 'finalizado'));
+    await _syncService.atualizarStatusProjetoNaFirebase(projeto.id.toString(), 'finalizado');
+    _checkUserRoleAndLoadProjects();
+  }
+
+  Future<void> _reativarProjeto(Projeto projeto) async {
+    await _projetoRepository.updateProjeto(projeto.copyWith(status: 'ativo'));
+    await _syncService.atualizarStatusProjetoNaFirebase(projeto.id.toString(), 'ativo');
+    _checkUserRoleAndLoadProjects();
+  }
+
   Future<void> _iniciarImportacao(Projeto projeto) async {
     FilePickerResult? result = await FilePicker.pickFiles(
       type: FileType.custom,
@@ -442,7 +479,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
       appBar: _isSelectionMode ? _buildSelectionAppBar() : _buildNormalAppBar(),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : projetos.isEmpty
+          : (projetos.isEmpty && projetosFinalizados.isEmpty)
               ? _buildEmptyState()
               : _buildListView(),
       floatingActionButton:
@@ -451,94 +488,175 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
   }
 
   Widget _buildListView() {
-    return ListView.builder(
+    return ListView(
       padding: const EdgeInsets.only(bottom: 80),
-      itemCount: projetos.length,
-      itemBuilder: (context, index) {
-        final projeto = projetos[index];
-        final isSelected = _selectedProjetos.contains(projeto.id!);
-        final isArchived = projeto.status == 'arquivado';
-        final isDelegado = projeto.delegadoPorLicenseId != null;
+      children: [
+        ...projetos.map(_buildActiveCard),
+        if (projetosFinalizados.isNotEmpty) ...[
+          _buildSectionHeader(),
+          ...projetosFinalizados.map(_buildFinalizadoCard),
+        ],
+      ],
+    );
+  }
 
-        return Slidable(
-          key: ValueKey(projeto.id),
-          startActionPane: ActionPane(
-            motion: const DrawerMotion(),
-            extentRatio: _isGerente ? (isDelegado ? 0.25 : 0.75) : 0.25,
-            children: [
-              if (!isDelegado)
-                SlidableAction(
-                  onPressed: (_) => _navegarParaEdicao(projeto),
-                  backgroundColor: Colors.blue.shade700,
-                  foregroundColor: Colors.white,
-                  icon: Icons.edit_outlined,
-                  label: 'Editar',
-                ),
-              if (_isGerente)
-                SlidableAction(
-                  onPressed: (_) => _toggleArchiveStatus(projeto),
-                  backgroundColor: isArchived
-                      ? Colors.green.shade600
-                      : Colors.orange.shade700,
-                  foregroundColor: Colors.white,
-                  icon: isArchived
-                      ? Icons.unarchive_outlined
-                      : Icons.archive_outlined,
-                  label: isArchived ? 'Reativar' : 'Arquivar',
-                ),
-              if (_isGerente && !isDelegado)
-                SlidableAction(
-                  onPressed: (_) => _delegarProjeto(projeto),
-                  backgroundColor: Colors.teal,
-                  foregroundColor: Colors.white,
-                  icon: Icons.handshake_outlined,
-                  label: 'Delegar',
-                ),
-            ],
-          ),
-          child: Card(
-            color: isArchived
-                ? Colors.grey.shade300
-                : (isSelected ? Colors.lightBlue.shade100 : null),
-            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: ListTile(
-              onTap: () {
-                if (_isImportingPage) {
-                  _iniciarImportacao(projeto);
-                } else if (_isSelectionMode) {
-                  _toggleSelection(projeto.id!);
-                } else {
-                  _navegarParaDetalhes(projeto);
-                }
-              },
-              onLongPress: () {
-                if (_isGerente) _toggleSelection(projeto.id!);
-              },
-              leading: Icon(
-                isSelected
-                    ? Icons.check_circle
-                    : isArchived
-                        ? Icons.archive_rounded
-                        : isDelegado
-                            ? Icons.handshake_outlined
-                            : Icons.folder_outlined,
-                color: isDelegado
-                    ? Colors.teal
-                    : (isArchived
-                        ? Colors.grey.shade700
-                        : Theme.of(context).primaryColor),
-              ),
-              title: Text(projeto.nome,
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(isDelegado
-                  ? "Projeto Delegado"
-                  : 'Responsável: ${projeto.responsavel}'),
-              trailing:
-                  Text(DateFormat('dd/MM/yy').format(projeto.dataCriacao)),
+  Widget _buildSectionHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle_outline, size: 16, color: Colors.green.shade700),
+          const SizedBox(width: 6),
+          Text(
+            'FINALIZADOS',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              color: Colors.green.shade700,
+              letterSpacing: 0.8,
             ),
           ),
-        );
-      },
+          const SizedBox(width: 8),
+          Expanded(child: Divider(color: Colors.green.shade200)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveCard(Projeto projeto) {
+    final isSelected = _selectedProjetos.contains(projeto.id!);
+    final isArchived = projeto.status == 'arquivado';
+    final isDelegado = projeto.delegadoPorLicenseId != null;
+
+    return Slidable(
+      key: ValueKey(projeto.id),
+      startActionPane: ActionPane(
+        motion: const DrawerMotion(),
+        extentRatio: _isGerente ? (isDelegado ? 0.25 : 0.75) : 0.25,
+        children: [
+          if (!isDelegado)
+            SlidableAction(
+              onPressed: (_) => _navegarParaEdicao(projeto),
+              backgroundColor: Colors.blue.shade700,
+              foregroundColor: Colors.white,
+              icon: Icons.edit_outlined,
+              label: 'Editar',
+            ),
+          if (_isGerente)
+            SlidableAction(
+              onPressed: (_) => _toggleArchiveStatus(projeto),
+              backgroundColor: isArchived ? Colors.green.shade600 : Colors.orange.shade700,
+              foregroundColor: Colors.white,
+              icon: isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+              label: isArchived ? 'Reativar' : 'Arquivar',
+            ),
+          if (_isGerente && !isDelegado)
+            SlidableAction(
+              onPressed: (_) => _delegarProjeto(projeto),
+              backgroundColor: Colors.teal,
+              foregroundColor: Colors.white,
+              icon: Icons.handshake_outlined,
+              label: 'Delegar',
+            ),
+        ],
+      ),
+      endActionPane: (_isGerente && !isArchived)
+          ? ActionPane(
+              motion: const DrawerMotion(),
+              extentRatio: 0.35,
+              children: [
+                SlidableAction(
+                  onPressed: (_) => _finalizarProjeto(projeto),
+                  backgroundColor: Colors.green.shade700,
+                  foregroundColor: Colors.white,
+                  icon: Icons.check_circle_outline,
+                  label: 'Finalizar',
+                ),
+              ],
+            )
+          : null,
+      child: Card(
+        color: isArchived ? Colors.grey.shade300 : (isSelected ? Colors.lightBlue.shade100 : null),
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: ListTile(
+          onTap: () {
+            if (_isImportingPage) {
+              _iniciarImportacao(projeto);
+            } else if (_isSelectionMode) {
+              _toggleSelection(projeto.id!);
+            } else {
+              _navegarParaDetalhes(projeto);
+            }
+          },
+          onLongPress: () {
+            if (_isGerente) _toggleSelection(projeto.id!);
+          },
+          leading: Icon(
+            isSelected
+                ? Icons.check_circle
+                : isArchived
+                    ? Icons.archive_rounded
+                    : isDelegado
+                        ? Icons.handshake_outlined
+                        : Icons.folder_outlined,
+            color: isDelegado
+                ? Colors.teal
+                : (isArchived ? Colors.grey.shade700 : Theme.of(context).primaryColor),
+          ),
+          title: Text(projeto.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Text(isDelegado ? "Projeto Delegado" : 'Responsável: ${projeto.responsavel}'),
+          trailing: Text(DateFormat('dd/MM/yy').format(projeto.dataCriacao)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFinalizadoCard(Projeto projeto) {
+    return Slidable(
+      key: ValueKey('final_${projeto.id}'),
+      endActionPane: _isGerente
+          ? ActionPane(
+              motion: const DrawerMotion(),
+              extentRatio: 0.35,
+              children: [
+                SlidableAction(
+                  onPressed: (_) => _reativarProjeto(projeto),
+                  backgroundColor: Colors.blue.shade700,
+                  foregroundColor: Colors.white,
+                  icon: Icons.refresh,
+                  label: 'Reativar',
+                ),
+              ],
+            )
+          : null,
+      child: Card(
+        color: Colors.green.shade50,
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: ListTile(
+          onTap: () => _navegarParaDetalhes(projeto),
+          leading: Icon(Icons.check_circle, color: Colors.green.shade700),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(projeto.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade700,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Finalizado',
+                  style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          subtitle: Text('Responsável: ${projeto.responsavel}'),
+          trailing: Text(DateFormat('dd/MM/yy').format(projeto.dataCriacao)),
+        ),
+      ),
     );
   }
 

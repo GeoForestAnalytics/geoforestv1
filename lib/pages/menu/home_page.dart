@@ -37,6 +37,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   bool _isSyncing = false;
+  SyncProgress? _currentSyncProgress;
 
   @override
   void initState() {
@@ -192,13 +193,21 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _executarSincronizacao() async {
     if (_isSyncing) return;
-    setState(() => _isSyncing = true);
-    
+    setState(() {
+      _isSyncing = true;
+      _currentSyncProgress = null;
+    });
+
     final syncService = SyncService();
+
+    // Atualiza o botão em tempo real com o progresso
+    syncService.progressStream.listen((p) {
+      if (mounted) setState(() => _currentSyncProgress = p);
+    });
 
     showDialog(
       context: context,
-      barrierDismissible: true, // Permite cancelar
+      barrierDismissible: true,
       builder: (dialogContext) {
         return StreamBuilder<SyncProgress>(
           stream: syncService.progressStream,
@@ -206,7 +215,7 @@ class _HomePageState extends State<HomePage> {
             final progress = snapshot.data;
             if (progress?.concluido == true) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
-                Navigator.of(dialogContext).pop(); 
+                Navigator.of(dialogContext).pop();
                 if (syncService.conflicts.isNotEmpty && mounted) {
                   Navigator.push(context, MaterialPageRoute(builder: (context) => ConflictResolutionPage(conflicts: syncService.conflicts)));
                 } else if (progress?.erro == null && mounted) {
@@ -214,23 +223,50 @@ class _HomePageState extends State<HomePage> {
                 }
                 if (mounted) {
                   context.read<GerenteProvider>().iniciarMonitoramentoEstrutural;
-                  setState(() => _isSyncing = false);
+                  setState(() { _isSyncing = false; _currentSyncProgress = null; });
                 }
               });
-              return const SizedBox.shrink(); 
+              return const SizedBox.shrink();
             }
+
+            final isDownloading = progress?.isDownloading ?? false;
+            final uploadPct = progress?.uploadPercent ?? 0.0;
+            final downloadPct = progress?.downloadPercent ?? 0.0;
+            final totalDown = progress?.totalDownload ?? 0;
+            final baixados = progress?.downloadados ?? 0;
+            final totalUp = progress?.totalAProcessar ?? 0;
+            final enviados = progress?.processados ?? 0;
+
             return AlertDialog(
-              title: const Text('Sincronizando dados'),
+              title: Row(
+                children: [
+                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5)),
+                  const SizedBox(width: 12),
+                  Text(isDownloading ? 'Baixando dados' : 'Enviando dados'),
+                ],
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 20),
                   Text(progress?.mensagem ?? 'Iniciando...', textAlign: TextAlign.center),
-                  if ((progress?.totalAProcessar ?? 0) > 0) ...[
-                    const SizedBox(height: 10),
-                    LinearProgressIndicator(value: (progress!.processados / progress.totalAProcessar)),
-                  ]
+                  const SizedBox(height: 16),
+                  if (!isDownloading && totalUp > 0) ...[
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      const Text('Enviando', style: TextStyle(fontSize: 12)),
+                      Text('$enviados / $totalUp  (${(uploadPct * 100).toStringAsFixed(0)}%)', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ]),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(value: uploadPct, minHeight: 8, borderRadius: BorderRadius.circular(4)),
+                  ],
+                  if (isDownloading) ...[
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      const Text('Baixando', style: TextStyle(fontSize: 12)),
+                      Text(totalDown > 0 ? '$baixados / $totalDown  (${(downloadPct * 100).toStringAsFixed(0)}%)' : 'calculando...', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ]),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(value: downloadPct, minHeight: 8, borderRadius: BorderRadius.circular(4)),
+                  ],
                 ],
               ),
               actions: [
@@ -239,7 +275,7 @@ class _HomePageState extends State<HomePage> {
                     syncService.cancelarSincronizacao();
                     Navigator.of(dialogContext).pop();
                     if (mounted) {
-                      setState(() => _isSyncing = false);
+                      setState(() { _isSyncing = false; _currentSyncProgress = null; });
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Sincronização cancelada'), backgroundColor: Colors.orange),
                       );
@@ -260,6 +296,40 @@ class _HomePageState extends State<HomePage> {
       debugPrint("Erro grave na sincronização capturado na UI: $e");
       if (mounted) setState(() => _isSyncing = false);
     }
+  }
+
+  Widget _buildSyncProgressButton(Color primaryNavy, Color accentGold) {
+    final p = _currentSyncProgress;
+    final isDownloading = p?.isDownloading ?? false;
+    final pct = isDownloading ? (p?.downloadPercent ?? 0.0) : (p?.uploadPercent ?? 0.0);
+    final label = isDownloading
+        ? (p != null && p.totalDownload > 0
+            ? 'BAIXANDO ${p.downloadados}/${p.totalDownload} (${(pct * 100).toStringAsFixed(0)}%)'
+            : 'BAIXANDO...')
+        : (p != null && p.totalAProcessar > 0
+            ? 'ENVIANDO ${p.processados}/${p.totalAProcessar} (${(pct * 100).toStringAsFixed(0)}%)'
+            : 'SINCRONIZANDO...');
+
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(15),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 50,
+              backgroundColor: accentGold.withValues(alpha: 0.3),
+              valueColor: AlwaysStoppedAnimation<Color>(accentGold),
+            ),
+          ),
+          Center(
+            child: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.5, color: Color(0xFF023853))),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -331,7 +401,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     // ITEM 2: PLANEJAMENTO
                     ModernMenuTile(
-                      title: 'Planejamento de Campo',
+                      title: 'Navegação de Campo',
                       imagePath: 'assets/grid/way.webp', 
                       onTap: () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const SelecaoAtividadeMapaPage()));
@@ -442,30 +512,27 @@ class _HomePageState extends State<HomePage> {
                             const SizedBox(height: 20),
                             
                             // BOTÃO SINCRONIZAR (Destaque Total)
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: ElevatedButton.icon(
-                                onPressed: _isSyncing ? null : _executarSincronizacao,
-                                icon: _isSyncing 
-                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF023853)))
-                                    : const Icon(Icons.sync, size: 24),
-                                label: Text(
-                                  _isSyncing ? "ENVIANDO..." : "SINCRONIZAR AGORA",
-                                  style: const TextStyle(
-                                    fontSize: 15, 
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.5
-                                  )
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: accentGold,
-                                  foregroundColor: primaryNavy,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                            if (_isSyncing)
+                              _buildSyncProgressButton(primaryNavy, accentGold)
+                            else
+                              SizedBox(
+                                width: double.infinity,
+                                height: 50,
+                                child: ElevatedButton.icon(
+                                  onPressed: _executarSincronizacao,
+                                  icon: const Icon(Icons.sync, size: 24),
+                                  label: const Text(
+                                    "SINCRONIZAR AGORA",
+                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: accentGold,
+                                    foregroundColor: primaryNavy,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                                  ),
                                 ),
                               ),
-                            ),
                           ],
                         ),
                       ),
