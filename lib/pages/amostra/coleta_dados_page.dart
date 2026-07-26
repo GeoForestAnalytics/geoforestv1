@@ -731,7 +731,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
         children: [
           SizedBox(height: 50, child: ElevatedButton.icon(onPressed: _salvando ? null : _reabrirParaEdicao, icon: _salvando ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white)) : const Icon(Icons.edit_outlined), label: const Text('Reabrir para Edição', style: TextStyle(fontSize: 18)), style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade700, foregroundColor: Colors.white))),
           const SizedBox(height: 12),
-          SizedBox(height: 50, child: OutlinedButton.icon(onPressed: _navegarParaInventario, icon: const Icon(Icons.park_outlined), label: const Text('Ver Inventário', style: TextStyle(fontSize: 18)))),
+          SizedBox(height: 50, child: ElevatedButton.icon(onPressed: _navegarParaInventario, icon: const Icon(Icons.park_outlined), label: const Text('Ver Inventário', style: TextStyle(fontSize: 18)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1D4433), foregroundColor: Colors.white))),
         ],
       );
     }

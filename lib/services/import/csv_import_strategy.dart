@@ -12,6 +12,7 @@ class ImportResult {
   int linhasProcessadas = 0, atividadesCriadas = 0, fazendasCriadas = 0, talhoesCriados = 0;
   int parcelasCriadas = 0, arvoresCriadas = 0, cubagensCriadas = 0, secoesCriadas = 0;
   int parcelasAtualizadas = 0, cubagensAtualizadas = 0, parcelasIgnoradas = 0;
+  int centroidesCriados = 0;
 }
 
 abstract class CsvImportStrategy {

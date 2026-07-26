@@ -31,7 +31,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 67,
+      version: 73,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -102,7 +102,8 @@ class DatabaseHelper {
         ${DbTalhoes.up} TEXT,
         ${DbTalhoes.materialGenetico} TEXT,
         ${DbTalhoes.dataPlantio} TEXT,
-        ${DbTalhoes.lastModified} TEXT NOT NULL, 
+        ${DbTalhoes.volumeTotalTalhao} REAL,
+        ${DbTalhoes.lastModified} TEXT NOT NULL,
         FOREIGN KEY (${DbTalhoes.fazendaId}, ${DbTalhoes.fazendaAtividadeId}) REFERENCES ${DbFazendas.tableName} (${DbFazendas.id}, ${DbFazendas.atividadeId}) ON DELETE CASCADE
       )
     ''');
@@ -227,6 +228,48 @@ class DatabaseHelper {
         ${DbSortimentos.comprimento} REAL NOT NULL,
         ${DbSortimentos.diametroMinimo} REAL NOT NULL,
         ${DbSortimentos.diametroMaximo} REAL NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE ${DbCentroidesPilha.tableName} (
+        ${DbCentroidesPilha.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+        ${DbCentroidesPilha.talhaoId} INTEGER,
+        ${DbCentroidesPilha.fazendaId} TEXT,
+        ${DbCentroidesPilha.nomeFazenda} TEXT,
+        ${DbCentroidesPilha.nomeTalhao} TEXT,
+        ${DbCentroidesPilha.latitude} REAL NOT NULL,
+        ${DbCentroidesPilha.longitude} REAL NOT NULL,
+        ${DbCentroidesPilha.sortimentos} TEXT,
+        ${DbCentroidesPilha.lastModified} TEXT NOT NULL,
+        FOREIGN KEY (${DbCentroidesPilha.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE ${DbPilhasMadeira.tableName} (
+        ${DbPilhasMadeira.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+        ${DbPilhasMadeira.talhaoId} INTEGER,
+        ${DbPilhasMadeira.centroideId} INTEGER,
+        ${DbPilhasMadeira.numeroPilha} INTEGER NOT NULL,
+        ${DbPilhasMadeira.sortimento} TEXT,
+        ${DbPilhasMadeira.dapMin} REAL,
+        ${DbPilhasMadeira.dapMax} REAL,
+        ${DbPilhasMadeira.comprimentoTora} REAL,
+        ${DbPilhasMadeira.comprimentoPilha} REAL,
+        ${DbPilhasMadeira.secoes} TEXT,
+        ${DbPilhasMadeira.alturaMedia} REAL,
+        ${DbPilhasMadeira.volumeBruto} REAL,
+        ${DbPilhasMadeira.latitude} REAL,
+        ${DbPilhasMadeira.longitude} REAL,
+        ${DbPilhasMadeira.nomeFazenda} TEXT,
+        ${DbPilhasMadeira.nomeTalhao} TEXT,
+        ${DbPilhasMadeira.nomeLider} TEXT,
+        ${DbPilhasMadeira.dataColeta} TEXT,
+        ${DbPilhasMadeira.exportada} INTEGER DEFAULT 0 NOT NULL,
+        ${DbPilhasMadeira.isSynced} INTEGER DEFAULT 0 NOT NULL,
+        ${DbPilhasMadeira.lastModified} TEXT NOT NULL,
+        FOREIGN KEY (${DbPilhasMadeira.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
       )
     ''');
 
@@ -704,6 +747,117 @@ class DatabaseHelper {
               await db.execute('ALTER TABLE ${DbCubagensArvores.tableName} ADD COLUMN ${DbCubagensArvores.passoFixo} REAL DEFAULT 2.0');
               debugPrint("Coluna ${DbCubagensArvores.passoFixo} adicionada em CUBAGENS_ARVORES.");
             } catch (e) { debugPrint("Erro ao adicionar coluna ${DbCubagensArvores.passoFixo}: $e"); }
+          }
+          break;
+        case 68:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V68 (Módulo Pilhas) <<<");
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS ${DbCentroidesPilha.tableName} (
+                ${DbCentroidesPilha.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+                ${DbCentroidesPilha.talhaoId} INTEGER,
+                ${DbCentroidesPilha.fazendaId} TEXT,
+                ${DbCentroidesPilha.nomeFazenda} TEXT,
+                ${DbCentroidesPilha.nomeTalhao} TEXT,
+                ${DbCentroidesPilha.latitude} REAL NOT NULL,
+                ${DbCentroidesPilha.longitude} REAL NOT NULL,
+                ${DbCentroidesPilha.sortimentos} TEXT,
+                ${DbCentroidesPilha.lastModified} TEXT NOT NULL,
+                FOREIGN KEY (${DbCentroidesPilha.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS ${DbPilhasMadeira.tableName} (
+                ${DbPilhasMadeira.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+                ${DbPilhasMadeira.talhaoId} INTEGER,
+                ${DbPilhasMadeira.centroideId} INTEGER,
+                ${DbPilhasMadeira.numeroPilha} INTEGER NOT NULL,
+                ${DbPilhasMadeira.sortimento} TEXT,
+                ${DbPilhasMadeira.dapMin} REAL,
+                ${DbPilhasMadeira.dapMax} REAL,
+                ${DbPilhasMadeira.comprimentoTora} REAL,
+                ${DbPilhasMadeira.comprimentoPilha} REAL,
+                ${DbPilhasMadeira.secoes} TEXT,
+                ${DbPilhasMadeira.alturaMedia} REAL,
+                ${DbPilhasMadeira.volumeBruto} REAL,
+                ${DbPilhasMadeira.latitude} REAL,
+                ${DbPilhasMadeira.longitude} REAL,
+                ${DbPilhasMadeira.nomeFazenda} TEXT,
+                ${DbPilhasMadeira.nomeTalhao} TEXT,
+                ${DbPilhasMadeira.nomeLider} TEXT,
+                ${DbPilhasMadeira.dataColeta} TEXT,
+                ${DbPilhasMadeira.exportada} INTEGER DEFAULT 0 NOT NULL,
+                ${DbPilhasMadeira.isSynced} INTEGER DEFAULT 0 NOT NULL,
+                ${DbPilhasMadeira.lastModified} TEXT NOT NULL,
+                FOREIGN KEY (${DbPilhasMadeira.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
+              )
+            ''');
+            debugPrint("Tabelas pilhas criadas com sucesso.");
+          } catch (e) { debugPrint("Erro na migração 68: $e"); }
+          break;
+        case 69:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V69 (Pilhas: obs, tora real, fotos) <<<");
+          for (final col in [
+            (DbPilhasMadeira.comprimentoToraReal, 'REAL'),
+            (DbPilhasMadeira.observacoes, 'TEXT'),
+            (DbPilhasMadeira.fotos, 'TEXT'),
+          ]) {
+            if (!await _columnExists(db, DbPilhasMadeira.tableName, col.$1)) {
+              try {
+                await db.execute('ALTER TABLE ${DbPilhasMadeira.tableName} ADD COLUMN ${col.$1} ${col.$2}');
+              } catch (e) { debugPrint("Erro col ${col.$1}: $e"); }
+            }
+          }
+          break;
+        case 70:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V70 (Pilhas: fatorEmpilhamento) <<<");
+          if (!await _columnExists(db, DbPilhasMadeira.tableName, DbPilhasMadeira.fatorEmpilhamento)) {
+            try {
+              await db.execute(
+                'ALTER TABLE ${DbPilhasMadeira.tableName} ADD COLUMN ${DbPilhasMadeira.fatorEmpilhamento} REAL DEFAULT 0.65',
+              );
+            } catch (e) { debugPrint("Erro col fatorEmpilhamento: $e"); }
+          }
+          break;
+        case 71:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V71 (Pilhas: corrige colunas v69 que falharam silenciosamente) <<<");
+          for (final col in [
+            (DbPilhasMadeira.comprimentoToraReal, 'REAL'),
+            (DbPilhasMadeira.observacoes, 'TEXT'),
+            (DbPilhasMadeira.fotos, 'TEXT'),
+            (DbPilhasMadeira.fatorEmpilhamento, 'REAL DEFAULT 0.65'),
+          ]) {
+            if (!await _columnExists(db, DbPilhasMadeira.tableName, col.$1)) {
+              try {
+                await db.execute('ALTER TABLE ${DbPilhasMadeira.tableName} ADD COLUMN ${col.$1} ${col.$2}');
+                debugPrint("V71: coluna ${col.$1} adicionada.");
+              } catch (e) { debugPrint("V71: erro col ${col.$1}: $e"); }
+            }
+          }
+          break;
+        case 72:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V72 (Pilhas: garante colunas em dispositivos que já estavam em v71) <<<");
+          for (final col in [
+            (DbPilhasMadeira.comprimentoToraReal, 'REAL'),
+            (DbPilhasMadeira.observacoes, 'TEXT'),
+            (DbPilhasMadeira.fotos, 'TEXT'),
+            (DbPilhasMadeira.fatorEmpilhamento, 'REAL DEFAULT 0.65'),
+          ]) {
+            if (!await _columnExists(db, DbPilhasMadeira.tableName, col.$1)) {
+              try {
+                await db.execute('ALTER TABLE ${DbPilhasMadeira.tableName} ADD COLUMN ${col.$1} ${col.$2}');
+                debugPrint("V72: coluna ${col.$1} adicionada.");
+              } catch (e) { debugPrint("V72: erro col ${col.$1}: $e"); }
+            }
+          }
+          break;
+        case 73:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V73 (Talhões: volumeTotalTalhao) <<<");
+          if (!await _columnExists(db, DbTalhoes.tableName, DbTalhoes.volumeTotalTalhao)) {
+            try {
+              await db.execute('ALTER TABLE ${DbTalhoes.tableName} ADD COLUMN ${DbTalhoes.volumeTotalTalhao} REAL');
+              debugPrint("V73: coluna volumeTotalTalhao adicionada.");
+            } catch (e) { debugPrint("V73: erro: $e"); }
           }
           break;
       }

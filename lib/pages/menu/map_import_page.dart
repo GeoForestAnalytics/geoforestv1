@@ -5,6 +5,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/sample_point.dart';
 import 'package:geoforestv1/pages/amostra/coleta_dados_page.dart';
+import 'package:geoforestv1/pages/pilhas/coleta_pilha_page.dart';
+import 'package:geoforestv1/pages/pilhas/detalhe_pilha_page.dart';
+import 'package:geoforestv1/models/pilha_madeira_model.dart';
+import 'package:geoforestv1/services/export_service.dart';
 import 'package:geoforestv1/providers/map_provider.dart';
 import 'package:geoforestv1/services/activity_optimizer_service.dart';
 import 'package:geolocator/geolocator.dart';
@@ -218,6 +222,69 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
               mapProvider.startGoTo(samplePoint);
             },
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Abre o menu de opções ao tocar em um marcador de centróide de pilha.
+  void _showCentroideOptions(BuildContext context, CentroidePilha centroide) {
+    final mapProvider = context.read<MapProvider>();
+    final isVisualizando = mapProvider.talhaoVisualizandoPilhas == centroide.talhaoId;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Wrap(
+        children: [
+          ListTile(
+            title: Text(
+              'Talhão: ${centroide.nomeTalhao}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text('${centroide.nomeFazenda}  •  ${centroide.sortimentos.length} sortimento(s)'),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.add_circle_outline, color: Colors.brown),
+            title: const Text('Adicionar Pilha'),
+            onTap: () async {
+              Navigator.pop(ctx);
+              final salvo = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(builder: (_) => ColetaPilhaPage(centroide: centroide)),
+              );
+              if (salvo == true && mounted) {
+                mapProvider.recarregarPilhasVisiveis();
+              }
+            },
+          ),
+          ListTile(
+            leading: Icon(
+              isVisualizando ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+              color: Colors.orange.shade700,
+            ),
+            title: Text(isVisualizando ? 'Ocultar Pilhas do Talhão' : 'Visualizar Pilhas do Talhão'),
+            onTap: () {
+              Navigator.pop(ctx);
+              if (centroide.talhaoId != null) {
+                mapProvider.toggleVisualizarPilhasTalhao(centroide.talhaoId!);
+              }
+            },
+          ),
+          if (centroide.talhaoId != null)
+            ListTile(
+              leading: const Icon(Icons.download_outlined, color: Colors.teal),
+              title: const Text('Exportar Pilhas do Talhão'),
+              onTap: () {
+                Navigator.pop(ctx);
+                ExportService().exportarPilhasTalhao(
+                  context: context,
+                  talhaoId: centroide.talhaoId!,
+                  nomeTalhao: centroide.nomeTalhao,
+                  nomeFazenda: centroide.nomeFazenda,
+                );
+              },
+            ),
         ],
       ),
     );
@@ -455,6 +522,65 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
                   );
                 }).toList(),
               ),
+
+              // ── Centróides de Pilhas ──────────────────────────────────
+              if (mapProvider.centroidesPilha.isNotEmpty)
+                MarkerLayer(
+                  markers: mapProvider.centroidesPilha.map((c) {
+                    final isActive = mapProvider.talhaoVisualizandoPilhas == c.talhaoId;
+                    return Marker(
+                      width: 44,
+                      height: 44,
+                      point: LatLng(c.latitude, c.longitude),
+                      child: GestureDetector(
+                        onTap: () => _showCentroideOptions(context, c),
+                        onLongPress: () => _showCentroideOptions(context, c),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isActive ? Colors.orange.shade700 : Colors.brown.shade600,
+                            shape: BoxShape.rectangle,
+                            borderRadius: BorderRadius.circular(6),
+                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 4, offset: const Offset(2, 2))],
+                          ),
+                          child: const Icon(Icons.layers, color: Colors.white, size: 22),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+              // ── Pilhas GPS visíveis do talhão selecionado ─────────────
+              if (mapProvider.pilhasVisiveis.isNotEmpty)
+                MarkerLayer(
+                  markers: mapProvider.pilhasVisiveis
+                      .where((p) => p.latitude != null && p.longitude != null)
+                      .map((p) => Marker(
+                            width: 38,
+                            height: 38,
+                            point: LatLng(p.latitude!, p.longitude!),
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (_) => DetalhePilhaPage(pilha: p),
+                                ));
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade300,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.brown.shade800, width: 2),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    p.numeroPilhaFormatado,
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.brown.shade900),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ))
+                      .toList(),
+                ),
 
               if (mapProvider.isGoToModeActive && currentUserPosition != null)
                 PolylineLayer(

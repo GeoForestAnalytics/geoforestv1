@@ -163,6 +163,14 @@ class _HomePageState extends State<HomePage> {
               mostrarDialogoTipo(context, onNovas: () => exportService.exportarNovasCubagens(context), onTodas: () => exportService.exportarTodasCubagensBackup(context));
             },
           ),
+          ListTile(
+            leading: const Icon(Icons.layers_outlined, color: Colors.orange),
+            title: Text('Pilhas de Madeira', style: TextStyle(color: textColor, fontWeight: FontWeight.w500)),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              mostrarDialogoTipo(context, onNovas: () => exportService.exportarNovasPilhas(context), onTodas: () => exportService.exportarTodasPilhasBackup(context));
+            },
+          ),
           const SizedBox(height: 20),
         ],
       ),

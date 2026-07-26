@@ -66,7 +66,8 @@ class Talhao {
       DbTalhoes.up: up,
       DbTalhoes.materialGenetico: materialGenetico,
       DbTalhoes.dataPlantio: dataPlantio,
-      DbTalhoes.lastModified: lastModified?.toIso8601String(), 
+      DbTalhoes.volumeTotalTalhao: volumeTotalTalhao,
+      DbTalhoes.lastModified: lastModified?.toIso8601String(),
     };
   }
 
@@ -84,6 +85,7 @@ class Talhao {
       DbTalhoes.up: up,
       DbTalhoes.materialGenetico: materialGenetico,
       DbTalhoes.dataPlantio: dataPlantio,
+      DbTalhoes.volumeTotalTalhao: volumeTotalTalhao,
     };
   }
   
@@ -111,6 +113,7 @@ class Talhao {
       up: map[DbTalhoes.up],
       materialGenetico: map[DbTalhoes.materialGenetico],
       dataPlantio: map[DbTalhoes.dataPlantio],
+      volumeTotalTalhao: (map[DbTalhoes.volumeTotalTalhao] as num?)?.toDouble(),
       lastModified: parseDate(map[DbTalhoes.lastModified]),
     );
   }

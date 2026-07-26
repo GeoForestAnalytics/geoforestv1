@@ -1,9 +1,10 @@
-// lib/pages/gerente/gerente_main_page.dart (VERSÃO CORRETA E FINAL)
-
 import 'package:flutter/material.dart';
-import 'package:geoforestv1/pages/gerente/projetos_dashboard_page.dart'; 
+import 'package:geoforestv1/pages/gerente/pilhas_dashboard_page.dart';
+import 'package:geoforestv1/pages/gerente/projetos_dashboard_page.dart';
 import 'package:geoforestv1/pages/gerente/operacoes_dashboard_page.dart';
 import 'package:geoforestv1/pages/menu/home_page.dart';
+import 'package:geoforestv1/providers/license_provider.dart';
+import 'package:provider/provider.dart';
 
 class GerenteMainPage extends StatefulWidget {
   const GerenteMainPage({super.key});
@@ -15,55 +16,81 @@ class GerenteMainPage extends StatefulWidget {
 class _GerenteMainPageState extends State<GerenteMainPage> {
   int _selectedIndex = 0;
 
-  // A lista de páginas para a navegação
-  static final List<Widget> _pages = <Widget>[
-    const HomePage(title: 'Modo Coleta de Campo', showAppBar: false),
-    const ProjetosDashboardPage(),
-    const OperacoesDashboardPage(),
-  ];
-
-  // Os títulos correspondentes para a AppBar
-  static const List<String> _pageTitles = <String>[
-    'Modo Coleta de Campo',
-    'Dashboard de Projetos',
-    'Dashboard de Operações',
-  ];
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
+    final modulo = context.watch<LicenseProvider>().licenseData?.modulo ?? 'inventario';
+    final tabs = _buildTabs(modulo);
+
+    // Garante que o índice não ultrapasse o número de tabs disponíveis
+    final safeIndex = _selectedIndex.clamp(0, tabs.length - 1);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_pageTitles.elementAt(_selectedIndex)),
-        automaticallyImplyLeading: false, 
+        title: Text(tabs[safeIndex].title),
+        automaticallyImplyLeading: false,
       ),
       body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
+        index: safeIndex,
+        children: tabs.map((t) => t.page).toList(),
       ),
       bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.park_outlined),
-            label: 'Coleta',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_outlined),
-            label: 'Projetos',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.insights_outlined),
-            label: 'Operações',
-          ),
-        ],
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+        currentIndex: safeIndex,
+        onTap: (i) => setState(() => _selectedIndex = i),
+        type: BottomNavigationBarType.fixed,
+        items: tabs.map((t) => BottomNavigationBarItem(icon: Icon(t.icon), label: t.label)).toList(),
       ),
     );
   }
+
+  List<_TabItem> _buildTabs(String modulo) {
+    final tabs = <_TabItem>[
+      _TabItem(
+        title: 'Modo Coleta de Campo',
+        label: 'Coleta',
+        icon: Icons.park_outlined,
+        page: const HomePage(title: 'Modo Coleta de Campo', showAppBar: false),
+      ),
+    ];
+
+    if (modulo == 'inventario' || modulo == 'todos') {
+      tabs.add(_TabItem(
+        title: 'Inventário / Cubagem',
+        label: 'Inventário',
+        icon: Icons.bar_chart_outlined,
+        page: const ProjetosDashboardPage(),
+      ));
+    }
+
+    if (modulo == 'colheita' || modulo == 'todos') {
+      tabs.add(_TabItem(
+        title: 'Colheita',
+        label: 'Colheita',
+        icon: Icons.forest_outlined,
+        page: const PilhasDashboardPage(),
+      ));
+    }
+
+    tabs.add(_TabItem(
+      title: 'Dashboard de Operações',
+      label: 'Operações',
+      icon: Icons.insights_outlined,
+      page: const OperacoesDashboardPage(),
+    ));
+
+    return tabs;
+  }
+}
+
+class _TabItem {
+  final String title;
+  final String label;
+  final IconData icon;
+  final Widget page;
+
+  const _TabItem({
+    required this.title,
+    required this.label,
+    required this.icon,
+    required this.page,
+  });
 }

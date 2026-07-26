@@ -24,7 +24,10 @@ import 'dart:convert'; // <--- ADICIONE ESTA LINHA
 
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+import 'package:geoforestv1/data/repositories/pilha_repository.dart';
 import 'package:geoforestv1/data/repositories/projeto_repository.dart';
+import 'package:geoforestv1/data/datasources/local/database_constants.dart';
+import 'package:geoforestv1/models/pilha_madeira_model.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:geoforestv1/utils/app_config.dart';
@@ -37,6 +40,7 @@ class SyncService {
   
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
+  final _pilhaRepository = PilhaRepository();
   final _projetoRepository = ProjetoRepository();
   
   final StreamController<SyncProgress> _progressStreamController = StreamController.broadcast();
@@ -92,18 +96,21 @@ class SyncService {
       
       final totalParcelas = (await _parcelaRepository.getUnsyncedParcelas()).length;
       final totalCubagens = (await _cubagemRepository.getUnsyncedCubagens()).length;
-      final totalGeral = totalParcelas + totalCubagens;
+      final totalPilhas = await _pilhaRepository.getUnsyncedPilhasCount();
+      final totalGeral = totalParcelas + totalCubagens + totalPilhas;
       
-      _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, mensagem: "Preparando sincronização..."));
+      debugPrint("--- [SYNC] Pendentes: $totalParcelas parcelas, $totalCubagens cubagens, $totalPilhas pilhas");
+      _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, mensagem: "Preparando: $totalParcelas parcelas, $totalCubagens cubagens, $totalPilhas pilhas pendentes..."));
 
+      String cargo = 'equipe';
       if (licenseIdDoUsuarioLogado != null) {
-        final cargo = (licenseDoc!.data()!['usuariosPermitidos'] as Map<String, dynamic>?)?[user.uid]?['cargo'] ?? 'equipe';
+        cargo = (licenseDoc!.data()!['usuariosPermitidos'] as Map<String, dynamic>?)?[user.uid]?['cargo'] ?? 'equipe';
         if (cargo == 'gerente') {
           _progressStreamController.add(SyncProgress(totalAProcessar: totalGeral, mensagem: "Enviando estrutura de projetos..."));
           await _uploadHierarquiaCompleta(licenseIdDoUsuarioLogado);
         }
       }
-      
+
       // Upload de dados (com lógica corrigida)
       await _uploadColetasNaoSincronizadas(licenseIdDoUsuarioLogado, totalGeral);
 
@@ -115,20 +122,27 @@ class SyncService {
         totalDownload: 0,
         downloadados: 0,
       ));
-      
+
       if (licenseIdDoUsuarioLogado != null) {
         debugPrint("--- SyncService: Baixando dados da licença PRÓPRIA: $licenseIdDoUsuarioLogado");
-        final idsHierarquiaLocal = await _downloadHierarquiaCompleta(licenseIdDoUsuarioLogado);
-        await _downloadColetas(licenseIdDoUsuarioLogado, talhaoIdsParaBaixar: idsHierarquiaLocal);
+        var idsParaBaixar = await _downloadHierarquiaCompleta(licenseIdDoUsuarioLogado, isGerente: cargo == 'gerente');
+        // Fallback: se a hierarquia não retornou IDs (docs sem campo 'status', rede lenta, etc.)
+        // usa os talhões que já existem localmente para tentar baixar as coletas
+        if (idsParaBaixar.isEmpty) {
+          debugPrint("--- SyncService: Hierarquia retornou 0 IDs. Usando talhões locais como fallback.");
+          idsParaBaixar = await _getTodosOsTalhaoIdsLocais();
+        }
+        await _downloadColetas(licenseIdDoUsuarioLogado, talhaoIdsParaBaixar: idsParaBaixar);
       }
-      
+
       final projetosDelegados = await _buscarProjetosDelegadosParaUsuario(user.uid);
       for (final entry in projetosDelegados.entries) {
         final licenseIdDoCliente = entry.key;
         final projetosParaBaixar = entry.value;
         debugPrint("--- SyncService: Baixando dados delegados da licença do CLIENTE: $licenseIdDoCliente para os projetos $projetosParaBaixar");
-        
-        final idsHierarquiaDelegada = await _downloadHierarquiaCompleta(licenseIdDoCliente, projetosParaBaixar: projetosParaBaixar);
+
+        // Projetos delegados: coletores só recebem projetos ativos (não finalizados)
+        final idsHierarquiaDelegada = await _downloadHierarquiaCompleta(licenseIdDoCliente, projetosParaBaixar: projetosParaBaixar, isGerente: cargo == 'gerente');
         await _downloadColetas(licenseIdDoCliente, talhaoIdsParaBaixar: idsHierarquiaDelegada);
       }
 
@@ -156,6 +170,12 @@ class SyncService {
       _progressStreamController.add(SyncProgress(erro: erroMsg, concluido: true));
       rethrow;
     }
+  }
+
+  Future<List<int>> _getTodosOsTalhaoIdsLocais() async {
+    final db = await _dbHelper.database;
+    final result = await db.query('talhoes', columns: ['id']);
+    return result.map((r) => r['id'] as int).toList();
   }
 
   Future<Map<String, List<int>>> _buscarProjetosDelegadosParaUsuario(String uid) async {
@@ -378,6 +398,31 @@ class SyncService {
         }
       }
 
+      // --- PILHAS ---
+      try {
+        final pilhaLocal = await _pilhaRepository.getOneUnsyncedPilha();
+        if (pilhaLocal != null) {
+          if (licenseIdDoUsuarioLogado == null) throw Exception("Licença de destino não encontrada para a pilha ${pilhaLocal.id}.");
+          final docRef = _firestore
+              .collection('clientes')
+              .doc(licenseIdDoUsuarioLogado)
+              .collection('dados_pilhas')
+              .doc(pilhaLocal.id.toString());
+          await _uploadPilha(docRef, pilhaLocal);
+          await _pilhaRepository.markPilhaAsSynced(pilhaLocal.id!);
+          processados++;
+          falhasConsecutivas = 0;
+          continue;
+        }
+      } catch (e) {
+        debugPrint("Falha ao enviar pilha: $e");
+        _progressStreamController.add(SyncProgress(
+          mensagem: "Erro ao enviar pilha. Continuando...",
+        ));
+        falhasConsecutivas++;
+        continue;
+      }
+
       // Se chegou aqui, não há mais itens para processar
       break;
     }
@@ -407,6 +452,16 @@ class SyncService {
   debugPrint("--- [SYNC] Parcela ${parcela.idParcela} enviada com sucesso (Compactada).");
 }     
   
+  Future<void> _uploadPilha(firestore.DocumentReference docRef, PilhaMadeira pilha) async {
+    final map = pilha.toMap();
+    if (map[DbPilhasMadeira.secoes] is String) {
+      map[DbPilhasMadeira.secoes] = jsonDecode(map[DbPilhasMadeira.secoes] as String);
+    }
+    map['lastModified'] = firestore.FieldValue.serverTimestamp();
+    await docRef.set(map, firestore.SetOptions(merge: true));
+    debugPrint("--- [SYNC] Pilha ${pilha.id} enviada com sucesso.");
+  }
+
   Future<void> _uploadCubagem(firestore.DocumentReference docRef, CubagemArvore cubagem) async {
   final map = cubagem.toMap();
   
@@ -454,7 +509,7 @@ class SyncService {
       }
   }
 
-  Future<List<int>> _downloadHierarquiaCompleta(String licenseId, {List<int>? projetosParaBaixar}) async {
+  Future<List<int>> _downloadHierarquiaCompleta(String licenseId, {List<int>? projetosParaBaixar, bool isGerente = false}) async {
     final db = await _dbHelper.database;
     final List<int> downloadedTalhaoIds = [];
 
@@ -469,9 +524,16 @@ class SyncService {
         }
       }
     } else {
-      // Só baixa projetos ativos — finalizados/arquivados/deletados ficam de fora
-      final snap = await projetosQuery.where('status', isEqualTo: 'ativo').get();
+      // Baixa todos os projetos — filtra deletados localmente.
+      // Não filtra por 'status' no Firestore porque docs antigos podem não ter esse campo,
+      // o que faria a query retornar vazia e pular o download de coletas.
+      final snap = await projetosQuery.get();
       for (var projDoc in snap.docs) {
+        final data = projDoc.data() as Map<String, dynamic>;
+        final status = (data['status'] as String?)?.toLowerCase();
+        if (status == 'deletado') continue;
+        // Coletores não recebem projetos finalizados
+        if (!isGerente && status == 'finalizado') continue;
         final talhaoIds = await _processarProjetoDaNuvem(projDoc, licenseId, db);
         downloadedTalhaoIds.addAll(talhaoIds);
       }
@@ -522,21 +584,35 @@ class SyncService {
     // Coleta todos os docs numa passagem só (sem gravar no banco) para saber o total
     final parcelaDocs = <firestore.QueryDocumentSnapshot<Map<String, dynamic>>>[];
     final cubagemDocs = <firestore.QueryDocumentSnapshot<Map<String, dynamic>>>[];
+    final pilhaDocs = <firestore.QueryDocumentSnapshot<Map<String, dynamic>>>[];
     for (var chunk in talhaoIdsParaBaixar.slices(10)) {
-      final pSnap = await _firestore
-          .collection('clientes').doc(licenseId).collection('dados_coleta')
-          .where('talhaoId', whereIn: chunk).get();
-      parcelaDocs.addAll(pSnap.docs);
-      final cSnap = await _firestore
-          .collection('clientes').doc(licenseId).collection('dados_cubagem')
-          .where('talhaoId', whereIn: chunk).get();
-      cubagemDocs.addAll(cSnap.docs);
+      try {
+        final pSnap = await _firestore
+            .collection('clientes').doc(licenseId).collection('dados_coleta')
+            .where('talhaoId', whereIn: chunk).get();
+        parcelaDocs.addAll(pSnap.docs);
+      } catch (e) { debugPrint("Erro ao buscar dados_coleta: $e"); }
+
+      try {
+        final cSnap = await _firestore
+            .collection('clientes').doc(licenseId).collection('dados_cubagem')
+            .where('talhaoId', whereIn: chunk).get();
+        cubagemDocs.addAll(cSnap.docs);
+      } catch (e) { debugPrint("Erro ao buscar dados_cubagem: $e"); }
+
+      try {
+        final piSnap = await _firestore
+            .collection('clientes').doc(licenseId).collection('dados_pilhas')
+            .where('talhaoId', whereIn: chunk).get();
+        pilhaDocs.addAll(piSnap.docs);
+      } catch (e) { debugPrint("Erro ao buscar dados_pilhas: $e"); }
     }
-    _downloadTotal += parcelaDocs.length + cubagemDocs.length;
+    _downloadTotal += parcelaDocs.length + cubagemDocs.length + pilhaDocs.length;
     _emitDownloadProgress("Baixando dados da nuvem...");
 
     await _downloadParcelasDaNuvem(parcelaDocs);
     await _downloadCubagensDaNuvem(cubagemDocs);
+    await _downloadPilhasDaNuvem(pilhaDocs);
   }
   
   Future<List<int>> _downloadFilhosDeProjeto(String licenseId, int projetoId) async {
@@ -702,6 +778,40 @@ class SyncService {
     }
   }
   
+  Future<void> _downloadPilhasDaNuvem(
+    List<firestore.QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) async {
+    if (docs.isEmpty) return;
+    final db = await _dbHelper.database;
+    await _pilhaRepository.ensureSchema();
+    for (final docSnapshot in docs) {
+      final dadosDaNuvem = docSnapshot.data();
+      try {
+        final rawSecoes = dadosDaNuvem[DbPilhasMadeira.secoes];
+        final String secoesJson;
+        if (rawSecoes is List) {
+          secoesJson = jsonEncode(rawSecoes);
+        } else if (rawSecoes is String) {
+          secoesJson = rawSecoes;
+        } else {
+          secoesJson = jsonEncode([]);
+        }
+
+        final pMap = PilhaMadeira.fromMap(dadosDaNuvem).toMap();
+        pMap[DbPilhasMadeira.secoes] = secoesJson;
+        pMap[DbPilhasMadeira.isSynced] = 1;
+
+        await db.transaction((txn) async {
+          await _upsert(txn, DbPilhasMadeira.tableName, pMap, DbPilhasMadeira.id);
+        });
+        _downloadados++;
+        _emitDownloadProgress("Baixando pilhas...");
+      } catch (e, s) {
+        debugPrint("Erro ao sincronizar pilha ${dadosDaNuvem['id']}: $e\n$s");
+      }
+    }
+  }
+
   Future<void> atualizarStatusProjetoNaFirebase(String projetoId, String novoStatus) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception("Usuário não está logado.");

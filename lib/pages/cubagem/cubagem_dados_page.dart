@@ -585,7 +585,11 @@ class _CubagemDadosPageState extends State<CubagemDadosPage> {
                         final secao = _secoes[index];
                         final bool isFilled = secao.circunferencia > 0;
                         return Card(
-                          color: isFilled ? Colors.green.shade50 : null,
+                          color: isFilled
+                              ? (Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.green.shade900.withAlpha(120)
+                                  : Colors.green.shade50)
+                              : null,
                           elevation: 2,
                           margin: const EdgeInsets.symmetric(vertical: 4),
                           child: ListTile(

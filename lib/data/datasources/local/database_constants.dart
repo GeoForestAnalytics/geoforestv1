@@ -51,6 +51,7 @@ class DbTalhoes {
   static const String materialGenetico = 'material_genetico';
   static const String dataPlantio = 'data_plantio';
   static const String lastModified = 'lastModified';
+  static const String volumeTotalTalhao = 'volumeTotalTalhao';
 }
 
 class DbParcelas {
@@ -161,6 +162,48 @@ class DbSortimentos {
   static const String comprimento = 'comprimento';
   static const String diametroMinimo = 'diametroMinimo';
   static const String diametroMaximo = 'diametroMaximo';
+}
+
+class DbCentroidesPilha {
+  static const String tableName = 'pontos_centroide_pilha';
+  static const String id = 'id';
+  static const String talhaoId = 'talhaoId';
+  static const String fazendaId = 'fazendaId';
+  static const String nomeFazenda = 'nomeFazenda';
+  static const String nomeTalhao = 'nomeTalhao';
+  static const String latitude = 'latitude';
+  static const String longitude = 'longitude';
+  static const String sortimentos = 'sortimentos'; // JSON
+  static const String lastModified = 'lastModified';
+}
+
+class DbPilhasMadeira {
+  static const String tableName = 'pilhas_madeira';
+  static const String id = 'id';
+  static const String talhaoId = 'talhaoId';
+  static const String centroideId = 'centroideId';
+  static const String numeroPilha = 'numeroPilha';
+  static const String sortimento = 'sortimento';
+  static const String dapMin = 'dapMin';
+  static const String dapMax = 'dapMax';
+  static const String comprimentoTora = 'comprimentoTora';
+  static const String comprimentoToraReal = 'comprimentoToraReal';
+  static const String comprimentoPilha = 'comprimentoPilha';
+  static const String secoes = 'secoes'; // JSON
+  static const String alturaMedia = 'alturaMedia';
+  static const String volumeBruto = 'volumeBruto';
+  static const String fatorEmpilhamento = 'fatorEmpilhamento';
+  static const String latitude = 'latitude';
+  static const String longitude = 'longitude';
+  static const String nomeFazenda = 'nomeFazenda';
+  static const String nomeTalhao = 'nomeTalhao';
+  static const String nomeLider = 'nomeLider';
+  static const String dataColeta = 'dataColeta';
+  static const String observacoes = 'observacoes';
+  static const String fotos = 'fotos'; // JSON array de caminhos
+  static const String exportada = 'exportada';
+  static const String isSynced = 'isSynced';
+  static const String lastModified = 'lastModified';
 }
 
 class DbDiarioDeCampo {

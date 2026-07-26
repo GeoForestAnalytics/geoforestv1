@@ -36,6 +36,8 @@ import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/data/repositories/codigos_repository.dart';
+import 'package:geoforestv1/data/repositories/pilha_repository.dart';
+import 'package:geoforestv1/models/pilha_madeira_model.dart';
 
 // --- PAYLOADS PARA ISOLATES ---
 
@@ -187,6 +189,17 @@ class _CsvOperacoesPayload {
     required this.composicaoDespesasRows,
     required this.custoPorVeiculoRows,
     required this.custoPorEquipeRows,
+  });
+}
+
+class _XlsxPilhasPayload {
+  final List<Map<String, dynamic>> pilhasMap;
+  final String nomeZona;
+  final Map<int, String> proj4Defs;
+  _XlsxPilhasPayload({
+    required this.pilhasMap,
+    required this.nomeZona,
+    required this.proj4Defs,
   });
 }
 
@@ -807,12 +820,104 @@ Future<List<int>> _generateXlsxConsolidadoBytesInIsolate(_CsvConsolidadoPayload 
   return excelFile.save() ?? <int>[];
 }
 
+// ── Isolate: exportação de pilhas de madeira ─────────────────────────────────
+
+Future<List<int>> _generateXlsxPilhasBytesInIsolate(_XlsxPilhasPayload payload) async {
+  final nf2 = NumberFormat("0.00", "pt_BR");
+  final nf0 = NumberFormat("0", "pt_BR");
+  final df = DateFormat('dd/MM/yyyy HH:mm');
+
+  // Inicializa projeção UTM
+  proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+  payload.proj4Defs.forEach((epsg, def) {
+    proj4.Projection.add('EPSG:$epsg', def);
+  });
+  final codigoEpsg = zonasUtmSirgas2000[payload.nomeZona] ?? 31982;
+  final projWGS84 = proj4.Projection.get('EPSG:4326');
+  final projUTM = proj4.Projection.get('EPSG:$codigoEpsg');
+
+  // Aba 1: uma linha por pilha
+  final List<List<dynamic>> rowsPilhas = [];
+  rowsPilhas.add([
+    'Fazenda', 'Talhão', 'Nº Pilha', 'Sortimento',
+    'DAP Min (cm)', 'DAP Max (cm)',
+    'Tora OS (m)', 'Tora Real (m)',
+    'Comprimento Pilha (m)', 'Nº Seções',
+    'Altura Média (m)', 'Volume Estéreo (st)', 'Fe', 'Volume Sólido (m³)',
+    'Líder', 'Data Coleta',
+    'X UTM', 'Y UTM',
+    'Observações',
+  ]);
+
+  // Aba 2: uma linha por seção
+  final List<List<dynamic>> rowsSecoes = [];
+  rowsSecoes.add([
+    'Fazenda', 'Talhão', 'Nº Pilha', 'Sortimento',
+    'Nº Seção', 'Distância (m)', 'Altura (m)',
+  ]);
+
+  for (final pMap in payload.pilhasMap) {
+    final p = PilhaMadeira.fromMap(pMap);
+    final vol = p.calcularVolumeBruto();
+    final volSolido = p.calcularVolumesolido();
+    final altMedia = p.calcularAlturaMedia();
+    final dataFmt = p.dataColeta != null ? df.format(p.dataColeta!) : '';
+    final toraReal = p.comprimentoToraReal != null ? nf2.format(p.comprimentoToraReal) : '';
+
+    String xUtm = '', yUtm = '';
+    if (p.latitude != null && p.longitude != null && projWGS84 != null && projUTM != null) {
+      final pUtm = projWGS84.transform(projUTM, proj4.Point(x: p.longitude!, y: p.latitude!));
+      xUtm = nf0.format(pUtm.x);
+      yUtm = nf0.format(pUtm.y);
+    }
+
+    rowsPilhas.add([
+      p.nomeFazenda ?? '', p.nomeTalhao ?? '', p.numeroPilhaFormatado, p.sortimento,
+      p.dapMin != null ? nf2.format(p.dapMin) : '',
+      p.dapMax != null ? nf2.format(p.dapMax) : '',
+      nf2.format(p.comprimentoTora), toraReal,
+      nf2.format(p.comprimentoPilha), p.secoes.length,
+      nf2.format(altMedia), nf2.format(vol), nf2.format(p.fatorEmpilhamento), nf2.format(volSolido),
+      p.nomeLider ?? '', dataFmt,
+      xUtm, yUtm,
+      p.observacoes ?? '',
+    ]);
+
+    for (final s in p.secoes) {
+      rowsSecoes.add([
+        p.nomeFazenda ?? '', p.nomeTalhao ?? '', p.numeroPilhaFormatado, p.sortimento,
+        s.posicao, nf2.format(s.distanciaMetros), nf2.format(s.altura),
+      ]);
+    }
+  }
+
+  final excel = Excel.createExcel();
+  const sheetPilhas = 'Pilhas';
+  const sheetSecoes = 'Seções';
+  final sheetPadrao = excel.getDefaultSheet();
+
+  for (final row in rowsPilhas) {
+    excel.appendRow(sheetPilhas, row.map(_paraCellValue).toList());
+  }
+  for (final row in rowsSecoes) {
+    excel.appendRow(sheetSecoes, row.map(_paraCellValue).toList());
+  }
+
+  if (sheetPadrao != null && sheetPadrao != sheetPilhas) excel.delete(sheetPadrao);
+  excel.setDefaultSheet(sheetPilhas);
+
+  return excel.save() ?? <int>[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 class ExportService {
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
   final _projetoRepository = ProjetoRepository();
   final _atividadeRepository = AtividadeRepository();
   final _talhaoRepository = TalhaoRepository();
+  final _pilhaRepository = PilhaRepository();
 
   Future<void> exportarRelatorioDiarioConsolidadoCsv({
     required BuildContext context,
@@ -1826,6 +1931,173 @@ class ExportService {
       }
     }
     if (todasAsCubagens.isNotEmpty) await _gerarXlsxCubagem(context, todasAsCubagens, outputPath, false);
+  }
+
+  // ── Exportação de Pilhas (mesmo padrão Parcelas / Cubagens) ─────────────────
+
+  Future<void> exportarNovasPilhas(BuildContext context) async {
+    try {
+      if (!await _requestPermission(context)) return;
+      final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
+      final cargo = licenseProvider.licenseData?.cargo;
+      if (cargo == 'gerente') {
+        await _showManagerPilhasExportDialog(context, isBackup: false);
+      } else {
+        final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+        final lider = teamProvider.lider;
+        if (lider == null || lider.isEmpty) {
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nome do líder não encontrado.')));
+          return;
+        }
+        final pilhas = await _pilhaRepository.getUnexportedPilhasByLider(lider);
+        if (pilhas.isEmpty) {
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma pilha nova para exportar.'), backgroundColor: Colors.orange));
+          return;
+        }
+        final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
+        await _gerarXlsxPilhas(context, pilhas, 'geoforest_export_pilhas_$hoje.xlsx', marcarComoExportado: true);
+      }
+    } catch (e, s) {
+      _handleExportError(context, 'exportar pilhas', e, s);
+    }
+  }
+
+  Future<void> exportarTodasPilhasBackup(BuildContext context) async {
+    try {
+      if (!await _requestPermission(context)) return;
+      final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
+      final cargo = licenseProvider.licenseData?.cargo;
+      if (cargo == 'gerente') {
+        await _showManagerPilhasExportDialog(context, isBackup: true);
+      } else {
+        final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+        final lider = teamProvider.lider;
+        if (lider == null || lider.isEmpty) {
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nome do líder não encontrado.')));
+          return;
+        }
+        final pilhas = await _pilhaRepository.getAllPilhasByLider(lider);
+        if (pilhas.isEmpty) {
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma pilha encontrada para backup.'), backgroundColor: Colors.orange));
+          return;
+        }
+        final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
+        await _gerarXlsxPilhas(context, pilhas, 'geoforest_BACKUP_PILHAS_$hoje.xlsx', marcarComoExportado: false);
+      }
+    } catch (e, s) {
+      _handleExportError(context, 'backup de pilhas', e, s);
+    }
+  }
+
+  Future<void> _showManagerPilhasExportDialog(BuildContext context, {required bool isBackup}) async {
+    final todosProjetos = await _projetoRepository.getTodosOsProjetosParaGerente();
+    final todosLideres = await _pilhaRepository.getDistinctLideres();
+    if (!context.mounted) return;
+    final result = await showDialog<ExportFilters>(
+      context: context,
+      builder: (_) => ManagerExportDialog(isBackup: isBackup, projetosDisponiveis: todosProjetos, lideresDisponiveis: todosLideres),
+    );
+    if (result != null && context.mounted) {
+      await _executarExportacaoGerentePilhas(context, result);
+    }
+  }
+
+  Future<void> _executarExportacaoGerentePilhas(BuildContext context, ExportFilters filters) async {
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando pilhas com base nos filtros...')));
+    final pilhas = await _pilhaRepository.getPilhasPorLideres(
+      apenasNaoExportadas: !filters.isBackup,
+      lideresNomes: filters.selectedLideres.isNotEmpty ? filters.selectedLideres : null,
+    );
+    if (pilhas.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma pilha encontrada para os filtros selecionados.')));
+      }
+      return;
+    }
+    final tipo = filters.isBackup ? 'BACKUP_PILHAS_GERENTE' : 'EXPORT_PILHAS_GERENTE';
+    final fName = 'geoforest_${tipo}_${DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now())}.xlsx';
+    await _gerarXlsxPilhas(context, pilhas, fName, marcarComoExportado: !filters.isBackup);
+  }
+
+  Future<void> _gerarXlsxPilhas(
+    BuildContext context,
+    List<PilhaMadeira> pilhas,
+    String nomeArquivo, {
+    required bool marcarComoExportado,
+  }) async {
+    if (pilhas.isEmpty) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma pilha para exportar.'), backgroundColor: Colors.orange));
+      return;
+    }
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando planilha de pilhas...')));
+
+    final prefs = await SharedPreferences.getInstance();
+    final payload = _XlsxPilhasPayload(
+      pilhasMap: pilhas.map((p) => p.toMap()).toList(),
+      nomeZona: prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S',
+      proj4Defs: proj4Definitions,
+    );
+    final bytes = await compute(_generateXlsxPilhasBytesInIsolate, payload);
+    final path = await _salvarBytesEObterCaminho(bytes, nomeArquivo);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      await Share.shareXFiles([XFile(path)], subject: 'Exportação de Pilhas — GeoForest');
+      if (marcarComoExportado) {
+        final ids = pilhas.map((p) => p.id).whereType<int>().toList();
+        await _pilhaRepository.marcarPilhasComoExportadas(ids);
+      }
+    }
+  }
+
+  // ── Exportação por talhão (acionada pelo mapa) ───────────────────────────
+  Future<void> exportarPilhasTalhao({
+    required BuildContext context,
+    required int talhaoId,
+    String? nomeTalhao,
+    String? nomeFazenda,
+  }) async {
+    try {
+      if (!await _requestPermission(context)) return;
+      if (context.mounted) ProgressDialog.show(context, 'Gerando planilha de pilhas...');
+
+      final pilhas = await _pilhaRepository.getPilhasDoTalhao(talhaoId);
+      if (pilhas.isEmpty) {
+        if (context.mounted) {
+          ProgressDialog.hide(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Nenhuma pilha coletada neste talhão.'), backgroundColor: Colors.orange),
+          );
+        }
+        return;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final payload = _XlsxPilhasPayload(
+        pilhasMap: pilhas.map((p) => p.toMap()).toList(),
+        nomeZona: prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S',
+        proj4Defs: proj4Definitions,
+      );
+      final bytes = await compute(_generateXlsxPilhasBytesInIsolate, payload);
+
+      final fazFmt = (nomeFazenda ?? 'fazenda').replaceAll(RegExp(r'[^\w]'), '_');
+      final talFmt = (nomeTalhao ?? 'talhao').replaceAll(RegExp(r'[^\w]'), '_');
+      final dataFmt = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final fName = 'pilhas_${fazFmt}_${talFmt}_$dataFmt.xlsx';
+
+      final path = await _salvarBytesEObterCaminho(bytes, fName);
+      if (context.mounted) {
+        await Share.shareXFiles(
+          [XFile(path)],
+          subject: 'Pilhas — ${nomeFazenda ?? ''} ${nomeTalhao ?? ''} — GeoForest',
+        );
+      }
+    } catch (e, s) {
+      _handleExportError(context, 'exportar pilhas', e, s);
+    } finally {
+      if (context.mounted) ProgressDialog.hide(context);
+    }
   }
 
   Future<bool> _requestPermission(BuildContext context) async {

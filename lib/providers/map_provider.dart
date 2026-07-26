@@ -27,7 +27,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
+import 'package:geoforestv1/data/repositories/pilha_repository.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
+import 'package:geoforestv1/models/pilha_madeira_model.dart';
 import 'package:geoforestv1/utils/app_config.dart';
 
 enum MapLayerType { ruas, satelite, sateliteMapbox }
@@ -42,11 +44,15 @@ class MapProvider with ChangeNotifier {
   final _parcelaRepository = ParcelaRepository();
   final _fazendaRepository = FazendaRepository();
   final _talhaoRepository = TalhaoRepository();
+  final _pilhaRepository = PilhaRepository();
   
   static final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
   List<ImportedPolygonFeature> _importedPolygons = [];
   List<SamplePoint> _samplePoints = [];
+  List<CentroidePilha> _centroidesPilha = [];
+  List<PilhaMadeira> _pilhasVisiveis = [];
+  int? _talhaoVisualizandoPilhas;
   bool _isLoading = false;
   Atividade? _currentAtividade;
   MapLayerType _currentLayer = MapLayerType.satelite;
@@ -67,6 +73,9 @@ class MapProvider with ChangeNotifier {
   List<LatLng> get drawnPoints => _drawnPoints;
   List<Polygon> get polygons => _importedPolygons.map((f) => f.polygon).toList();
   List<SamplePoint> get samplePoints => _samplePoints;
+  List<CentroidePilha> get centroidesPilha => _centroidesPilha;
+  List<PilhaMadeira> get pilhasVisiveis => _pilhasVisiveis;
+  int? get talhaoVisualizandoPilhas => _talhaoVisualizandoPilhas;
   bool get isLoading => _isLoading;
   Atividade? get currentAtividade => _currentAtividade;
   MapLayerType get currentLayer => _currentLayer;
@@ -1019,34 +1028,36 @@ class MapProvider with ChangeNotifier {
   }
 
   Future<String> _processarPlanoDeAmostragemImportado(List<ImportedPointFeature> pontosImportados, BuildContext context) async {
-    _importedPolygons = []; 
-    _samplePoints = []; 
+    _importedPolygons = [];
+    _samplePoints = [];
     notifyListeners();
-  
+
     final db = await _dbHelper.database;
     final List<Parcela> parcelasParaSalvar = [];
     int novasFazendas = 0;
     int novosTalhoes = 0;
-    
+
     final int? idDoProjetoAtual = _currentAtividade?.projetoId;
     final now = DateTime.now().toIso8601String();
-    
+    // Tracks talhões already processed in this import to correctly accumulate volumes
+    final talhoesJaProcessados = <String>{};
+
     int pointIdCounter = 1;
-  
+
     await db.transaction((txn) async {
       for (final ponto in pontosImportados) {
         final props = ponto.properties;
-        
+
         final fazendaId = (props['fazenda_id'] ?? props['id_fazenda'] ?? props['Fazenda'])?.toString();
         final nomeTalhao = (props['talhao_nome'] ?? props['talhao_id'] ?? props['Talhão'])?.toString();
-        
+
         if (fazendaId == null || nomeTalhao == null) {
           debugPrint("Aviso: Ponto pulado por falta de 'fazenda' ou 'talhao' nas propriedades.");
           continue;
         }
-  
+
         Fazenda? fazenda = (await txn.query('fazendas', where: 'id = ? AND atividadeId = ?', whereArgs: [fazendaId, _currentAtividade!.id!])).map((e) => Fazenda.fromMap(e)).firstOrNull;
-        
+
         if (fazenda == null) {
           final nomeDaFazenda = props['fazenda_nome']?.toString() ?? props['Fazenda']?.toString() ?? fazendaId;
           final municipio = props['municipio']?.toString() ?? 'N/I';
@@ -1057,9 +1068,9 @@ class MapProvider with ChangeNotifier {
           await txn.insert('fazendas', map);
           novasFazendas++;
         }
-  
+
         Talhao? talhao = (await txn.query('talhoes', where: 'nome = ? AND fazendaId = ? AND fazendaAtividadeId = ?', whereArgs: [nomeTalhao, fazenda.id, fazenda.atividadeId])).map((e) => Talhao.fromMap(e)).firstOrNull;
-        
+
         // Captura todos os dados do talhão do arquivo
         final areaHaDoArquivo = (props['area_talhao_ha'] as num?)?.toDouble() ?? (props['AreaTalhao'] as num?)?.toDouble();
         final especieDoArquivo = (props['especie'] ?? props['Espécie'])?.toString();
@@ -1068,12 +1079,20 @@ class MapProvider with ChangeNotifier {
         final plantioDoArquivo = (props['plantio'] ?? props['Plantio'])?.toString();
         final blocoDoArquivo = (props['bloco'] ?? props['Bloco'])?.toString();
         final rfDoArquivo = (props['rf'] ?? props['RF'])?.toString();
-  
+
+        // Volume esperado por sortimento (coluna O da planilha) — acumulado por talhão
+        final rawVol = props['volume_esperado'] ?? props['Volume_esperado'] ??
+            props['volume esperado'] ?? props['m3_esperado'] ?? props['m³_esperado'] ?? props['classe'];
+        final volumeDouble = rawVol != null
+            ? double.tryParse(rawVol.toString().replaceAll(',', '.'))
+            : null;
+        final talhaoKey = '$fazendaId/$nomeTalhao';
+
         if (talhao == null) {
           // Cria um novo talhão com todos os dados se não existir
           talhao = Talhao(
-            fazendaId: fazenda.id, 
-            fazendaAtividadeId: fazenda.atividadeId, 
+            fazendaId: fazenda.id,
+            fazendaAtividadeId: fazenda.atividadeId,
             nome: nomeTalhao,
             areaHa: areaHaDoArquivo,
             especie: especieDoArquivo,
@@ -1082,13 +1101,25 @@ class MapProvider with ChangeNotifier {
             dataPlantio: plantioDoArquivo,
             bloco: blocoDoArquivo,
             up: rfDoArquivo,
+            volumeTotalTalhao: volumeDouble,
           );
           final map = talhao.toMap();
           map['lastModified'] = now;
           final talhaoId = await txn.insert('talhoes', map);
           talhao = talhao.copyWith(id: talhaoId);
+          talhoesJaProcessados.add(talhaoKey);
           novosTalhoes++;
         } else {
+          // Calcula o novo volume: primeira ocorrência neste import → substitui; demais → acumula
+          double? newVolume;
+          if (volumeDouble != null) {
+            final isFirstInImport = !talhoesJaProcessados.contains(talhaoKey);
+            newVolume = isFirstInImport
+                ? volumeDouble
+                : (talhao.volumeTotalTalhao ?? 0) + volumeDouble;
+            talhoesJaProcessados.add(talhaoKey);
+          }
+
           // Se o talhão já existe, verifica se algum campo pode ser atualizado (ex: área)
           final talhaoAtualizado = talhao.copyWith(
             areaHa: (talhao.areaHa == null || talhao.areaHa == 0) ? areaHaDoArquivo : talhao.areaHa,
@@ -1098,6 +1129,7 @@ class MapProvider with ChangeNotifier {
             dataPlantio: talhao.dataPlantio ?? plantioDoArquivo,
             bloco: talhao.bloco ?? blocoDoArquivo,
             up: talhao.up ?? rfDoArquivo,
+            volumeTotalTalhao: newVolume,
           );
           final map = talhaoAtualizado.toMap();
           map['lastModified'] = now;
@@ -1145,9 +1177,35 @@ class MapProvider with ChangeNotifier {
   void clearAllMapData() {
     _importedPolygons = [];
     _samplePoints = [];
+    _centroidesPilha = [];
+    _pilhasVisiveis = [];
+    _talhaoVisualizandoPilhas = null;
     _currentAtividade = null;
     if (_isFollowingUser) toggleFollowingUser();
     if (_isDrawing) cancelDrawing();
+    notifyListeners();
+  }
+
+  Future<void> loadCentroidesPilha() async {
+    if (_currentAtividade == null) return;
+    _centroidesPilha = await _pilhaRepository.getCentroidesParaAtividade(_currentAtividade!.id!);
+    notifyListeners();
+  }
+
+  Future<void> toggleVisualizarPilhasTalhao(int talhaoId) async {
+    if (_talhaoVisualizandoPilhas == talhaoId) {
+      _pilhasVisiveis = [];
+      _talhaoVisualizandoPilhas = null;
+    } else {
+      _pilhasVisiveis = await _pilhaRepository.getPilhasDoTalhao(talhaoId);
+      _talhaoVisualizandoPilhas = talhaoId;
+    }
+    notifyListeners();
+  }
+
+  Future<void> recarregarPilhasVisiveis() async {
+    if (_talhaoVisualizandoPilhas == null) return;
+    _pilhasVisiveis = await _pilhaRepository.getPilhasDoTalhao(_talhaoVisualizandoPilhas!);
     notifyListeners();
   }
 
@@ -1254,9 +1312,12 @@ class MapProvider with ChangeNotifier {
   
   Future<void> loadSamplesParaAtividade() async {
     if (_currentAtividade == null) return;
-    
+
     _setLoading(true);
     _samplePoints.clear();
+    _centroidesPilha = [];
+    _pilhasVisiveis = [];
+    _talhaoVisualizandoPilhas = null;
     final fazendas = await _fazendaRepository.getFazendasDaAtividade(_currentAtividade!.id!);
     for (final fazenda in fazendas) {
       final talhoes = await _talhaoRepository.getTalhoesDaFazenda(fazenda.id, _currentAtividade!.id!);
@@ -1272,6 +1333,7 @@ class MapProvider with ChangeNotifier {
         }
       }
     }
+    _centroidesPilha = await _pilhaRepository.getCentroidesParaAtividade(_currentAtividade!.id!);
     _setLoading(false);
   }
 

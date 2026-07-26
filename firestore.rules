@@ -24,16 +24,26 @@ service cloud.firestore {
       allow delete: if false;
 
 
-      // Regra para TODAS as subcoleções (projetos, dados_coleta, etc.)
+      // Registro de dispositivos — qualquer usuário autenticado pode registrar
+      // seu próprio dispositivo (limite é checado na Cloud Function)
+      match /dispositivosAtivos/{deviceId} {
+        allow read, write: if request.auth != null;
+      }
+
+      // Regra para TODAS as demais subcoleções (projetos, dados_coleta, etc.)
       match /{subcollection}/{docId=**} {
 
-        // PERMISSÃO DE LEITURA E ESCRITA:
-        // Permite a operação SOMENTE SE o 'licenseId' carimbado no token do usuário
-        // for exatamente o mesmo que o {licenseId} do documento que ele está tentando acessar.
-        //
-        // Isso é super eficiente (0 leituras extras) e muito seguro.
-        allow read, write: if request.auth.token.licenseId == licenseId;
+        // Permite se:
+        // 1. O custom claim licenseId bate com o licenseId do caminho (coletores/equipe delegada), OU
+        // 2. O UID do usuário É o licenseId (dono/gerente da licença, antes do claim ser setado)
+        allow read, write: if request.auth.token.licenseId == licenseId
+                           || request.auth.uid == licenseId;
       }
+    }
+
+    // Cada usuário pode ler e escrever o próprio documento de perfil
+    match /users/{userId} {
+      allow read, write: if request.auth.uid == userId;
     }
 
     // Regra de delegação. Permite que qualquer usuário autenticado leia e atualize

@@ -57,7 +57,7 @@ exports.adicionarMembroEquipe = functions
         throw new functions.https.HttpsError("permission-denied", "Apenas gerentes autenticados podem adicionar membros.");
       }
       
-      const { email, password, name, cargo } = data;
+      const { email, password, name, cargo, modulo } = data;
       if (!email || !password || !name || !cargo || password.length < 6) {
         throw new functions.https.HttpsError("invalid-argument", "Dados inválidos. Senha deve ter mín. 6 caracteres.");
       }
@@ -79,6 +79,7 @@ exports.adicionarMembroEquipe = functions
         batch.update(clienteDocRef, {
             [`usuariosPermitidos.${userRecord.uid}`]: {
                 cargo: cargo,
+                modulo: cargo === 'gerente' ? (modulo || 'inventario') : null,
                 email: email,
                 nome: name,
                 adicionadoEm: admin.firestore.FieldValue.serverTimestamp()
@@ -95,7 +96,7 @@ exports.adicionarMembroEquipe = functions
 
         await batch.commit();
         
-        return { success: true, message: `Usuário '${name}' adicionado com sucesso!` };
+        return { success: true, uid: userRecord.uid, message: `Usuário '${name}' adicionado com sucesso!` };
 
       } catch (error) {
         console.error("Erro ao criar membro:", error);

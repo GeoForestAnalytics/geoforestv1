@@ -632,19 +632,22 @@ class _InventarioPageState extends State<InventarioPage> {
                             final regra = _encontrarRegra(arvore.codigo);
                             
                             // --- LÓGICA DE CORES ATUALIZADA (DINÂMICA) ---
+                            final isDark = Theme.of(context).brightness == Brightness.dark;
                             Color backgroundColor;
 
                             // 1. Prioridade: Erro ou Dano (Baseado no CSV: Extra_Dano == S)
                             if (regra != null && regra.requerAlturaDano) {
-                              backgroundColor = Colors.red.shade50; 
-                            } 
+                              backgroundColor = isDark ? Colors.red.shade900.withAlpha(180) : Colors.red.shade50;
+                            }
                             // 2. Prioridade: Dominante (Baseado no App: booleano dominante)
                             else if (arvore.dominante) {
-                              backgroundColor = Colors.blue.shade50;
-                            } 
+                              backgroundColor = isDark ? Colors.blue.shade900.withAlpha(180) : Colors.blue.shade50;
+                            }
                             // 3. Normal (Alternado)
                             else {
-                              backgroundColor = index.isOdd ? Colors.grey.shade50 : Colors.white;
+                              backgroundColor = isDark
+                                  ? (index.isOdd ? Colors.grey.shade800 : Colors.grey.shade900)
+                                  : (index.isOdd ? Colors.grey.shade50 : Colors.white);
                             }
 
                             // Borda especial se tiver Dano

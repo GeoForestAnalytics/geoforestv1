@@ -1,7 +1,8 @@
-// lib/pages/talhoes/detalhes_talhao_page.dart (VERSÃO FINAL COMPLETA COM GO_ROUTER)
+// lib/pages/talhoes/detalhes_talhao_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
+import 'package:geoforestv1/models/pilha_madeira_model.dart';
 import 'package:intl/intl.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
@@ -9,16 +10,18 @@ import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/pages/dashboard/talhao_dashboard_page.dart';
 import 'package:geoforestv1/pages/amostra/coleta_dados_page.dart';
 import 'package:geoforestv1/pages/cubagem/cubagem_dados_page.dart';
+import 'package:geoforestv1/pages/pilhas/coleta_pilha_page.dart';
+import 'package:geoforestv1/pages/pilhas/detalhe_pilha_page.dart';
 import 'package:geoforestv1/utils/navigation_helper.dart';
 
 // Repositórios
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+import 'package:geoforestv1/data/repositories/pilha_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 
 class DetalhesTalhaoPage extends StatefulWidget {
-  // ✅ CONSTRUTOR MODIFICADO
   final int atividadeId;
   final int talhaoId;
 
@@ -33,29 +36,32 @@ class DetalhesTalhaoPage extends StatefulWidget {
 }
 
 class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
-  // ✅ INSTÂNCIAS DOS REPOSITÓRIOS
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
+  final _pilhaRepository = PilhaRepository();
   final _talhaoRepository = TalhaoRepository();
   final _atividadeRepository = AtividadeRepository();
 
-  // ✅ ESTADO COM FUTURES
-  late Future<List<dynamic>> _pageDataFuture; // Para Talhão e Atividade
+  late Future<List<dynamic>> _pageDataFuture;
   late Future<List<dynamic>> _coletasFuture;
 
   bool _isSelectionMode = false;
   final Set<int> _selectedItens = {};
 
-  // Função auxiliar para verificar tipo de atividade
   bool _isAtividadeDeInventario(Atividade? atividade) {
     if (atividade == null) return false;
-    final tipo = atividade.tipo.toLowerCase();    
-    // ADICIONAMOS "BIO" AQUI
+    final tipo = atividade.tipo.toLowerCase();
     return tipo.contains("ipc") ||
         tipo.contains("ifc") ||
         tipo.contains("ifs") ||
-        tipo.contains("bio") || // <--- AQUI ESTA A CORREÇÃO
+        tipo.contains("bio") ||
         tipo.contains("inventário");
+  }
+
+  bool _isAtividadeDeColheita(Atividade? atividade) {
+    if (atividade == null) return false;
+    final tipo = atividade.tipo.toLowerCase();
+    return tipo.contains('colheita') || tipo.contains('pilha');
   }
 
   @override
@@ -73,17 +79,17 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
           _talhaoRepository.getTalhaoById(widget.talhaoId),
           _atividadeRepository.getAtividadeById(widget.atividadeId),
         ]);
-        
+
         _pageDataFuture.then((data) {
           if (mounted) {
             final Atividade? atividade = data.length > 1 ? data[1] as Atividade? : null;
             setState(() {
               if (_isAtividadeDeInventario(atividade)) {
                 _coletasFuture = _parcelaRepository.getParcelasDoTalhao(widget.talhaoId);
+              } else if (_isAtividadeDeColheita(atividade)) {
+                _coletasFuture = _pilhaRepository.getPilhasDoTalhao(widget.talhaoId);
               } else {
-                // CORREÇÃO: Garante que as cubagens venham ordenadas
                 _coletasFuture = _cubagemRepository.getTodasCubagensDoTalhao(widget.talhaoId).then((lista) {
-                  // Ordena por Identificador (alfabético/numérico) para manter consistência
                   lista.sort((a, b) => a.identificador.compareTo(b.identificador));
                   return lista;
                 });
@@ -103,10 +109,26 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     if (recarregar == true && mounted) _carregarDados();
   }
 
-  Future<void> _deleteSelectedItems(bool isInventario) async {
+  Future<void> _navegarParaNovaPilha(Talhao talhao) async {
+    final centroide = await _pilhaRepository.getCentroideParaTalhao(talhao.id!);
+    if (!mounted) return;
+    if (centroide == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nenhum centróide configurado para este talhão.')),
+      );
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ColetaPilhaPage(centroide: centroide)),
+    );
+    if (mounted) _carregarDados();
+  }
+
+  Future<void> _deleteSelectedItems(bool isInventario, {bool isColheita = false}) async {
     if (_selectedItens.isEmpty || !mounted) return;
 
-    final itemType = isInventario ? 'parcelas' : 'cubagens';
+    final itemType = isInventario ? 'parcelas' : isColheita ? 'pilhas' : 'cubagens';
     final bool? confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -114,7 +136,11 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
         content: Text('Tem certeza que deseja apagar os ${_selectedItens.length} $itemType selecionados?'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), style: FilledButton.styleFrom(backgroundColor: Colors.red), child: const Text('Apagar')),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Apagar'),
+          ),
         ],
       ),
     );
@@ -122,14 +148,22 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     if (confirmar == true) {
       if (isInventario) {
         await _parcelaRepository.deletarMultiplasParcelas(_selectedItens.toList());
+      } else if (isColheita) {
+        for (final id in _selectedItens) {
+          await _pilhaRepository.deletePilha(id);
+        }
       } else {
         await _cubagemRepository.deletarMultiplasCubagens(_selectedItens.toList());
       }
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_selectedItens.length} $itemType apagados.'), backgroundColor: Colors.green));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${_selectedItens.length} $itemType apagados.'), backgroundColor: Colors.green),
+        );
+      }
       _carregarDados();
     }
   }
-  
+
   Future<void> _navegarParaNovaCubagem(Talhao talhao) async {
     final String? metodoEscolhido = await showDialog<String>(
       context: context,
@@ -184,7 +218,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
       _carregarDados();
     }
   }
-  
+
   Future<void> _navegarParaDetalhesParcela(Parcela parcela) async {
     await Navigator.push(
       context,
@@ -194,7 +228,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     );
     _carregarDados();
   }
-  
+
   Future<void> _navegarParaDetalhesCubagem(CubagemArvore arvore, Atividade atividade) async {
     final metodoCorreto = arvore.metodoCubagem ?? atividade.metodoCubagem ?? 'Fixas';
     await Navigator.push(
@@ -208,7 +242,15 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
     );
     _carregarDados();
   }
-  
+
+  Future<void> _navegarParaDetalhesPilha(PilhaMadeira pilha) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => DetalhePilhaPage(pilha: pilha)),
+    );
+    if (mounted) _carregarDados();
+  }
+
   void _toggleSelectionMode(int? itemId) {
     setState(() {
       _isSelectionMode = !_isSelectionMode;
@@ -261,7 +303,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
         return 'Exportada';
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<dynamic>>(
@@ -281,12 +323,21 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
           return Scaffold(appBar: AppBar(title: const Text('Erro')), body: const Center(child: Text('Não foi possível encontrar os dados do talhão ou atividade.')));
         }
 
+        final bool isInventario = _isAtividadeDeInventario(atividade);
+        final bool isColheita = _isAtividadeDeColheita(atividade);
+
         return Scaffold(
           appBar: _isSelectionMode
               ? AppBar(
                   leading: IconButton(icon: const Icon(Icons.close), onPressed: () => _toggleSelectionMode(null)),
                   title: Text('${_selectedItens.length} selecionados'),
-                  actions: [IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _deleteSelectedItems(_isAtividadeDeInventario(atividade)), tooltip: 'Apagar Selecionados')],
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _deleteSelectedItems(isInventario, isColheita: isColheita),
+                      tooltip: 'Apagar Selecionados',
+                    ),
+                  ],
                 )
               : _buildAppBar(talhao, atividade),
           body: Column(
@@ -314,7 +365,11 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
                 child: Text(
-                  _isAtividadeDeInventario(atividade) ? "Coletas de Parcela" : "Árvores para Cubagem",
+                  isInventario
+                      ? "Coletas de Parcela"
+                      : isColheita
+                          ? "Pilhas de Madeira"
+                          : "Árvores para Cubagem",
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Theme.of(context).colorScheme.primary),
                 ),
               ),
@@ -335,9 +390,11 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
                           child: Text(
-                            _isAtividadeDeInventario(atividade)
+                            isInventario
                                 ? 'Nenhuma parcela coletada.\nClique no botão "+" para iniciar.'
-                                : 'Nenhuma árvore para cubar.\nClique no botão "+" para adicionar uma cubagem manual.',
+                                : isColheita
+                                    ? 'Nenhuma pilha registrada.\nClique no botão "+" para adicionar uma pilha.'
+                                    : 'Nenhuma árvore para cubar.\nClique no botão "+" para adicionar uma cubagem manual.',
                             textAlign: TextAlign.center,
                             style: const TextStyle(fontSize: 16, color: Colors.grey),
                           ),
@@ -345,9 +402,13 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
                       );
                     }
 
-                    return _isAtividadeDeInventario(atividade)
-                        ? _buildListaDeParcelas(itens.cast<Parcela>())
-                        : _buildListaDeCubagens(itens.cast<CubagemArvore>(), atividade);
+                    if (isInventario) {
+                      return _buildListaDeParcelas(itens.cast<Parcela>());
+                    } else if (isColheita) {
+                      return _buildListaDePilhas(itens.cast<PilhaMadeira>());
+                    } else {
+                      return _buildListaDeCubagens(itens.cast<CubagemArvore>(), atividade);
+                    }
                   },
                 ),
               ),
@@ -356,10 +417,22 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
           floatingActionButton: _isSelectionMode
               ? null
               : FloatingActionButton.extended(
-                  onPressed: () => _isAtividadeDeInventario(atividade) ? _navegarParaNovaParcela(talhao) : _navegarParaNovaCubagem(talhao),
-                  tooltip: _isAtividadeDeInventario(atividade) ? 'Nova Parcela' : 'Nova Cubagem Manual',
-                  icon: Icon(_isAtividadeDeInventario(atividade) ? Icons.add_location_alt_outlined : Icons.add),
-                  label: Text(_isAtividadeDeInventario(atividade) ? 'Nova Parcela' : 'Nova Cubagem'),
+                  onPressed: () {
+                    if (isInventario) {
+                      _navegarParaNovaParcela(talhao);
+                    } else if (isColheita) {
+                      _navegarParaNovaPilha(talhao);
+                    } else {
+                      _navegarParaNovaCubagem(talhao);
+                    }
+                  },
+                  tooltip: isInventario ? 'Nova Parcela' : isColheita ? 'Nova Pilha' : 'Nova Cubagem Manual',
+                  icon: Icon(isInventario
+                      ? Icons.add_location_alt_outlined
+                      : isColheita
+                          ? Icons.layers_outlined
+                          : Icons.add),
+                  label: Text(isInventario ? 'Nova Parcela' : isColheita ? 'Nova Pilha' : 'Nova Cubagem'),
                 ),
         );
       },
@@ -374,7 +447,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
         final parcela = parcelas[index];
         final isSelected = _selectedItens.contains(parcela.dbId!);
         final dataFormatada = DateFormat('dd/MM/yyyy HH:mm').format(parcela.dataColeta!);
-        
+
         final bool foiExportada = parcela.exportada;
         final StatusParcela statusFinal = foiExportada ? StatusParcela.exportada : parcela.status;
         final Color corFinal = foiExportada ? StatusParcela.exportada.cor : parcela.status.cor;
@@ -384,7 +457,7 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
         if (parcela.up != null && parcela.up!.isNotEmpty) {
           titulo = 'UP: ${parcela.up} / Parcela: ${parcela.idParcela}';
         }
-        
+
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           color: isSelected ? Theme.of(context).colorScheme.primaryContainer.withAlpha(128) : null,
@@ -405,6 +478,50 @@ class _DetalhesTalhaoPageState extends State<DetalhesTalhaoPage> {
                       _selectedItens.clear();
                       _selectedItens.add(parcela.dbId!);
                       _deleteSelectedItems(true);
+                    },
+                  ),
+            selected: isSelected,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildListaDePilhas(List<PilhaMadeira> pilhas) {
+    final nf2 = NumberFormat('#,##0.00', 'pt_BR');
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 80),
+      itemCount: pilhas.length,
+      itemBuilder: (context, index) {
+        final pilha = pilhas[index];
+        final isSelected = _selectedItens.contains(pilha.id!);
+        final volEstereo = pilha.calcularVolumeBruto();
+        final volSolido = pilha.calcularVolumesolido();
+        final dataFormatada = pilha.dataColeta != null ? DateFormat('dd/MM/yyyy HH:mm').format(pilha.dataColeta!) : '';
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          color: isSelected ? Theme.of(context).colorScheme.primaryContainer.withAlpha(128) : null,
+          child: ListTile(
+            onTap: () => _isSelectionMode ? _onItemSelected(pilha.id!) : _navegarParaDetalhesPilha(pilha),
+            onLongPress: () => _toggleSelectionMode(pilha.id!),
+            leading: CircleAvatar(
+              backgroundColor: isSelected
+                  ? Theme.of(context).colorScheme.primary
+                  : (pilha.exportada ? Colors.grey : Colors.brown),
+              child: Icon(isSelected ? Icons.check : Icons.layers_outlined, color: Colors.white),
+            ),
+            title: Text('Pilha ${pilha.numeroPilha}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(
+              '${nf2.format(volEstereo)} st  ·  ${nf2.format(volSolido)} m³ sólido\n$dataFormatada',
+            ),
+            trailing: _isSelectionMode
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () {
+                      _selectedItens.clear();
+                      _selectedItens.add(pilha.id!);
+                      _deleteSelectedItems(false, isColheita: true);
                     },
                   ),
             selected: isSelected,

@@ -21,8 +21,9 @@ import 'package:geoforestv1/services/import/planejamento_import_strategy.dart';
 import 'package:geoforestv1/services/import/inventario_import_strategy.dart';
 import 'package:geoforestv1/services/import/cubagem_import_strategy.dart';
 import 'package:geoforestv1/services/import/planejamento_cubagem_import_strategy.dart';
+import 'package:geoforestv1/services/import/pilha_os_import_strategy.dart';
 
-enum TipoImportacao { inventario, cubagem, planejamento, planejamentoCubagem, desconhecido }
+enum TipoImportacao { inventario, cubagem, planejamento, planejamentoCubagem, pilhasOs, desconhecido }
 
 class ImportRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
@@ -44,6 +45,12 @@ class ImportRepository {
     bool hasCubingMeasurementData = headers.contains('circunferencia_secao_cm') || headers.contains('circunferencia_cm');
     bool hasPlanningData = headers.contains('medir ?') || (headers.contains('long (x)') && headers.contains('lat (y)'));
     bool hasCubingIdentifier = headers.contains('identificador_arvore');
+    bool hasPilhasData = headers.any((h) => h.replaceAll(RegExp(r'[^a-z0-9]'), '') == 'identificadorpilha');
+
+    // 0. É uma OS DE PILHAS?
+    if (hasPilhasData) {
+      return (PilhaOsImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.pilhasOs);
+    }
 
     // 1. É um PLANO DE CUBAGEM?
     if (hasCubingIdentifier && hasPlanningData && !hasCubingMeasurementData) {
@@ -182,7 +189,15 @@ class ImportRepository {
 
       // Relatório final baseado no tipo detectado
       String report;
-      if (tipoArquivo == TipoImportacao.planejamento) {
+      if (tipoArquivo == TipoImportacao.pilhasOs) {
+        report = "OS de Pilhas importada com sucesso!\n\n"
+                 "Linhas processadas: ${finalResult.linhasProcessadas}\n\n"
+                 "Itens Criados:\n"
+                 " - Atividades: ${finalResult.atividadesCriadas}\n"
+                 " - Fazendas: ${finalResult.fazendasCriadas}\n"
+                 " - Talhões: ${finalResult.talhoesCriados}\n"
+                 " - Pontos de Pilha (centróides): ${finalResult.centroidesCriados}";
+      } else if (tipoArquivo == TipoImportacao.planejamento) {
         report = "Importação de Plano de Amostragem Concluída!\n\n"
                  "Linhas no arquivo: ${finalResult.linhasProcessadas}\n"
                  "Parcelas ignoradas (Medir != SIM): ${finalResult.parcelasIgnoradas}\n\n"

@@ -12,6 +12,8 @@ class LicenseData {
   final Map<String, dynamic> features;
   final Map<String, dynamic> limites;
   final String cargo;
+  // 'inventario' | 'pilhas' | 'todos'
+  final String modulo;
 
   LicenseData({
     required this.id,
@@ -20,7 +22,13 @@ class LicenseData {
     required this.features,
     required this.limites,
     required this.cargo,
+    this.modulo = 'inventario',
   });
+
+  bool get isModuloInventario => modulo == 'inventario' || modulo == 'todos';
+  bool get isModuloColheita => modulo == 'colheita' || modulo == 'todos';
+  bool get isModuloSilvicultura => modulo == 'silvicultura' || modulo == 'todos';
+  bool get isModuloTodos => modulo == 'todos';
 
   bool get isTrialExpiringSoon {
     if (status != 'trial' || trialEndDate == null) {
@@ -77,6 +85,9 @@ class LicenseProvider with ChangeNotifier {
         final usuariosPermitidos = data['usuariosPermitidos'] as Map<String, dynamic>? ?? {};
         final dadosDoUsuario = usuariosPermitidos[user.uid] as Map<String, dynamic>?;
         final cargoDoUsuario = dadosDoUsuario?['cargo'] as String? ?? 'equipe';
+        // Compatibilidade: 'pilhas' (nome antigo) → 'colheita'
+        final rawModulo = dadosDoUsuario?['modulo'] as String? ?? 'inventario';
+        final moduloDoUsuario = rawModulo == 'pilhas' ? 'colheita' : rawModulo;
 
         _licenseData = LicenseData(
           id: doc.id,
@@ -85,6 +96,7 @@ class LicenseProvider with ChangeNotifier {
           features: data['features'] ?? {},
           limites: data['limites'] ?? {},
           cargo: cargoDoUsuario,
+          modulo: moduloDoUsuario,
         );
         _error = null;
       } else {
