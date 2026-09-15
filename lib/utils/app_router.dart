@@ -26,6 +26,8 @@ import 'package:geoforestv1/pages/menu/visualizador_relatorio_page.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
+import 'package:geoforestv1/models/pilha_madeira_model.dart';
+import 'package:geoforestv1/models/silvi_model.dart';
 
 
 class AppRouter {
@@ -74,16 +76,18 @@ class AppRouter {
       ),
 
       GoRoute(
-      path: '/visualizar-relatorio',
-      builder: (context, state) {
-        final data = state.extra as Map<String, dynamic>;
-        return VisualizadorRelatorioPage(
-          diario: data['diario'] as DiarioDeCampo,
-          parcelas: data['parcelas'] as List<Parcela>,
-          cubagens: data['cubagens'] as List<CubagemArvore>,
-        );
-      },
-    ),
+        path: '/visualizar-relatorio',
+        builder: (context, state) {
+          final data = state.extra as Map<String, dynamic>;
+          return VisualizadorRelatorioPage(
+            diario: data['diario'] as DiarioDeCampo,
+            parcelas: List<Parcela>.from(data['parcelas'] as List? ?? []),
+            cubagens: List<CubagemArvore>.from(data['cubagens'] as List? ?? []),
+            pilhas: List<PilhaMadeira>.from(data['pilhas'] as List? ?? []),
+            silvis: List<OperacaoSilvi>.from(data['silvis'] as List? ?? []),
+          );
+        },
+      ),
 
       // ROTA PRINCIPAL DE PROJETOS E SUA HIERARQUIA ANINHADA
       GoRoute(

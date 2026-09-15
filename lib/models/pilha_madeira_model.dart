@@ -177,27 +177,26 @@ class PilhaMadeira {
   });
 
   // Regras de seção:
-  // ≤5m → passo 1m | 5-10m → 2m | 10-30m → 3m | >30m → 5m
+  // ≤10m → passo 1m | 10–30m → passo 2m | >30m → passo 3m
   // Início: 0,5m fixo; segundo ponto: 1,0m fixo; fim: comprimento-0,5m fixo.
   static List<SecaoPilha> gerarSecoes(double comprimento) {
     final double step;
-    if (comprimento <= 5.0) {
+    if (comprimento <= 10.0) {
       step = 1.0;
-    } else if (comprimento <= 10.0) {
-      step = 2.0;
     } else if (comprimento <= 30.0) {
-      step = 3.0;
+      step = 2.0;
     } else {
-      step = 5.0;
+      step = 3.0;
     }
 
     final double fimBorda = double.parse((comprimento - 0.5).toStringAsFixed(2));
+    final double limiteLoop = double.parse((comprimento - 1.0).toStringAsFixed(2));
     final List<double> posicoes = [0.5];
 
     if (comprimento > 1.5) {
       posicoes.add(1.0);
       double current = double.parse((1.0 + step).toStringAsFixed(2));
-      while (current < fimBorda) {
+      while (current < limiteLoop) {
         posicoes.add(current);
         current = double.parse((current + step).toStringAsFixed(2));
       }

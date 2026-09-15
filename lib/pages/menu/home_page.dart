@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 // Importações do Projeto
-import 'package:geoforestv1/pages/analises/analise_selecao_page.dart';
+import 'package:geoforestv1/pages/analises/analista_hub_page.dart';
 import 'package:geoforestv1/pages/menu/configuracoes_page.dart';
 import 'package:geoforestv1/pages/planejamento/selecao_atividade_mapa_page.dart';
 import 'package:geoforestv1/pages/menu/paywall_page.dart';
@@ -15,6 +15,7 @@ import 'package:geoforestv1/services/export_service.dart';
 import 'package:geoforestv1/services/sync_service.dart';
 import 'package:geoforestv1/models/sync_progress_model.dart';
 import 'package:geoforestv1/pages/menu/conflict_resolution_page.dart';
+import 'package:geoforestv1/pages/menu/relatorio_diario_page.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 
 // Importações dos Novos Widgets
@@ -98,7 +99,7 @@ class _HomePageState extends State<HomePage> {
   void _abrirAnalistaDeDados(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const AnaliseSelecaoPage()),
+      MaterialPageRoute(builder: (context) => const AnalistaHubPage()),
     );
   }
   
@@ -169,6 +170,14 @@ class _HomePageState extends State<HomePage> {
             onTap: () {
               Navigator.of(ctx).pop();
               mostrarDialogoTipo(context, onNovas: () => exportService.exportarNovasPilhas(context), onTodas: () => exportService.exportarTodasPilhasBackup(context));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.eco_outlined, color: Colors.green),
+            title: Text('Operações Silviculturais (CSV)', style: TextStyle(color: textColor, fontWeight: FontWeight.w500)),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              mostrarDialogoTipo(context, onNovas: () => exportService.exportarNovasOperacoesSilvi(context), onTodas: () => exportService.exportarTodasOperacoesSilviBackup(context));
             },
           ),
           const SizedBox(height: 20),
@@ -401,16 +410,16 @@ class _HomePageState extends State<HomePage> {
                   crossAxisSpacing: 16,
                   childAspectRatio: 0.85,
                   children: [
-                    // ITEM 1: PROJETOS
+                    // ITEM 1: PROJETOS — todos os usuários
                     ModernMenuTile(
                       title: 'Projetos e Coletas',
-                      imagePath: 'assets/grid/folder.webp', 
+                      imagePath: 'assets/grid/folder.webp',
                       onTap: () => context.push('/projetos'),
                     ),
-                    // ITEM 2: PLANEJAMENTO
+                    // ITEM 2: NAVEGAÇÃO — todos os usuários
                     ModernMenuTile(
                       title: 'Navegação de Campo',
-                      imagePath: 'assets/grid/way.webp', 
+                      imagePath: 'assets/grid/way.webp',
                       onTap: () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const SelecaoAtividadeMapaPage()));
                       },
@@ -418,7 +427,7 @@ class _HomePageState extends State<HomePage> {
                     // ITEM 3: ANALISTA
                     ModernMenuTile(
                       title: 'GeoForest Analista',
-                      imagePath: 'assets/grid/analytics.webp', 
+                      imagePath: 'assets/grid/analytics.webp',
                       onTap: podeAnalisar
                           ? () => _abrirAnalistaDeDados(context)
                           : () => _mostrarAvisoDeUpgrade(context, "GeoForest Analista"),
@@ -426,21 +435,21 @@ class _HomePageState extends State<HomePage> {
                     // ITEM 4: IMPORTAR
                     ModernMenuTile(
                       title: 'Importar Dados',
-                      imagePath: 'assets/grid/download.webp', 
+                      imagePath: 'assets/grid/download.webp',
                       onTap: () => _mostrarDialogoImportacao(context),
                     ),
                     // ITEM 5: EXPORTAR
                     ModernMenuTile(
                       title: 'Exportar Dados',
-                      imagePath: 'assets/grid/upload.webp', 
+                      imagePath: 'assets/grid/upload.webp',
                       onTap: podeExportar
                           ? () => _mostrarDialogoExportacao(context)
                           : () => _mostrarAvisoDeUpgrade(context, "Exportar Dados"),
                     ),
-                    // ITEM 6: CONFIGURAÇÕES
+                    // ITEM 6: CONFIGURAÇÕES — todos os usuários
                     ModernMenuTile(
                       title: 'Configurações',
-                      imagePath: 'assets/grid/service-tools.webp', 
+                      imagePath: 'assets/grid/service-tools.webp',
                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ConfiguracoesPage())),
                     ),
                   ],
@@ -545,7 +554,36 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
 
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 12),
+
+                      // --- BOTÃO REGISTRAR DIA ---
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const RelatorioDiarioPage()),
+                          ),
+                          icon: const Icon(Icons.today_outlined, size: 22),
+                          label: const Text(
+                            "REGISTRAR DIA DE CAMPO",
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                            foregroundColor: isDark ? Colors.white : primaryNavy,
+                            elevation: 0,
+                            side: BorderSide(
+                              color: isDark ? Colors.white24 : primaryNavy.withValues(alpha: 0.25),
+                              width: 1.5,
+                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
 
                       // --- BOTÃO DE ASSINATURA (Fora do Card, no fundo da tela) ---
                       // Usamos um Container com borda sutil para ele não flutuar solto demais

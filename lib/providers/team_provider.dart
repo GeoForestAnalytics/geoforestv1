@@ -1,5 +1,6 @@
 // lib/providers/team_provider.dart
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,6 +22,22 @@ class TeamProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _lider = prefs.getString('nome_lider');
     _ajudantes = prefs.getString('nomes_ajudantes');
+
+    // Se nome não foi configurado (gerente nunca passa pela tela de equipe),
+    // usa o displayName ou email do Firebase Auth como fallback.
+    if (_lider == null || _lider!.trim().isEmpty) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final nome = user.displayName?.trim().isNotEmpty == true
+            ? user.displayName!.trim()
+            : user.email?.split('@').first ?? '';
+        if (nome.isNotEmpty) {
+          _lider = nome;
+          await prefs.setString('nome_lider', nome);
+        }
+      }
+    }
+
     _isLoaded = true;
     notifyListeners();
   }

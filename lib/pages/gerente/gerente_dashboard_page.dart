@@ -5,6 +5,7 @@ import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
 import 'package:geoforestv1/services/export_service.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:geoforestv1/providers/dashboard_filter_provider.dart';
@@ -49,12 +50,14 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
             ? metricsProvider.parcelasFiltradas.where((p) => p.nomeFazenda != null && filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!)).toList()
             : metricsProvider.parcelasFiltradas;
             
-        final totalPlanejado = parcelasParaDashboard.length;
-        final concluidas = parcelasParaDashboard
+        final totalParc = parcelasParaDashboard.length;
+        final concluidasParc = parcelasParaDashboard
             .where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada)
             .length;
-        final progressoGeral =
-            totalPlanejado > 0 ? concluidas / totalPlanejado : 0.0;
+        final cubTotais = metricsProvider.desempenhoCubagemTotais;
+        final totalGeral = totalParc + cubTotais.total;
+        final concluidasGeral = concluidasParc + cubTotais.concluidas + cubTotais.exportadas;
+        final progressoGeral = totalGeral > 0 ? concluidasGeral / totalGeral : 0.0;
         
         final projetosDisponiveis = filterProvider.projetosDisponiveis.where((p) => p.status == 'ativo').toList();
 
@@ -63,15 +66,15 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
             children: [
-              _buildMultiSelectProjectFilter(context, filterProvider, projetosDisponiveis),
-              const SizedBox(height: 8),
-              _buildMultiSelectFazendaFilter(context, filterProvider),
-              const SizedBox(height: 16),
+              _buildFiltros(context, filterProvider, projetosDisponiveis),
+              const SizedBox(height: 12),
+              _buildAtividadeCards(context, filterProvider, metricsProvider),
+              const SizedBox(height: 12),
               _buildSummaryCard(
                 context: context,
                 title: 'Progresso Inventário',
                 value: '${(progressoGeral * 100).toStringAsFixed(0)}%',
-                subtitle: '$concluidas de $totalPlanejado parcelas concluídas',
+                subtitle: '$concluidasGeral de $totalGeral atividades concluídas',
                 progress: progressoGeral,
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -119,157 +122,332 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
     );
   }
 
-  Widget _buildMultiSelectProjectFilter(BuildContext context,
-      DashboardFilterProvider provider, List<Projeto> projetosDisponiveis) {
-    String displayText;
-    if (provider.selectedProjetoIds.isEmpty) {
-      displayText = 'Todos os Projetos';
-    } else if (provider.selectedProjetoIds.length == 1) {
-      try {
-        displayText = projetosDisponiveis
-            .firstWhere((p) => p.id == provider.selectedProjetoIds.first)
-            .nome;
-      } catch (e) {
-        displayText = '1 projeto selecionado';
-      }
-    } else {
-      displayText =
-          '${provider.selectedProjetoIds.length} projetos selecionados';
+  Widget _buildFiltros(BuildContext context, DashboardFilterProvider fp, List<Projeto> projetosDisponiveis) {
+    return Column(children: [
+      Row(children: [
+        Expanded(child: _buildProjetoChip(context, fp, projetosDisponiveis)),
+        const SizedBox(width: 8),
+        Expanded(child: _buildChip(
+          context: context,
+          label: 'Fazenda',
+          disponiveis: fp.fazendasDisponiveis,
+          selecionados: fp.selectedFazendaNomes,
+          onApply: (s) => context.read<DashboardFilterProvider>().setSelectedFazendas(s),
+          onClear: () => context.read<DashboardFilterProvider>().clearFazendaSelection(),
+        )),
+      ]),
+      const SizedBox(height: 6),
+      Row(children: [
+        Expanded(child: _buildChip(
+          context: context,
+          label: 'Talhão',
+          disponiveis: fp.talhoesDisponiveis,
+          selecionados: fp.selectedTalhaoNomes,
+          onApply: (s) => context.read<DashboardFilterProvider>().setSelectedTalhoes(s),
+          onClear: () => context.read<DashboardFilterProvider>().clearTalhaoSelection(),
+        )),
+        const SizedBox(width: 8),
+        Expanded(child: _buildPeriodoChip(context, fp)),
+      ]),
+      const SizedBox(height: 6),
+      _buildChip(
+        context: context,
+        label: 'Líder',
+        disponiveis: fp.lideresDisponiveis,
+        selecionados: fp.lideresSelecionados,
+        onApply: (s) => context.read<DashboardFilterProvider>().setSelectedLideres(s),
+        onClear: () => context.read<DashboardFilterProvider>().clearLideresSelection(),
+      ),
+    ]);
+  }
+
+  Widget _buildAtividadeCards(BuildContext context, DashboardFilterProvider fp, DashboardMetricsProvider mp) {
+    final atividades = fp.atividadesDisponiveis;
+    if (atividades.isEmpty) return const SizedBox.shrink();
+
+    final descrToTipo = <String, String>{
+      for (final a in atividades) (a.descricao.isNotEmpty ? a.descricao : a.tipo): a.tipo,
+    };
+
+    // Contadores separados: inventário (parcelas) e cubagem
+    final totalInvPorTipo = <String, int>{};
+    final conclInvPorTipo = <String, int>{};
+    for (final d in mp.desempenhoPorFazenda) {
+      final tipo = descrToTipo[d.nomeAtividade] ?? d.nomeAtividade;
+      totalInvPorTipo[tipo] = (totalInvPorTipo[tipo] ?? 0) + d.total;
+      conclInvPorTipo[tipo] = (conclInvPorTipo[tipo] ?? 0) + d.concluidas + d.exportadas;
+    }
+    final totalCubPorTipo = <String, int>{};
+    final conclCubPorTipo = <String, int>{};
+    for (final d in mp.desempenhoPorCubagem) {
+      final tipo = descrToTipo[d.nomeAtividade] ?? d.nomeAtividade;
+      totalCubPorTipo[tipo] = (totalCubPorTipo[tipo] ?? 0) + d.total;
+      conclCubPorTipo[tipo] = (conclCubPorTipo[tipo] ?? 0) + d.concluidas + d.exportadas;
     }
 
-    return InkWell(
-      onTap: () {
-        showDialog(
-          context: context,
-          builder: (dialogContext) {
-            return Consumer<DashboardFilterProvider>(
-              builder: (context, filterProvider, _) {
-                return AlertDialog(
-                  title: const Text('Filtrar por Projeto'),
-                  content: SizedBox(
-                    width: double.maxFinite,
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: projetosDisponiveis.map((projeto) {
-                        return CheckboxListTile(
-                          title: Text(projeto.nome),
-                          value: filterProvider.selectedProjetoIds
-                              .contains(projeto.id),
-                          onChanged: (bool? value) {
-                            context
-                                .read<DashboardFilterProvider>()
-                                .toggleProjetoSelection(projeto.id!);
-                          },
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        context
-                            .read<DashboardFilterProvider>()
-                            .clearProjetoSelection();
-                        Navigator.of(dialogContext).pop();
-                      },
-                      child: const Text('Limpar (Todos)'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      child: const Text('Aplicar'),
+    final color = Theme.of(context).colorScheme.primary;
+    return SizedBox(
+      height: 82,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        itemCount: atividades.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final a = atividades[i];
+          final tipo = a.tipo;
+          final nome = a.descricao.isNotEmpty ? a.descricao : a.tipo;
+          final totalInv = totalInvPorTipo[tipo] ?? 0;
+          final conclInv = conclInvPorTipo[tipo] ?? 0;
+          final totalCub = totalCubPorTipo[tipo] ?? 0;
+          final conclCub = conclCubPorTipo[tipo] ?? 0;
+          final total = totalInv + totalCub;
+          final concluidas = conclInv + conclCub;
+          final pct = total > 0 ? (concluidas / total).clamp(0.0, 1.0) : null;
+          final subLabel = total == 0
+              ? '—'
+              : totalCub > 0 && totalInv == 0
+                  ? '$conclCub / $totalCub árv.'
+                  : '$conclInv / $totalInv parc.';
+          final sel = fp.selectedAtividadeTipos.contains(tipo);
+          return GestureDetector(
+            onTap: () {
+              final novo = Set<String>.from(fp.selectedAtividadeTipos);
+              sel ? novo.remove(tipo) : novo.add(tipo);
+              context.read<DashboardFilterProvider>().setSelectedAtividadeTipos(novo);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 148,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: sel ? color.withValues(alpha: 0.14) : Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: sel ? color : Colors.transparent, width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Row(children: [
+                    Icon(Icons.forest_outlined, size: 13, color: color),
+                    const SizedBox(width: 4),
+                    Expanded(child: Text(nome, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    if (sel) Icon(Icons.check_circle, size: 12, color: color),
+                  ]),
+                  const SizedBox(height: 3),
+                  Text(subLabel, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                  if (pct != null) ...[
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: LinearProgressIndicator(value: pct, minHeight: 5, backgroundColor: Colors.grey.shade200, color: color),
                     ),
                   ],
-                );
-              },
-            );
-          },
-        );
-      },
-      child: InputDecorator(
-        decoration: const InputDecoration(
-          border: OutlineInputBorder(),
-          contentPadding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Expanded(child: Text(displayText, overflow: TextOverflow.ellipsis)),
-            const Icon(Icons.arrow_drop_down),
-          ],
-        ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildMultiSelectFazendaFilter(BuildContext context, DashboardFilterProvider provider) {
-    if (provider.fazendasDisponiveis.isEmpty) {
-      return const SizedBox.shrink();
+  Widget _buildChip({
+    required BuildContext context,
+    required String label,
+    required List<String> disponiveis,
+    required Set<String> selecionados,
+    required void Function(Set<String>) onApply,
+    required VoidCallback onClear,
+  }) {
+    if (disponiveis.isEmpty) {
+      return InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          isDense: true,
+        ),
+        child: const Row(children: [
+          Expanded(child: Text('Todos', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13))),
+          Icon(Icons.arrow_drop_down, size: 20),
+        ]),
+      );
     }
-
-    String displayText;
-    if (provider.selectedFazendaNomes.isEmpty) {
-      displayText = 'Todas as Fazendas';
-    } else if (provider.selectedFazendaNomes.length == 1) {
-      displayText = provider.selectedFazendaNomes.first;
-    } else {
-      displayText = '${provider.selectedFazendaNomes.length} fazendas selecionadas';
-    }
-
+    final txt = selecionados.isEmpty
+        ? 'Todos'
+        : selecionados.length == 1
+            ? selecionados.first
+            : '${selecionados.length} selecionados';
     return InkWell(
+      borderRadius: BorderRadius.circular(4),
       onTap: () {
-        showDialog(
+        final tmp = Set<String>.from(selecionados);
+        showDialog<void>(
           context: context,
-          builder: (dialogContext) {
-            return Consumer<DashboardFilterProvider>(
-              builder: (context, filterProvider, _) {
-                return AlertDialog(
-                  title: const Text('Filtrar por Fazenda'),
-                  content: SizedBox(
-                    width: double.maxFinite,
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: filterProvider.fazendasDisponiveis.map((nomeFazenda) {
-                        return CheckboxListTile(
-                          title: Text(nomeFazenda),
-                          value: filterProvider.selectedFazendaNomes.contains(nomeFazenda),
-                          onChanged: (bool? value) {
-                            context.read<DashboardFilterProvider>().toggleFazendaSelection(nomeFazenda);
-                          },
-                        );
-                      }).toList(),
+          builder: (ctx) => StatefulBuilder(
+            builder: (ctx, setDlg) => AlertDialog(
+              title: Text('Filtrar por $label'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    CheckboxListTile(
+                      title: const Text('Todos', style: TextStyle(fontWeight: FontWeight.bold)),
+                      value: tmp.isEmpty,
+                      onChanged: (_) => setDlg(() => tmp.clear()),
                     ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        context.read<DashboardFilterProvider>().clearFazendaSelection();
-                        Navigator.of(dialogContext).pop();
-                      },
-                      child: const Text('Limpar (Todas)'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      child: const Text('Aplicar'),
-                    ),
+                    const Divider(height: 1),
+                    ...disponiveis.map((v) => CheckboxListTile(
+                          title: Text(v),
+                          value: tmp.contains(v),
+                          onChanged: (on) => setDlg(() => on == true ? tmp.add(v) : tmp.remove(v)),
+                        )),
                   ],
-                );
-              },
-            );
-          },
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () { onClear(); Navigator.pop(ctx); }, child: const Text('Limpar')),
+                FilledButton(onPressed: () { onApply(tmp); Navigator.pop(ctx); }, child: const Text('Aplicar')),
+              ],
+            ),
+          ),
+        );
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          isDense: true,
+        ),
+        child: Row(children: [
+          Expanded(child: Text(txt, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))),
+          const Icon(Icons.arrow_drop_down, size: 20),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildProjetoChip(BuildContext context, DashboardFilterProvider fp, List<Projeto> projetosDisponiveis) {
+    final txt = fp.selectedProjetoIds.isEmpty
+        ? 'Todos'
+        : fp.selectedProjetoIds.length == 1
+            ? (projetosDisponiveis.where((p) => p.id == fp.selectedProjetoIds.first).firstOrNull?.nome ?? '1 projeto')
+            : '${fp.selectedProjetoIds.length} projetos';
+    return InkWell(
+      borderRadius: BorderRadius.circular(4),
+      onTap: () {
+        final tmp = Set<int>.from(fp.selectedProjetoIds);
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => StatefulBuilder(
+            builder: (ctx, setDlg) => AlertDialog(
+              title: const Text('Filtrar por Projeto'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    CheckboxListTile(
+                      title: const Text('Todos', style: TextStyle(fontWeight: FontWeight.bold)),
+                      value: tmp.isEmpty,
+                      onChanged: (_) => setDlg(() => tmp.clear()),
+                    ),
+                    const Divider(height: 1),
+                    ...projetosDisponiveis.map((p) => CheckboxListTile(
+                          title: Text(p.nome),
+                          value: tmp.contains(p.id),
+                          onChanged: (on) => setDlg(() => on == true ? tmp.add(p.id!) : tmp.remove(p.id)),
+                        )),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () { context.read<DashboardFilterProvider>().clearProjetoSelection(); Navigator.pop(ctx); },
+                  child: const Text('Limpar'),
+                ),
+                FilledButton(
+                  onPressed: () { context.read<DashboardFilterProvider>().setSelectedProjetos(tmp); Navigator.pop(ctx); },
+                  child: const Text('Aplicar'),
+                ),
+              ],
+            ),
+          ),
         );
       },
       child: InputDecorator(
         decoration: const InputDecoration(
+          labelText: 'Projeto',
           border: OutlineInputBorder(),
-          contentPadding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0),
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          isDense: true,
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Expanded(child: Text(displayText, overflow: TextOverflow.ellipsis)),
-            const Icon(Icons.arrow_drop_down),
-          ],
+        child: Row(children: [
+          Expanded(child: Text(txt, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))),
+          const Icon(Icons.arrow_drop_down, size: 20),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildPeriodoChip(BuildContext context, DashboardFilterProvider fp) {
+    String label = fp.periodo.displayName;
+    if (fp.periodo == PeriodoFiltro.personalizado && fp.periodoPersonalizado != null) {
+      final fmt = DateFormat('dd/MM');
+      label = '${fmt.format(fp.periodoPersonalizado!.start)} – ${fmt.format(fp.periodoPersonalizado!.end)}';
+    }
+    return InkWell(
+      borderRadius: BorderRadius.circular(4),
+      onTap: () async {
+        final picked = await showModalBottomSheet<PeriodoFiltro>(
+          context: context,
+          builder: (_) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text('Período', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+              for (final p in PeriodoFiltro.values)
+                ListTile(
+                  title: Text(p.displayName),
+                  trailing: fp.periodo == p ? const Icon(Icons.check, color: Colors.green) : null,
+                  onTap: () => Navigator.pop(context, p),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+        if (picked == null || !context.mounted) return;
+        if (picked == PeriodoFiltro.personalizado) {
+          final range = await showDateRangePicker(
+            context: context,
+            firstDate: DateTime(2020),
+            lastDate: DateTime.now(),
+            initialDateRange: fp.periodoPersonalizado,
+          );
+          if (range != null && context.mounted) {
+            context.read<DashboardFilterProvider>().setPeriodo(PeriodoFiltro.personalizado, personalizado: range);
+          }
+        } else {
+          context.read<DashboardFilterProvider>().setPeriodo(picked);
+        }
+      },
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Período',
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          isDense: true,
         ),
+        child: Row(children: [
+          Expanded(child: Text(label, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))),
+          const Icon(Icons.arrow_drop_down, size: 20),
+        ]),
       ),
     );
   }
@@ -306,7 +484,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                 value: progress,
                 minHeight: 6,
                 borderRadius: BorderRadius.circular(3),
-                backgroundColor: color.withOpacity(0.2),
+                backgroundColor: color.withValues(alpha: 0.2),
                 valueColor: AlwaysStoppedAnimation<Color>(color)),
           ],
         ),
@@ -478,7 +656,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                       horizontalLines: [
                         HorizontalLine(
                             y: media,
-                            color: Colors.red.withOpacity(0.8),
+                            color: Colors.red.withValues(alpha: 0.8),
                             strokeWidth: 2,
                             dashArray: [10, 5],
                             label: HorizontalLineLabel(
@@ -489,7 +667,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
                               labelResolver: (line) =>
                                   'Média: ${line.y.toStringAsFixed(1)}',
                               style: TextStyle(
-                                  color: Colors.red.withOpacity(0.8),
+                                  color: Colors.red.withValues(alpha: 0.8),
                                   fontWeight: FontWeight.bold),
                             )),
                       ],
@@ -518,7 +696,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
             scrollDirection: Axis.horizontal,
             child: DataTable(
               columnSpacing: 18.0,
-              headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+              headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
               columns: const [
                 DataColumn(
                     label: Text('Atividade',
@@ -573,7 +751,7 @@ class _GerenteDashboardPageState extends State<GerenteDashboardPage> {
             scrollDirection: Axis.horizontal,
             child: DataTable(
               columnSpacing: 18.0,
-              headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+              headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
               // Colunas idênticas à tabela de inventário
               columns: const [
                 DataColumn(

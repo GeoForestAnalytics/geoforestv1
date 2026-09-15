@@ -509,7 +509,7 @@ class _ColetaPilhaPageState extends State<ColetaPilhaPage> {
                                         0) >
                                     0
                                 ? (Theme.of(context).brightness == Brightness.dark
-                                    ? Colors.green.shade900.withAlpha(120)
+                                    ? Colors.green.shade700.withValues(alpha: 0.28)
                                     : Colors.green.shade50)
                                 : null,
                           ),
@@ -526,9 +526,7 @@ class _ColetaPilhaPageState extends State<ColetaPilhaPage> {
             if (_secoes.isNotEmpty) ...[
               const SizedBox(height: 16),
               Card(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.brown.shade900.withAlpha(160)
-                    : Colors.brown.shade50,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
@@ -537,34 +535,29 @@ class _ColetaPilhaPageState extends State<ColetaPilhaPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Volume Estéreo', style: TextStyle(color: Colors.brown.shade700, fontSize: 13)),
-                          Text(
-                            '${estereo.toStringAsFixed(2)} st',
-                            style: TextStyle(fontSize: 15, color: Colors.brown.shade700),
-                          ),
+                          Text('Volume Estéreo',
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                                  fontSize: 13)),
+                          Text('${estereo.toStringAsFixed(2)} st',
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      // Slider do fator de empilhamento
+                      const SizedBox(height: 6),
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('fe:', style: TextStyle(fontSize: 12)),
-                          Expanded(
-                            child: Slider(
-                              value: _fatorEmpilhamento,
-                              min: 0.55,
-                              max: 0.85,
-                              divisions: 30,
-                              label: _fatorEmpilhamento.toStringAsFixed(2),
-                              activeColor: Colors.brown.shade600,
-                              onChanged: (v) => setState(() => _fatorEmpilhamento = double.parse(v.toStringAsFixed(2))),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 36,
-                            child: Text(_fatorEmpilhamento.toStringAsFixed(2),
-                                style: const TextStyle(fontSize: 12)),
-                          ),
+                          Text('Fator de empilhamento (OS)',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+                          Text(_fatorEmpilhamento.toStringAsFixed(2),
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.onSurface)),
                         ],
                       ),
                       const Divider(height: 8),
@@ -578,7 +571,9 @@ class _ColetaPilhaPageState extends State<ColetaPilhaPage> {
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: solido > 0 ? Colors.brown.shade800 : Colors.grey,
+                              color: solido > 0
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
                             ),
                           ),
                         ],
@@ -672,8 +667,11 @@ class _ColetaPilhaPageState extends State<ColetaPilhaPage> {
         padding: const EdgeInsets.only(bottom: 4),
         child: Row(
           children: [
-            Text('$label: ', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-            Text(value, style: const TextStyle(fontSize: 13)),
+            Text('$label: ',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    fontSize: 13)),
+            Flexible(child: Text(value, style: const TextStyle(fontSize: 13))),
           ],
         ),
       );

@@ -15,9 +15,17 @@ class PlanejamentoCubagemImportStrategy extends BaseImportStrategy {
     // <<< CORREÇÃO APLICADA AQUI >>>
     final now = DateTime.now().toIso8601String(); // Era "toIso86o1String"
 
+    const aceitas = {'CUB', 'CUBAGEM'};
+
     for (final row in dataRows) {
       result.linhasProcessadas++;
-      
+
+      // Filtra apenas linhas de cubagem
+      if (!BaseImportStrategy.passaFiltroAtividade(row, aceitas)) {
+        result.parcelasIgnoradas++;
+        continue;
+      }
+
       final talhao = await getOrCreateHierarchy(row, result);
       if (talhao == null) continue;
 

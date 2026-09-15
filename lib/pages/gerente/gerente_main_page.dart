@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geoforestv1/pages/gerente/pilhas_dashboard_page.dart';
 import 'package:geoforestv1/pages/gerente/projetos_dashboard_page.dart';
 import 'package:geoforestv1/pages/gerente/operacoes_dashboard_page.dart';
+import 'package:geoforestv1/pages/gerente/silvi_dashboard_page.dart';
 import 'package:geoforestv1/pages/menu/home_page.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:provider/provider.dart';
@@ -67,6 +68,15 @@ class _GerenteMainPageState extends State<GerenteMainPage> {
         label: 'Colheita',
         icon: Icons.forest_outlined,
         page: const PilhasDashboardPage(),
+      ));
+    }
+
+    if (modulo == 'silvicultura' || modulo == 'todos') {
+      tabs.add(_TabItem(
+        title: 'Silvicultura',
+        label: 'Silvicultura',
+        icon: Icons.eco_outlined,
+        page: const SilviDashboardPage(),
       ));
     }
 

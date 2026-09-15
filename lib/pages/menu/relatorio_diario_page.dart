@@ -1,4 +1,4 @@
-// lib/pages/menu/relatorio_diario_page.dart (VERSÃO CORRIGIDA)
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -6,12 +6,13 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-// Imports do projeto
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/fazenda_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
+import 'package:geoforestv1/models/pilha_madeira_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
+import 'package:geoforestv1/models/silvi_model.dart';
 import 'package:geoforestv1/models/talhao_model.dart';
 import 'package:geoforestv1/providers/team_provider.dart';
 import 'package:geoforestv1/providers/license_provider.dart';
@@ -21,9 +22,10 @@ import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+import 'package:geoforestv1/data/repositories/pilha_repository.dart';
+import 'package:geoforestv1/data/repositories/silvi_repository.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/data/repositories/diario_de_campo_repository.dart';
-
 
 enum RelatorioStep {
   selecionarFiltros,
@@ -61,6 +63,8 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   final _talhaoRepo = TalhaoRepository();
   final _parcelaRepo = ParcelaRepository();
   final _cubagemRepo = CubagemRepository();
+  final _pilhaRepo = PilhaRepository();
+  final _silviRepo = SilviRepository();
   final _diarioRepo = DiarioDeCampoRepository();
 
   DateTime _dataSelecionada = DateTime.now();
@@ -69,18 +73,36 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   DiarioDeCampo? _diarioAtual;
   List<Parcela> _parcelasDoRelatorio = [];
   List<CubagemArvore> _cubagensDoRelatorio = [];
+  List<PilhaMadeira> _pilhasDoRelatorio = [];
+  List<OperacaoSilvi> _silvisDoRelatorio = [];
+  List<String> _sugestoesLider = [];
+  bool _buscaRealizada = false;
   bool _isLoading = false;
+
+  // Auto-busca
+  bool _buscandoLocais = false;
+  Timer? _debounce;
+  bool _isGerente = false;
+
+  double get _volumeTotalM3 => _pilhasDoRelatorio.fold(0.0, (s, p) => s + (p.volumeBruto ?? 0));
+  double get _areaTotalHa => _silvisDoRelatorio.fold(0.0, (s, o) => s + (o.areaAplicadaHa ?? 0));
+
+  String get _modulo {
+    final lp = Provider.of<LicenseProvider>(context, listen: false);
+    return lp.licenseData?.modulo ?? 'inventario';
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _preencherNomesEquipe();
+      _inicializar();
     });
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _liderController.dispose();
     _ajudantesController.dispose();
     _kmInicialController.dispose();
@@ -98,19 +120,68 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     super.dispose();
   }
 
-  void _preencherNomesEquipe() {
+  void _inicializar() {
+    final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
+    _isGerente = licenseProvider.licenseData?.cargo == 'gerente';
+
     final teamProvider = Provider.of<TeamProvider>(context, listen: false);
     _liderController.text = teamProvider.lider ?? '';
     _ajudantesController.text = teamProvider.ajudantes ?? '';
 
-    if (_liderController.text.trim().isEmpty) {
-      final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
-      if (licenseProvider.licenseData?.cargo == 'gerente') {
-        final currentUser = FirebaseAuth.instance.currentUser;
-        if (currentUser != null) {
-          _liderController.text = currentUser.displayName ?? '';
+    if (_liderController.text.trim().isEmpty && _isGerente) {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        _liderController.text = currentUser.displayName ?? '';
+      }
+    }
+
+    // Gerente pode alterar o nome para buscar por outro coletor
+    if (_isGerente) {
+      _liderController.addListener(_onLiderChanged);
+    }
+
+    _buscarLocaisAutomaticamente();
+  }
+
+  void _onLiderChanged() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 600), () {
+      if (_liderController.text.trim().isNotEmpty) {
+        _buscarLocaisAutomaticamente();
+      }
+    });
+  }
+
+  Future<void> _buscarLocaisAutomaticamente() async {
+    final lider = _liderController.text.trim();
+    if (lider.isEmpty) return;
+
+    setState(() {
+      _buscandoLocais = true;
+      _locaisTrabalhados.clear();
+    });
+
+    try {
+      final results = await Future.wait([
+        _parcelaRepo.getTalhaoIdsNaData(lider, _dataSelecionada),
+        _cubagemRepo.getTalhaoIdsNaData(lider, _dataSelecionada),
+        _pilhaRepo.getTalhaoIdsNaData(lider, _dataSelecionada),
+        _silviRepo.getTalhaoIdsNaData(lider, _dataSelecionada),
+      ]);
+
+      final ids = <int>{};
+      for (final list in results) {
+        ids.addAll(list);
+      }
+
+      if (ids.isNotEmpty) {
+        final talhoes = await _talhaoRepo.getTalhoesPorIds(ids.toList());
+        if (mounted) {
+          setState(() => _locaisTrabalhados = talhoes);
         }
       }
+    } finally {
+      if (mounted) setState(() => _buscandoLocais = false);
     }
   }
 
@@ -121,7 +192,10 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 1)),
     );
-    if (dataEscolhida != null) setState(() => _dataSelecionada = dataEscolhida);
+    if (dataEscolhida != null) {
+      setState(() => _dataSelecionada = dataEscolhida);
+      _buscarLocaisAutomaticamente();
+    }
   }
 
   Future<void> _adicionarLocalTrabalho() async {
@@ -145,7 +219,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       });
     }
   }
-  
+
   Future<void> _gerarRelatorioConsolidado() async {
     if (_locaisTrabalhados.isEmpty || _liderController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -157,31 +231,60 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     setState(() => _isLoading = true);
 
     final lider = _liderController.text.trim();
+    final modulo = _modulo;
     final List<Parcela> parcelasEncontradas = [];
     final List<CubagemArvore> cubagensEncontradas = [];
+    final List<PilhaMadeira> pilhasEncontradas = [];
+    final List<OperacaoSilvi> silvisEncontrados = [];
 
     for (final talhao in _locaisTrabalhados) {
-      final parcelas = await _parcelaRepo.getParcelasDoDiaPorEquipeEFiltros(
-        nomeLider: lider,
-        dataSelecionada: _dataSelecionada,
-        talhaoId: talhao.id!,
-      );
-      parcelasEncontradas.addAll(parcelas);
-
-      final cubagens = await _cubagemRepo.getCubagensDoDiaPorEquipe(
-        nomeLider: lider,
-        dataSelecionada: _dataSelecionada,
-        talhaoId: talhao.id!,
-      );
-      cubagensEncontradas.addAll(cubagens);
+      if (modulo == 'inventario' || modulo == 'todos') {
+        parcelasEncontradas.addAll(await _parcelaRepo.getParcelasDoDiaPorEquipeEFiltros(
+          nomeLider: lider, dataSelecionada: _dataSelecionada, talhaoId: talhao.id!,
+        ));
+        cubagensEncontradas.addAll(await _cubagemRepo.getCubagensDoDiaPorEquipe(
+          nomeLider: lider, dataSelecionada: _dataSelecionada, talhaoId: talhao.id!,
+        ));
+      }
+      if (modulo == 'colheita' || modulo == 'todos') {
+        pilhasEncontradas.addAll(await _pilhaRepo.getPilhasDoDiaPorTalhao(
+          nomeLider: lider, dataSelecionada: _dataSelecionada, talhaoId: talhao.id!,
+        ));
+      }
+      if (modulo == 'silvicultura' || modulo == 'todos') {
+        silvisEncontrados.addAll(await _silviRepo.getOperacoesDoDiaPorTalhao(
+          nomeLider: lider, dataSelecionada: _dataSelecionada, talhaoId: talhao.id!,
+        ));
+      }
     }
-    
+
     final dataFormatada = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
     final diarioEncontrado = await _diarioRepo.getDiario(dataFormatada, lider);
+
+    final Set<String> sugestoes = {};
+    for (final talhao in _locaisTrabalhados) {
+      if ((modulo == 'inventario' || modulo == 'todos') && parcelasEncontradas.isEmpty) {
+        sugestoes.addAll(await _parcelaRepo.getLideresNoDia(data: _dataSelecionada, talhaoId: talhao.id!));
+      }
+      if ((modulo == 'inventario' || modulo == 'todos') && cubagensEncontradas.isEmpty) {
+        sugestoes.addAll(await _cubagemRepo.getLideresNoDia(data: _dataSelecionada, talhaoId: talhao.id!));
+      }
+      if ((modulo == 'silvicultura' || modulo == 'todos') && silvisEncontrados.isEmpty) {
+        sugestoes.addAll(await _silviRepo.getLideresNoDia(data: _dataSelecionada, talhaoId: talhao.id!));
+      }
+      if ((modulo == 'colheita' || modulo == 'todos') && pilhasEncontradas.isEmpty) {
+        sugestoes.addAll(await _pilhaRepo.getLideresNoDia(data: _dataSelecionada, talhaoId: talhao.id!));
+      }
+    }
+    sugestoes.removeWhere((n) => n.toLowerCase() == lider.toLowerCase());
 
     _diarioAtual = diarioEncontrado;
     _parcelasDoRelatorio = parcelasEncontradas;
     _cubagensDoRelatorio = cubagensEncontradas;
+    _pilhasDoRelatorio = pilhasEncontradas;
+    _silvisDoRelatorio = silvisEncontrados;
+    _sugestoesLider = sugestoes.toList()..sort();
+    _buscaRealizada = true;
 
     _preencherControladoresDiario();
 
@@ -190,7 +293,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       _currentStep = RelatorioStep.consolidarEPreencher;
     });
   }
-  
+
   void _preencherControladoresDiario() {
     _kmInicialController.text = _diarioAtual?.kmInicial?.toString().replaceAll('.', ',') ?? '';
     _kmFinalController.text = _diarioAtual?.kmFinal?.toString().replaceAll('.', ',') ?? '';
@@ -205,15 +308,17 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
     _placaController.text = _diarioAtual?.veiculoPlaca ?? '';
     _modeloController.text = _diarioAtual?.veiculoModelo ?? '';
   }
-  
+
   Future<void> _navegarParaVisualizacao() async {
     if (mounted) setState(() => _isLoading = true);
+
+    final modulo = _modulo;
 
     final diarioParaSalvar = DiarioDeCampo(
       id: _diarioAtual?.id,
       dataRelatorio: DateFormat('yyyy-MM-dd').format(_dataSelecionada),
       nomeLider: _liderController.text.trim(),
-      projetoId: _locaisTrabalhados.first.projetoId!, 
+      projetoId: _locaisTrabalhados.first.projetoId!,
       kmInicial: double.tryParse(_kmInicialController.text.replaceAll(',', '.')),
       kmFinal: double.tryParse(_kmFinalController.text.replaceAll(',', '.')),
       localizacaoDestino: _destinoController.text.trim(),
@@ -228,21 +333,24 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
       veiculoModelo: _modeloController.text.trim(),
       equipeNoCarro: '${_liderController.text.trim()}, ${_ajudantesController.text.trim()}',
       lastModified: DateTime.now().toIso8601String(),
+      modulo: modulo,
     );
-    
+
     await _diarioRepo.insertOrUpdateDiario(diarioParaSalvar);
-    
+
     if (mounted) setState(() => _isLoading = false);
-    
+
     if (mounted) {
       final bool? precisaEditar = await context.push<bool>(
-  '/visualizar-relatorio',
-  extra: {
-    'diario': diarioParaSalvar,
-    'parcelas': _parcelasDoRelatorio,
-    'cubagens': _cubagensDoRelatorio,
-  },
-); 
+        '/visualizar-relatorio',
+        extra: {
+          'diario': diarioParaSalvar,
+          'parcelas': _parcelasDoRelatorio,
+          'cubagens': _cubagensDoRelatorio,
+          'pilhas': _pilhasDoRelatorio,
+          'silvis': _silvisDoRelatorio,
+        },
+      );
 
       if (precisaEditar != true) {
         setState(() {
@@ -250,6 +358,8 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
           _locaisTrabalhados.clear();
           _parcelasDoRelatorio.clear();
           _cubagensDoRelatorio.clear();
+          _pilhasDoRelatorio.clear();
+          _silvisDoRelatorio.clear();
         });
       }
     }
@@ -259,20 +369,21 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Relatório Diário Consolidado'),
+        title: const Text('Relatório Diário'),
         leading: _currentStep != RelatorioStep.selecionarFiltros
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => setState(() {
                   _currentStep = RelatorioStep.selecionarFiltros;
-                  _locaisTrabalhados.clear();
                   _parcelasDoRelatorio.clear();
                   _cubagensDoRelatorio.clear();
+                  _pilhasDoRelatorio.clear();
+                  _silvisDoRelatorio.clear();
                 }),
               )
             : null,
       ),
-      body: _isLoading 
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : IndexedStack(
               index: _currentStep.index,
@@ -280,90 +391,17 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
                 _buildFiltros(),
                 _buildConsolidacaoEFormulario(),
               ],
-      ),
+            ),
     );
   }
 
   Widget _buildFiltros() {
+    final temLocais = _locaisTrabalhados.isNotEmpty;
+
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
-        Card(
-          elevation: 2,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                Text("1. Informações Gerais", style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 20),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text("Data do Relatório"),
-                  subtitle: Text(DateFormat('dd/MM/yyyy').format(_dataSelecionada), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () => _selecionarData(context),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(controller: _liderController, decoration: const InputDecoration(labelText: 'Líder da Equipe *', border: OutlineInputBorder())),
-                const SizedBox(height: 16),
-                TextFormField(controller: _ajudantesController, decoration: const InputDecoration(labelText: 'Ajudantes', border: OutlineInputBorder())),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        Card(
-          elevation: 2,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                Text("2. Locais Trabalhados", style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                if (_locaisTrabalhados.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24.0),
-                    child: Text("Nenhum local adicionado.", style: TextStyle(color: Colors.grey)),
-                  )
-                else
-                  ..._locaisTrabalhados.map((talhao) => Card(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    child: ListTile(
-                      leading: const Icon(Icons.park_outlined),
-                      title: Text(talhao.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text("${talhao.fazendaNome ?? 'N/A'}"),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
-                        onPressed: () => setState(() => _locaisTrabalhados.remove(talhao)),
-                      ),
-                    ),
-                  )),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.add_location_alt_outlined),
-                  label: const Text('Adicionar Local de Trabalho'),
-                  onPressed: _adicionarLocalTrabalho,
-                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
-                )
-              ],
-            ),
-          )
-        ),
-        const SizedBox(height: 24),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.receipt_long),
-          onPressed: _gerarRelatorioConsolidado,
-          label: const Text('Gerar Relatório Consolidado'),
-          style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-        )
-      ],
-    );
-  }
-
-  Widget _buildConsolidacaoEFormulario() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 90.0),
-      children: [
+        // ── Card 1: Data + Líder ─────────────────────────────────────────────
         Card(
           elevation: 2,
           child: Padding(
@@ -371,23 +409,254 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Resumo das Coletas do Dia", style: Theme.of(context).textTheme.titleLarge),
-                const Divider(),
+                Text("Informações Gerais", style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 20),
                 ListTile(
-                  leading: const Icon(Icons.list_alt, color: Colors.blue),
-                  title: const Text("Parcelas de Inventário"),
-                  trailing: Text(_parcelasDoRelatorio.length.toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("Data do Relatório"),
+                  subtitle: Text(
+                    DateFormat('dd/MM/yyyy').format(_dataSelecionada),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () => _selecionarData(context),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.architecture, color: Colors.green),
-                  title: const Text("Árvores de Cubagem"),
-                  trailing: Text(_cubagensDoRelatorio.length.toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _liderController,
+                  readOnly: !_isGerente,
+                  decoration: InputDecoration(
+                    labelText: 'Líder da Equipe',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: _isGerente
+                        ? const Icon(Icons.edit_outlined, size: 18)
+                        : const Icon(Icons.lock_outline, size: 18),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _ajudantesController,
+                  decoration: const InputDecoration(labelText: 'Ajudantes', border: OutlineInputBorder()),
                 ),
               ],
             ),
           ),
         ),
         const SizedBox(height: 24),
+
+        // ── Card 2: Locais encontrados ───────────────────────────────────────
+        Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text("Locais Trabalhados", style: Theme.of(context).textTheme.titleLarge),
+                    ),
+                    if (_buscandoLocais)
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                if (!_buscandoLocais)
+                  Text(
+                    temLocais
+                        ? '${_locaisTrabalhados.length} local(is) encontrado(s) automaticamente'
+                        : 'Nenhum registro local encontrado para esta data.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: temLocais
+                          ? Colors.green.shade700
+                          : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                if (temLocais) ...[
+                  ..._locaisTrabalhados.map((talhao) => Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        color: Theme.of(context).colorScheme.surfaceContainerLow,
+                        child: ListTile(
+                          leading: Icon(Icons.park_outlined,
+                              color: Theme.of(context).colorScheme.primary),
+                          title: Text(talhao.nome,
+                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(talhao.fazendaNome ?? ''),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            color: Colors.red.shade400,
+                            onPressed: () =>
+                                setState(() => _locaisTrabalhados.remove(talhao)),
+                          ),
+                        ),
+                      )),
+                  const SizedBox(height: 8),
+                ],
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.add_location_alt_outlined, size: 18),
+                  label: const Text('Adicionar talhão manualmente'),
+                  onPressed: _adicionarLocalTrabalho,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    foregroundColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        ElevatedButton.icon(
+          icon: const Icon(Icons.receipt_long),
+          onPressed: _gerarRelatorioConsolidado,
+          label: const Text('Gerar Relatório Consolidado'),
+          style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConsolidacaoEFormulario() {
+    final modulo = _modulo;
+    final temResultado = _parcelasDoRelatorio.isNotEmpty ||
+        _cubagensDoRelatorio.isNotEmpty ||
+        _pilhasDoRelatorio.isNotEmpty ||
+        _silvisDoRelatorio.isNotEmpty;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 90.0),
+      children: [
+        // ── Sugestões de líder ───────────────────────────────────────────────
+        if (_buscaRealizada && !temResultado && _sugestoesLider.isNotEmpty)
+          Card(
+            color: Colors.orange.shade50,
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Icon(Icons.person_search, color: Colors.orange.shade700),
+                    const SizedBox(width: 8),
+                    Text('Verifique o nome do líder',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+                  ]),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Buscamos por "${_liderController.text.trim()}" mas não encontramos nada.\n'
+                    'Estes nomes têm registros neste talhão/data:',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _sugestoesLider
+                        .map((nome) => ActionChip(
+                              avatar: const Icon(Icons.person, size: 16),
+                              label: Text(nome),
+                              backgroundColor: Colors.white,
+                              onPressed: () async {
+                                setState(() => _liderController.text = nome);
+                                await _gerarRelatorioConsolidado();
+                              },
+                            ))
+                        .toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        if (_buscaRealizada && !temResultado && _sugestoesLider.isEmpty)
+          Card(
+            color: Colors.grey.shade50,
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(children: [
+                Icon(Icons.inbox_outlined, color: Colors.grey.shade500),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Nenhuma atividade registrada neste talhão para '
+                    '${DateFormat("dd/MM/yyyy").format(_dataSelecionada)}.',
+                    style: TextStyle(color: Colors.grey.shade700),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+
+        // ── Resumo de produção ───────────────────────────────────────────────
+        Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Resumo da Produção do Dia", style: Theme.of(context).textTheme.titleLarge),
+                const Divider(),
+                if (modulo == 'inventario' || modulo == 'todos') ...[
+                  ListTile(
+                    leading: const Icon(Icons.list_alt, color: Colors.blue),
+                    title: const Text("Parcelas de Inventário"),
+                    trailing: Text(_parcelasDoRelatorio.length.toString(),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.architecture, color: Colors.green),
+                    title: const Text("Árvores de Cubagem"),
+                    trailing: Text(_cubagensDoRelatorio.length.toString(),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+                if (modulo == 'colheita' || modulo == 'todos') ...[
+                  ListTile(
+                    leading: const Icon(Icons.layers_outlined, color: Colors.orange),
+                    title: const Text("Pilhas Medidas"),
+                    trailing: Text(_pilhasDoRelatorio.length.toString(),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.waves_outlined, color: Colors.blue),
+                    title: const Text("Volume Total"),
+                    trailing: Text("${_volumeTotalM3.toStringAsFixed(2)} m³",
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+                if (modulo == 'silvicultura' || modulo == 'todos') ...[
+                  ListTile(
+                    leading: const Icon(Icons.eco_outlined, color: Colors.green),
+                    title: const Text("Operações Silvi."),
+                    trailing: Text(_silvisDoRelatorio.length.toString(),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.map_outlined, color: Colors.teal),
+                    title: const Text("Área Aplicada"),
+                    trailing: Text("${_areaTotalHa.toStringAsFixed(2)} ha",
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // ── Formulário diário ────────────────────────────────────────────────
         Card(
           elevation: 2,
           child: Padding(
@@ -400,37 +669,82 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
                   const Divider(),
                   Text("Veículo", style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  TextFormField(controller: _placaController, decoration: const InputDecoration(labelText: 'Placa', border: OutlineInputBorder())),
+                  TextFormField(
+                      controller: _placaController,
+                      decoration: const InputDecoration(labelText: 'Placa', border: OutlineInputBorder())),
                   const SizedBox(height: 12),
-                  TextFormField(controller: _modeloController, decoration: const InputDecoration(labelText: 'Modelo', border: OutlineInputBorder())),
+                  TextFormField(
+                      controller: _modeloController,
+                      decoration: const InputDecoration(labelText: 'Modelo', border: OutlineInputBorder())),
                   const SizedBox(height: 12),
                   Row(children: [
-                    Expanded(child: TextFormField(controller: _kmInicialController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'KM Inicial', border: OutlineInputBorder()))),
+                    Expanded(
+                        child: TextFormField(
+                            controller: _kmInicialController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'KM Inicial', border: OutlineInputBorder()))),
                     const SizedBox(width: 12),
-                    Expanded(child: TextFormField(controller: _kmFinalController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'KM Final', border: OutlineInputBorder()))),
+                    Expanded(
+                        child: TextFormField(
+                            controller: _kmFinalController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'KM Final', border: OutlineInputBorder()))),
                   ]),
                   const SizedBox(height: 12),
-                  TextFormField(controller: _destinoController, decoration: const InputDecoration(labelText: 'Localização/Destino', border: OutlineInputBorder())),
+                  TextFormField(
+                      controller: _destinoController,
+                      decoration: const InputDecoration(
+                          labelText: 'Localização/Destino', border: OutlineInputBorder())),
                   const Divider(height: 24),
                   Text("Despesas", style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Row(children: [
-                    Expanded(child: TextFormField(controller: _pedagioController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Pedágio (R\$)', border: OutlineInputBorder()))),
+                    Expanded(
+                        child: TextFormField(
+                            controller: _pedagioController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                                labelText: 'Pedágio (R\$)', border: OutlineInputBorder()))),
                     const SizedBox(width: 12),
-                    Expanded(child: TextFormField(controller: _abastecimentoController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Abastecimento (R\$)', border: OutlineInputBorder()))),
+                    Expanded(
+                        child: TextFormField(
+                            controller: _abastecimentoController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                                labelText: 'Abastecimento (R\$)', border: OutlineInputBorder()))),
                   ]),
                   const SizedBox(height: 12),
                   Row(children: [
-                    Expanded(child: TextFormField(controller: _marmitasController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Qtd. Marmitas', border: OutlineInputBorder()))),
+                    Expanded(
+                        child: TextFormField(
+                            controller: _marmitasController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                                labelText: 'Qtd. Marmitas', border: OutlineInputBorder()))),
                     const SizedBox(width: 12),
-                    Expanded(child: TextFormField(controller: _refeicaoValorController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Outras Refeições (R\$)', border: OutlineInputBorder()))),
+                    Expanded(
+                        child: TextFormField(
+                            controller: _refeicaoValorController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                                labelText: 'Outras Refeições (R\$)', border: OutlineInputBorder()))),
                   ]),
                   const SizedBox(height: 12),
-                  TextFormField(controller: _refeicaoDescricaoController, decoration: const InputDecoration(labelText: 'Descrição da Alimentação', border: OutlineInputBorder())),
+                  TextFormField(
+                      controller: _refeicaoDescricaoController,
+                      decoration: const InputDecoration(
+                          labelText: 'Descrição da Alimentação', border: OutlineInputBorder())),
                   const SizedBox(height: 12),
-                  TextFormField(controller: _outrasDespesasValorController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Outros Gastos (R\$)', border: OutlineInputBorder())),
+                  TextFormField(
+                      controller: _outrasDespesasValorController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                          labelText: 'Outros Gastos (R\$)', border: OutlineInputBorder())),
                   const SizedBox(height: 12),
-                  TextFormField(controller: _outrasDespesasDescricaoController, decoration: const InputDecoration(labelText: 'Descrição dos Outros Gastos', border: OutlineInputBorder())),
+                  TextFormField(
+                      controller: _outrasDespesasDescricaoController,
+                      decoration: const InputDecoration(
+                          labelText: 'Descrição dos Outros Gastos', border: OutlineInputBorder())),
                 ],
               ),
             ),
@@ -442,7 +756,7 @@ class _RelatorioDiarioPageState extends State<RelatorioDiarioPage> {
           onPressed: _navegarParaVisualizacao,
           label: const Text('Visualizar Relatório e Finalizar'),
           style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-        )
+        ),
       ],
     );
   }
@@ -473,8 +787,6 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
   List<Fazenda> _fazendasDisponiveis = [];
   Fazenda? _fazendaSelecionada;
   List<Talhao> _talhoesDisponiveis = [];
-  
-  // <<< CORREÇÃO 1: MUDAR DE SET<TALHAO> PARA SET<INT> >>>
   final Set<int> _talhoesSelecionados = {};
   bool _isLoadingTalhoes = false;
 
@@ -488,7 +800,7 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
     _projetosDisponiveis = await widget.projetoRepo.getTodosOsProjetosParaGerente();
     if (mounted) setState(() {});
   }
-  
+
   Future<void> _onProjetoSelecionado(Projeto? projeto) async {
     setState(() {
       _projetoSelecionado = projeto;
@@ -517,26 +829,21 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
   Future<void> _onFazendaSelecionada(Fazenda? fazenda) async {
     setState(() {
       _fazendaSelecionada = fazenda;
-      _talhoesSelecionados.clear(); 
+      _talhoesSelecionados.clear();
       _talhoesDisponiveis = [];
-      _isLoadingTalhoes = fazenda != null; // Mostra o loading se uma fazenda for selecionada
+      _isLoadingTalhoes = fazenda != null;
     });
     if (fazenda != null) {
-      _talhoesDisponiveis = await widget.talhaoRepo.getTalhoesDaFazenda(fazenda.id, fazenda.atividadeId);
+      _talhoesDisponiveis =
+          await widget.talhaoRepo.getTalhoesDaFazenda(fazenda.id, fazenda.atividadeId);
     }
-    if (mounted) {
-      setState(() {
-        _isLoadingTalhoes = false; // Esconde o loading após carregar
-      });
-    }
+    if (mounted) setState(() { _isLoadingTalhoes = false; });
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Adicionar Local de Trabalho'),
-      // <<< CORREÇÃO 2: CORRIGIR O LAYOUT DO DIÁLOGO >>>
-      // Envolve o conteúdo com um SizedBox para dar um tamanho fixo e evitar o overflow.
+      title: const Text('Adicionar Local Manualmente'),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
@@ -547,7 +854,11 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
               DropdownButtonFormField<Projeto>(
                 value: _projetoSelecionado,
                 hint: const Text('Selecione o Projeto'),
-                items: _projetosDisponiveis.map((p) => DropdownMenuItem(value: p, child: Text(p.nome, overflow: TextOverflow.ellipsis))).toList(),
+                items: _projetosDisponiveis
+                    .map((p) => DropdownMenuItem(
+                        value: p,
+                        child: Text(p.nome, overflow: TextOverflow.ellipsis)))
+                    .toList(),
                 onChanged: _onProjetoSelecionado,
                 isExpanded: true,
               ),
@@ -556,7 +867,13 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
                 DropdownButtonFormField<Atividade>(
                   value: _atividadeSelecionada,
                   hint: const Text('Selecione a Atividade'),
-                  items: _atividadesDisponiveis.map((a) => DropdownMenuItem(value: a, child: Text(a.tipo, overflow: TextOverflow.ellipsis))).toList(),
+                  items: _atividadesDisponiveis
+                      .map((a) => DropdownMenuItem(
+                          value: a,
+                          child: Text(
+                              a.descricao.isNotEmpty ? a.descricao : a.tipo,
+                              overflow: TextOverflow.ellipsis)))
+                      .toList(),
                   onChanged: _onAtividadeSelecionada,
                   isExpanded: true,
                 ),
@@ -565,17 +882,23 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
                 DropdownButtonFormField<Fazenda>(
                   value: _fazendaSelecionada,
                   hint: const Text('Selecione a Fazenda'),
-                  items: _fazendasDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f.nome, overflow: TextOverflow.ellipsis))).toList(),
+                  items: _fazendasDisponiveis
+                      .map((f) => DropdownMenuItem(
+                          value: f,
+                          child: Text(f.nome, overflow: TextOverflow.ellipsis)))
+                      .toList(),
                   onChanged: _onFazendaSelecionada,
                   isExpanded: true,
                 ),
               const SizedBox(height: 16),
-              
               if (_isLoadingTalhoes)
-                const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()))
+                const Center(
+                    child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: CircularProgressIndicator()))
               else if (_fazendaSelecionada != null && _talhoesDisponiveis.isNotEmpty)
                 Container(
-                  height: 250, 
+                  height: 250,
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.grey.shade400),
                     borderRadius: BorderRadius.circular(8),
@@ -583,12 +906,15 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
                   child: ListView(
                     children: [
                       CheckboxListTile(
-                        title: const Text('Selecionar Todos os Talhões', style: TextStyle(fontWeight: FontWeight.bold)),
-                        value: _talhoesDisponiveis.isNotEmpty && _talhoesSelecionados.length == _talhoesDisponiveis.length,
+                        title: const Text('Selecionar Todos',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        value: _talhoesDisponiveis.isNotEmpty &&
+                            _talhoesSelecionados.length == _talhoesDisponiveis.length,
                         onChanged: (selecionarTodos) {
                           setState(() {
                             if (selecionarTodos == true) {
-                              _talhoesSelecionados.addAll(_talhoesDisponiveis.map((t) => t.id!));
+                              _talhoesSelecionados
+                                  .addAll(_talhoesDisponiveis.map((t) => t.id!));
                             } else {
                               _talhoesSelecionados.clear();
                             }
@@ -597,39 +923,38 @@ class __SelecaoLocalTrabalhoDialogState extends State<_SelecaoLocalTrabalhoDialo
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
                       const Divider(height: 1),
-                      ..._talhoesDisponiveis.map((talhao) {
-                        return CheckboxListTile(
-                          title: Text(talhao.nome),
-                          // <<< CORREÇÃO 3: USAR O ID DO TALHÃO >>>
-                          value: _talhoesSelecionados.contains(talhao.id),
-                          onChanged: (isSelected) {
-                            setState(() {
-                              if (isSelected == true) {
-                                _talhoesSelecionados.add(talhao.id!);
-                              } else {
-                                _talhoesSelecionados.remove(talhao.id);
-                              }
-                            });
-                          },
-                          controlAffinity: ListTileControlAffinity.leading,
-                        );
-                      }),
+                      ..._talhoesDisponiveis.map((talhao) => CheckboxListTile(
+                            title: Text(talhao.nome),
+                            value: _talhoesSelecionados.contains(talhao.id),
+                            onChanged: (isSelected) {
+                              setState(() {
+                                if (isSelected == true) {
+                                  _talhoesSelecionados.add(talhao.id!);
+                                } else {
+                                  _talhoesSelecionados.remove(talhao.id);
+                                }
+                              });
+                            },
+                            controlAffinity: ListTileControlAffinity.leading,
+                          )),
                     ],
                   ),
                 )
               else if (_fazendaSelecionada != null)
                 const Padding(
                   padding: EdgeInsets.all(16.0),
-                  child: Text("Nenhum talhão encontrado para esta fazenda.", textAlign: TextAlign.center),
-                )
+                  child: Text("Nenhum talhão encontrado para esta fazenda.",
+                      textAlign: TextAlign.center),
+                ),
             ],
           ),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar')),
         FilledButton(
-          // <<< CORREÇÃO 4: AJUSTE DO BOTÃO ADICIONAR >>>
           onPressed: _talhoesSelecionados.isNotEmpty
               ? () {
                   final selecionados = _talhoesDisponiveis

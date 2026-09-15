@@ -36,8 +36,12 @@ import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/models/atividade_model.dart';
 import 'package:geoforestv1/data/repositories/codigos_repository.dart';
+import 'package:geoforestv1/data/repositories/estoque_repository.dart';
 import 'package:geoforestv1/data/repositories/pilha_repository.dart';
+import 'package:geoforestv1/data/repositories/silvi_repository.dart';
+import 'package:geoforestv1/models/estoque_saida_model.dart';
 import 'package:geoforestv1/models/pilha_madeira_model.dart';
+import 'package:geoforestv1/models/silvi_model.dart';
 
 // --- PAYLOADS PARA ISOLATES ---
 
@@ -194,10 +198,12 @@ class _CsvOperacoesPayload {
 
 class _XlsxPilhasPayload {
   final List<Map<String, dynamic>> pilhasMap;
+  final List<Map<String, dynamic>> estoquesMap;
   final String nomeZona;
   final Map<int, String> proj4Defs;
   _XlsxPilhasPayload({
     required this.pilhasMap,
+    required this.estoquesMap,
     required this.nomeZona,
     required this.proj4Defs,
   });
@@ -293,6 +299,9 @@ Future<List<int>> _generateXlsxParcelaBytesInIsolate(_CsvParcelaPayload payload)
     'Altura_m',
     'Altura_Dano_m',
     'Dominante',
+    'Latitude_Arvore',
+    'Longitude_Arvore',
+    'Identificado_Por_IA',
     'Observacao_Parcela'
   ]);
 
@@ -372,6 +381,9 @@ Future<List<int>> _generateXlsxParcelaBytesInIsolate(_CsvParcelaPayload payload)
         null, // Altura
         null, // Altura Dano
         null, // Dominante
+        null, // Latitude_Arvore
+        null, // Longitude_Arvore
+        null, // Identificado_Por_IA
         p.observacao                                // Observacao_Parcela (FINAL)
       ]);
     } else {
@@ -418,6 +430,9 @@ Future<List<int>> _generateXlsxParcelaBytesInIsolate(_CsvParcelaPayload payload)
           formatValue(a.altura, nf1),                 // Altura_m
           formatValue(a.alturaDano, nf1),             // Altura_Dano_m
           a.dominante ? 'Sim' : 'Não',                // Dominante
+          a.latitude?.toStringAsFixed(6) ?? '',       // Latitude_Arvore
+          a.longitude?.toStringAsFixed(6) ?? '',      // Longitude_Arvore
+          a.identificadoPorIa ? 'Sim' : 'Não',        // Identificado_Por_IA
           p.observacao ?? ''                          // Observacao_Parcela (FINAL)
         ]);
       }
@@ -891,9 +906,29 @@ Future<List<int>> _generateXlsxPilhasBytesInIsolate(_XlsxPilhasPayload payload) 
     }
   }
 
+  // Aba 3: estoques de saída
+  final List<List<dynamic>> rowsEstoques = [];
+  rowsEstoques.add([
+    'Fazenda', 'Talhão', 'Sortimento', 'Volume (m³)', 'Nº Caminhões', 'Data', 'Líder', 'Observações',
+  ]);
+  for (final eMap in payload.estoquesMap) {
+    final e = EstoqueSaida.fromMap(eMap);
+    rowsEstoques.add([
+      e.nomeFazenda,
+      e.nomeTalhao,
+      e.sortimento,
+      e.volumeM3,
+      e.numeroCaminhoes > 0 ? e.numeroCaminhoes : null,
+      DateFormat('dd/MM/yyyy').format(DateTime.parse(e.dataRegistro)),
+      e.nomeLider ?? '',
+      e.observacoes ?? '',
+    ]);
+  }
+
   final excel = Excel.createExcel();
   const sheetPilhas = 'Pilhas';
   const sheetSecoes = 'Seções';
+  const sheetEstoques = 'Estoques';
   final sheetPadrao = excel.getDefaultSheet();
 
   for (final row in rowsPilhas) {
@@ -901,6 +936,11 @@ Future<List<int>> _generateXlsxPilhasBytesInIsolate(_XlsxPilhasPayload payload) 
   }
   for (final row in rowsSecoes) {
     excel.appendRow(sheetSecoes, row.map(_paraCellValue).toList());
+  }
+  if (rowsEstoques.length > 1) {
+    for (final row in rowsEstoques) {
+      excel.appendRow(sheetEstoques, row.map(_paraCellValue).toList());
+    }
   }
 
   if (sheetPadrao != null && sheetPadrao != sheetPilhas) excel.delete(sheetPadrao);
@@ -918,6 +958,8 @@ class ExportService {
   final _atividadeRepository = AtividadeRepository();
   final _talhaoRepository = TalhaoRepository();
   final _pilhaRepository = PilhaRepository();
+  final _estoqueRepository = EstoqueRepository();
+  final _silviRepository = SilviRepository();
 
   Future<void> exportarRelatorioDiarioConsolidadoCsv({
     required BuildContext context,
@@ -1950,12 +1992,16 @@ class ExportService {
           return;
         }
         final pilhas = await _pilhaRepository.getUnexportedPilhasByLider(lider);
-        if (pilhas.isEmpty) {
-          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma pilha nova para exportar.'), backgroundColor: Colors.orange));
+        final estoques = await _estoqueRepository.getEstoquesPorLideresNomes(
+          apenasNaoExportadas: true,
+          lideresNomes: {lider},
+        );
+        if (pilhas.isEmpty && estoques.isEmpty) {
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma pilha ou saída de estoque nova para exportar.'), backgroundColor: Colors.orange));
           return;
         }
         final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
-        await _gerarXlsxPilhas(context, pilhas, 'geoforest_export_pilhas_$hoje.xlsx', marcarComoExportado: true);
+        await _gerarXlsxPilhas(context, pilhas, 'geoforest_export_pilhas_$hoje.xlsx', marcarComoExportado: true, estoquesPreloaded: estoques);
       }
     } catch (e, s) {
       _handleExportError(context, 'exportar pilhas', e, s);
@@ -1989,13 +2035,258 @@ class ExportService {
     }
   }
 
+  Future<void> exportarNovasOperacoesSilvi(BuildContext context) async {
+    try {
+      if (!await _requestPermission(context)) return;
+      final ops = await _silviRepository.getOperacoesPorLideres(apenasNaoExportadas: true);
+      if (ops.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Nenhuma operação silvicultural nova para exportar.'), backgroundColor: Colors.orange),
+          );
+        }
+        return;
+      }
+      await _gerarXlsxSilvi(context, ops, marcarComoExportado: true);
+    } catch (e, s) {
+      _handleExportError(context, 'exportar operações silvi', e, s);
+    }
+  }
+
+  Future<void> exportarTodasOperacoesSilviBackup(BuildContext context) async {
+    try {
+      if (!await _requestPermission(context)) return;
+      final ops = await _silviRepository.getTodasOperacoes();
+      if (ops.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Nenhuma operação silvicultural encontrada.'), backgroundColor: Colors.orange),
+          );
+        }
+        return;
+      }
+      await _gerarXlsxSilvi(context, ops, marcarComoExportado: false);
+    } catch (e, s) {
+      _handleExportError(context, 'backup de operações silvi', e, s);
+    }
+  }
+
+  Future<void> exportarOperacoesSilviComFiltros(
+    BuildContext context, {
+    Set<String>? fazendas,
+    Set<String>? talhoes,
+    Set<String>? tipos,
+    Set<String>? lideres,
+    DateTime? dataInicio,
+    DateTime? dataFim,
+  }) async {
+    try {
+      if (!await _requestPermission(context)) return;
+      var ops = await _silviRepository.getTodasOperacoes();
+      if (fazendas != null && fazendas.isNotEmpty) {
+        ops = ops.where((o) => fazendas.contains(o.nomeFazenda ?? '')).toList();
+      }
+      if (talhoes != null && talhoes.isNotEmpty) {
+        ops = ops.where((o) => talhoes.contains(o.nomeTalhao ?? '')).toList();
+      }
+      if (tipos != null && tipos.isNotEmpty) {
+        ops = ops.where((o) => tipos.contains(o.tipo)).toList();
+      }
+      if (lideres != null && lideres.isNotEmpty) {
+        ops = ops.where((o) => lideres.contains(o.nomeLider ?? '')).toList();
+      }
+      if (dataInicio != null) {
+        ops = ops.where((o) {
+          if (o.dataExecucao == null) return false;
+          final d = DateTime.tryParse(o.dataExecucao!);
+          return d != null && !d.isBefore(dataInicio);
+        }).toList();
+      }
+      if (dataFim != null) {
+        ops = ops.where((o) {
+          if (o.dataExecucao == null) return false;
+          final d = DateTime.tryParse(o.dataExecucao!);
+          return d != null && !d.isAfter(dataFim.add(const Duration(days: 1)));
+        }).toList();
+      }
+      if (ops.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Nenhuma operação encontrada com os filtros selecionados.'), backgroundColor: Colors.orange),
+          );
+        }
+        return;
+      }
+      await _gerarXlsxSilvi(context, ops, marcarComoExportado: false);
+    } catch (e, s) {
+      _handleExportError(context, 'exportar operações silvi filtradas', e, s);
+    }
+  }
+
+  Future<void> _gerarXlsxSilvi(BuildContext context, List<OperacaoSilvi> ops, {required bool marcarComoExportado}) async {
+    final hoje = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
+    final fileName = marcarComoExportado
+        ? 'geoforest_silvi_$hoje.xlsx'
+        : 'geoforest_BACKUP_silvi_$hoje.xlsx';
+
+    final centroides = await _silviRepository.getTodosCentroides();
+
+    // Índice rápido: talhaoId → centroide
+    final centroideMap = <int, CentroideSilvi>{};
+    for (final c in centroides) {
+      if (c.talhaoId != null) centroideMap[c.talhaoId!] = c;
+    }
+
+    final nf2 = NumberFormat('0.00', 'pt_BR');
+    final nf4 = NumberFormat('0.0000', 'pt_BR');
+    final df = DateFormat('dd/MM/yyyy');
+
+    // ── Colunas coringa: coleta todos os extras únicos dos planos ───────────
+    final extraKeys = <String>[];
+    for (final c in centroides) {
+      for (final plano in c.operacoesPlanejadas) {
+        for (final k in plano.extras.keys) {
+          if (!extraKeys.contains(k)) extraKeys.add(k);
+        }
+      }
+    }
+
+    // ── Aba 1: Operações detalhadas ─────────────────────────────────────────
+    final List<List<dynamic>> rowsOps = [];
+    rowsOps.add([
+      'Fazenda', 'Talhão', 'Área Total Talhão (ha)',
+      'Tipo de Operação', 'Área Planejada Tipo (ha)',
+      'Área Aplicada (ha)', 'Área Restante (ha)',
+      'Data Execução', 'Líder', 'Status', 'Observações',
+      'Latitude', 'Longitude',
+      ...extraKeys,
+    ]);
+
+    for (final op in ops) {
+      final c = op.talhaoId != null ? centroideMap[op.talhaoId!] : null;
+      final areaTotalHa = c?.areaTotalHa;
+      // Área planejada para este tipo específico neste talhão
+      final areaPlanejadaTipo = c?.operacoesPlanejadas
+          .where((p) => p.tipo == op.tipo)
+          .fold(0.0, (s, p) => s + (p.areaHa ?? 0));
+      // Soma já aplicada deste tipo neste talhão (entre todas as ops, incluindo esta)
+      final areaAplicadaTipo = ops
+          .where((o) => o.talhaoId == op.talhaoId && o.tipo == op.tipo)
+          .fold(0.0, (s, o) => s + (o.areaAplicadaHa ?? 0));
+      final areaRestante = areaPlanejadaTipo != null
+          ? (areaPlanejadaTipo - areaAplicadaTipo).clamp(0.0, double.infinity)
+          : null;
+
+      final tipo = OperacaoSilviTipo.fromString(op.tipo).label;
+      final data = op.dataExecucao != null
+          ? df.format(DateTime.parse(op.dataExecucao!))
+          : '';
+
+      // Extras do plano correspondente a este tipo neste talhão
+      final plano = c?.operacoesPlanejadas
+          .where((p) => p.tipo == op.tipo)
+          .firstOrNull;
+      final extrasOp = plano?.extras ?? {};
+
+      rowsOps.add([
+        op.nomeFazenda ?? '',
+        op.nomeTalhao ?? '',
+        areaTotalHa != null ? nf2.format(areaTotalHa) : '',
+        tipo,
+        areaPlanejadaTipo != null && areaPlanejadaTipo > 0 ? nf2.format(areaPlanejadaTipo) : '',
+        op.areaAplicadaHa != null ? nf2.format(op.areaAplicadaHa) : '',
+        areaRestante != null ? nf2.format(areaRestante) : '',
+        data,
+        op.nomeLider ?? '',
+        op.status,
+        op.observacoes ?? '',
+        op.latitude != null ? nf4.format(op.latitude) : '',
+        op.longitude != null ? nf4.format(op.longitude) : '',
+        ...extraKeys.map((k) => extrasOp[k] ?? ''),
+      ]);
+    }
+
+    // ── Aba 2: Resumo por talhão × tipo ─────────────────────────────────────
+    final List<List<dynamic>> rowsResumo = [];
+    rowsResumo.add([
+      'Fazenda', 'Talhão', 'Área Total Talhão (ha)',
+      'Tipo de Operação', 'Área Planejada (ha)',
+      'Área Executada (ha)', 'Área Restante (ha)', '% Avanço',
+    ]);
+
+    // Agrupa ops por talhaoId × tipo
+    final Map<String, double> aplicadoPorTalhaoTipo = {};
+    for (final op in ops) {
+      final key = '${op.talhaoId ?? op.nomeTalhao}_${op.tipo}';
+      aplicadoPorTalhaoTipo[key] = (aplicadoPorTalhaoTipo[key] ?? 0) + (op.areaAplicadaHa ?? 0);
+    }
+
+    // Itera centroides → operacoesPlanejadas → linha de resumo
+    for (final c in centroides) {
+      for (final plano in c.operacoesPlanejadas) {
+        final key = '${c.talhaoId}_${plano.tipo}';
+        final aplicado = aplicadoPorTalhaoTipo[key] ?? 0;
+        final planejado = plano.areaHa ?? 0;
+        final restante = (planejado - aplicado).clamp(0.0, double.infinity);
+        final pct = planejado > 0 ? (aplicado / planejado * 100).clamp(0.0, 100.0) : null;
+        rowsResumo.add([
+          c.nomeFazenda,
+          c.nomeTalhao,
+          c.areaTotalHa != null ? nf2.format(c.areaTotalHa) : '',
+          OperacaoSilviTipo.fromString(plano.tipo).label,
+          planejado > 0 ? nf2.format(planejado) : '',
+          aplicado > 0 ? nf2.format(aplicado) : '0,00',
+          nf2.format(restante),
+          pct != null ? '${nf2.format(pct)}%' : '',
+        ]);
+      }
+    }
+
+    final excel = Excel.createExcel();
+    const sheetOps = 'Operações';
+    const sheetResumo = 'Resumo por Talhão';
+    final sheetPadrao = excel.getDefaultSheet();
+
+    for (final row in rowsOps) {
+      excel.appendRow(sheetOps, row.map(_paraCellValue).toList());
+    }
+    if (rowsResumo.length > 1) {
+      for (final row in rowsResumo) {
+        excel.appendRow(sheetResumo, row.map(_paraCellValue).toList());
+      }
+    }
+    if (sheetPadrao != null && sheetPadrao != sheetOps) excel.delete(sheetPadrao);
+    excel.setDefaultSheet(sheetOps);
+
+    final bytes = excel.save() ?? <int>[];
+    final path = await _salvarBytesEObterCaminho(bytes, fileName);
+
+    if (marcarComoExportado) {
+      final ids = ops.where((o) => o.id != null).map((o) => o.id!).toList();
+      await _silviRepository.marcarComoExportadas(ids);
+    }
+
+    if (context.mounted) {
+      await SharePlus.instance.share(ShareParams(files: [XFile(path)], subject: 'Silvicultura - GeoForest'));
+    }
+  }
+
   Future<void> _showManagerPilhasExportDialog(BuildContext context, {required bool isBackup}) async {
     final todosProjetos = await _projetoRepository.getTodosOsProjetosParaGerente();
     final todosLideres = await _pilhaRepository.getDistinctLideres();
+    final todasPilhas = await _pilhaRepository.getPilhasPorLideres(apenasNaoExportadas: false);
+    final fazendasDisp = todasPilhas.map((p) => p.nomeFazenda ?? '').where((f) => f.isNotEmpty).toSet().toList()..sort();
+    final talhoesDisp = todasPilhas.map((p) => p.nomeTalhao ?? '').where((t) => t.isNotEmpty).toSet().toList()..sort();
     if (!context.mounted) return;
     final result = await showDialog<ExportFilters>(
       context: context,
-      builder: (_) => ManagerExportDialog(isBackup: isBackup, projetosDisponiveis: todosProjetos, lideresDisponiveis: todosLideres),
+      builder: (_) => ManagerExportDialog(
+        isBackup: isBackup,
+        projetosDisponiveis: todosProjetos,
+        lideresDisponiveis: todosLideres,
+        fazendasDisponiveis: fazendasDisp,
+        talhoesDisponiveis: talhoesDisp,
+      ),
     );
     if (result != null && context.mounted) {
       await _executarExportacaoGerentePilhas(context, result);
@@ -2003,21 +2294,34 @@ class ExportService {
   }
 
   Future<void> _executarExportacaoGerentePilhas(BuildContext context, ExportFilters filters) async {
-    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando pilhas com base nos filtros...')));
-    final pilhas = await _pilhaRepository.getPilhasPorLideres(
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando dados com base nos filtros...')));
+    final lideresNomes = filters.selectedLideres.isNotEmpty ? filters.selectedLideres : null;
+    var pilhas = await _pilhaRepository.getPilhasPorLideres(
       apenasNaoExportadas: !filters.isBackup,
-      lideresNomes: filters.selectedLideres.isNotEmpty ? filters.selectedLideres : null,
+      lideresNomes: lideresNomes,
     );
-    if (pilhas.isEmpty) {
+    var estoques = await _estoqueRepository.getEstoquesPorLideresNomes(
+      apenasNaoExportadas: !filters.isBackup,
+      lideresNomes: lideresNomes,
+    );
+    if (filters.selectedFazendas.isNotEmpty) {
+      pilhas = pilhas.where((p) => filters.selectedFazendas.contains(p.nomeFazenda ?? '')).toList();
+      estoques = estoques.where((e) => filters.selectedFazendas.contains(e.nomeFazenda)).toList();
+    }
+    if (filters.selectedTalhoes.isNotEmpty) {
+      pilhas = pilhas.where((p) => filters.selectedTalhoes.contains(p.nomeTalhao ?? '')).toList();
+      estoques = estoques.where((e) => filters.selectedTalhoes.contains(e.nomeTalhao)).toList();
+    }
+    if (pilhas.isEmpty && estoques.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma pilha encontrada para os filtros selecionados.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum dado encontrado para os filtros selecionados.')));
       }
       return;
     }
     final tipo = filters.isBackup ? 'BACKUP_PILHAS_GERENTE' : 'EXPORT_PILHAS_GERENTE';
     final fName = 'geoforest_${tipo}_${DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now())}.xlsx';
-    await _gerarXlsxPilhas(context, pilhas, fName, marcarComoExportado: !filters.isBackup);
+    await _gerarXlsxPilhas(context, pilhas, fName, marcarComoExportado: !filters.isBackup, estoquesPreloaded: estoques);
   }
 
   Future<void> _gerarXlsxPilhas(
@@ -2025,9 +2329,22 @@ class ExportService {
     List<PilhaMadeira> pilhas,
     String nomeArquivo, {
     required bool marcarComoExportado,
+    List<EstoqueSaida>? estoquesPreloaded,
   }) async {
-    if (pilhas.isEmpty) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma pilha para exportar.'), backgroundColor: Colors.orange));
+    // Carrega estoques: usa os pré-carregados ou busca pelos líderes das pilhas
+    final List<EstoqueSaida> estoques;
+    if (estoquesPreloaded != null) {
+      estoques = estoquesPreloaded;
+    } else {
+      final liderNames = pilhas.map((p) => p.nomeLider).whereType<String>().toSet();
+      estoques = await _estoqueRepository.getEstoquesPorLideresNomes(
+        apenasNaoExportadas: marcarComoExportado,
+        lideresNomes: liderNames.isNotEmpty ? liderNames : null,
+      );
+    }
+
+    if (pilhas.isEmpty && estoques.isEmpty) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum dado novo para exportar.'), backgroundColor: Colors.orange));
       return;
     }
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando planilha de pilhas...')));
@@ -2035,6 +2352,7 @@ class ExportService {
     final prefs = await SharedPreferences.getInstance();
     final payload = _XlsxPilhasPayload(
       pilhasMap: pilhas.map((p) => p.toMap()).toList(),
+      estoquesMap: estoques.map((e) => e.toMap()).toList(),
       nomeZona: prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S',
       proj4Defs: proj4Definitions,
     );
@@ -2045,8 +2363,10 @@ class ExportService {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       await Share.shareXFiles([XFile(path)], subject: 'Exportação de Pilhas — GeoForest');
       if (marcarComoExportado) {
-        final ids = pilhas.map((p) => p.id).whereType<int>().toList();
-        await _pilhaRepository.marcarPilhasComoExportadas(ids);
+        final idsPilhas = pilhas.map((p) => p.id).whereType<int>().toList();
+        await _pilhaRepository.marcarPilhasComoExportadas(idsPilhas);
+        final idsEstoques = estoques.map((e) => e.id).whereType<int>().toList();
+        await _estoqueRepository.marcarComoExportadas(idsEstoques);
       }
     }
   }
@@ -2073,9 +2393,12 @@ class ExportService {
         return;
       }
 
+      final estoques = await _estoqueRepository.getEstoquesDoTalhao(talhaoId);
+
       final prefs = await SharedPreferences.getInstance();
       final payload = _XlsxPilhasPayload(
         pilhasMap: pilhas.map((p) => p.toMap()).toList(),
+        estoquesMap: estoques.map((e) => e.toMap()).toList(),
         nomeZona: prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S',
         proj4Defs: proj4Definitions,
       );

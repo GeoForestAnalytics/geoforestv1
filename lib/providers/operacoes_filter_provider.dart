@@ -14,6 +14,9 @@ class OperacoesFilterProvider with ChangeNotifier {
   PeriodoFiltro _periodo = PeriodoFiltro.todos;
   DateTimeRange? _periodoPersonalizado;
 
+  // Filtro de Projeto
+  Set<int> _projetoIdsFiltro = {};
+
   // Filtro de Equipe
   Set<String> _lideresSelecionados = {};
   List<String> _lideresDisponiveis = [];
@@ -21,8 +24,19 @@ class OperacoesFilterProvider with ChangeNotifier {
   // --- GETTERS PÚBLICOS ---
   PeriodoFiltro get periodo => _periodo;
   DateTimeRange? get periodoPersonalizado => _periodoPersonalizado;
+  Set<int> get projetoIdsFiltro => _projetoIdsFiltro;
   Set<String> get lideresSelecionados => _lideresSelecionados;
   List<String> get lideresDisponiveis => _lideresDisponiveis;
+
+  void setProjetoIds(Set<int> ids) {
+    _projetoIdsFiltro = ids;
+    notifyListeners();
+  }
+
+  void clearProjetos() {
+    _projetoIdsFiltro.clear();
+    notifyListeners();
+  }
 
   // ✅ 2. NOVO MÉTODO CENTRALIZADO
   /// Atualiza os filtros com base nos dados mais recentes do GerenteProvider.

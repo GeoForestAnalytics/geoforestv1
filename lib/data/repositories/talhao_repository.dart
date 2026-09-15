@@ -98,6 +98,21 @@ class TalhaoRepository {
     return List.generate(talhoesMaps.length, (i) => Talhao.fromMap(talhoesMaps[i]));
   }
 
+  Future<List<Talhao>> getTalhoesPorIds(List<int> ids) async {
+    if (ids.isEmpty) return [];
+    final db = await _dbHelper.database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final maps = await db.rawQuery('''
+      SELECT T.*, F.${DbFazendas.nome} as fazendaNome, A.${DbAtividades.projetoId} as ${DbTalhoes.projetoId}
+      FROM ${DbTalhoes.tableName} T
+      INNER JOIN ${DbFazendas.tableName} F ON F.${DbFazendas.id} = T.${DbTalhoes.fazendaId} AND F.${DbFazendas.atividadeId} = T.${DbTalhoes.fazendaAtividadeId}
+      INNER JOIN ${DbAtividades.tableName} A ON F.${DbFazendas.atividadeId} = A.${DbAtividades.id}
+      WHERE T.${DbTalhoes.id} IN ($placeholders)
+      ORDER BY T.${DbTalhoes.nome} ASC
+    ''', ids);
+    return List.generate(maps.length, (i) => Talhao.fromMap(maps[i]));
+  }
+
   Future<List<Talhao>> getTodosOsTalhoes() async {
     final db = await _dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.rawQuery('''

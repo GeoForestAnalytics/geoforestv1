@@ -4,22 +4,28 @@ import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
+import 'package:geoforestv1/models/pilha_madeira_model.dart';
+import 'package:geoforestv1/models/silvi_model.dart';
 import 'package:geoforestv1/services/export_service.dart';
 import 'package:geoforestv1/services/pdf_service.dart';
 import 'package:geoforestv1/services/sync_service.dart';
-import 'package:geoforestv1/utils/navigation_helper.dart'; // <<< 1. IMPORT NECESSÁRIO
+import 'package:geoforestv1/utils/navigation_helper.dart';
 
 /// Tela de ações finais após a consolidação de um relatório diário.
 class VisualizadorRelatorioPage extends StatefulWidget {
   final DiarioDeCampo diario;
   final List<Parcela> parcelas;
   final List<CubagemArvore> cubagens;
+  final List<PilhaMadeira> pilhas;
+  final List<OperacaoSilvi> silvis;
 
   const VisualizadorRelatorioPage({
     super.key,
     required this.diario,
     required this.parcelas,
     required this.cubagens,
+    this.pilhas = const [],
+    this.silvis = const [],
   });
 
   @override

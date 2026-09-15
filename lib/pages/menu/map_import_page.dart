@@ -7,14 +7,19 @@ import 'package:geoforestv1/models/sample_point.dart';
 import 'package:geoforestv1/pages/amostra/coleta_dados_page.dart';
 import 'package:geoforestv1/pages/pilhas/coleta_pilha_page.dart';
 import 'package:geoforestv1/pages/pilhas/detalhe_pilha_page.dart';
+import 'package:geoforestv1/pages/pilhas/estoque_saida_page.dart';
+import 'package:geoforestv1/pages/silvicultura/coleta_silvi_page.dart';
+import 'package:geoforestv1/pages/silvicultura/visualizar_areas_silvi_page.dart';
 import 'package:geoforestv1/models/pilha_madeira_model.dart';
-import 'package:geoforestv1/services/export_service.dart';
+import 'package:geoforestv1/models/silvi_model.dart';
 import 'package:geoforestv1/providers/map_provider.dart';
+import 'package:geoforestv1/data/repositories/silvi_repository.dart';
 import 'package:geoforestv1/services/activity_optimizer_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:geoforestv1/data/repositories/pilha_repository.dart';
 
 class MapImportPage extends StatefulWidget {
   const MapImportPage({super.key});
@@ -25,11 +30,20 @@ class MapImportPage extends StatefulWidget {
 
 class _MapImportPageState extends State<MapImportPage> with RouteAware {
   final _mapController = MapController();
+  final _pilhaRepo = PilhaRepository();
+  final _silviRepo = SilviRepository();
+  List<CentroideSilvi> _centroidesSilvi = [];
+
+  bool _centroidesSilviCarregados = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     MapProvider.routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
+    if (!_centroidesSilviCarregados) {
+      _centroidesSilviCarregados = true;
+      _carregarCentroidesSilvi();
+    }
   }
   
   @override
@@ -37,6 +51,14 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
     super.didPopNext();
     debugPrint("Mapa visível novamente, recarregando os dados das amostras...");
     context.read<MapProvider>().loadSamplesParaAtividade();
+    _carregarCentroidesSilvi();
+  }
+
+  Future<void> _carregarCentroidesSilvi() async {
+    final atividadeId = context.read<MapProvider>().currentAtividade?.id;
+    if (atividadeId == null) return;
+    final lista = await _silviRepo.getCentroidesParaAtividade(atividadeId);
+    if (mounted) setState(() => _centroidesSilvi = lista);
   }
 
   @override
@@ -227,13 +249,107 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
     );
   }
 
+  Future<void> _showCentroideSilviOptions(BuildContext context, CentroideSilvi centroide) async {
+    final ops = await _silviRepo.getOperacoesDoTalhao(centroide.talhaoId ?? 0);
+    final totalPlan = centroide.operacoesPlanejadas.fold(0.0, (s, o) => s + (o.areaHa ?? 0));
+    final totalAplic = ops.fold(0.0, (s, o) => s + (o.areaAplicadaHa ?? 0));
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: this.context,
+      builder: (ctx) => Wrap(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.eco_outlined, color: Colors.green),
+            title: Text(centroide.nomeTalhao, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('${centroide.nomeFazenda}  •  ${centroide.operacoesPlanejadas.length} operação(ões) planejada(s)'),
+          ),
+          if (totalPlan > 0 || totalAplic > 0) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Executado: ${totalAplic.toStringAsFixed(2)} ha${totalPlan > 0 ? '  /  Planejado: ${totalPlan.toStringAsFixed(2)} ha' : ''}',
+                      style: const TextStyle(fontSize: 13)),
+                  if (totalPlan > 0) ...[
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (totalAplic / totalPlan).clamp(0.0, 1.0),
+                        minHeight: 8,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          totalAplic >= totalPlan ? Colors.green.shade600 : Colors.green.shade400),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.add_circle_outline, color: Colors.green),
+            title: const Text('Registrar Operação'),
+            onTap: () async {
+              Navigator.pop(ctx);
+              final salvo = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(builder: (_) => ColetaSilviPage(centroide: centroide)),
+              );
+              if (salvo == true && mounted) _carregarCentroidesSilvi();
+            },
+          ),
+          if (ops.isNotEmpty)
+            ListTile(
+              leading: Icon(Icons.layers_outlined, color: Colors.green.shade700),
+              title: const Text('Ver operações no mapa'),
+              subtitle: Text(
+                '${ops.where((o) => o.areaGeoJson != null).length} com área desenhada',
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => VisualizarAreasSilviPage(
+                      operacoes: ops,
+                      centroide: centroide,
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
   /// Abre o menu de opções ao tocar em um marcador de centróide de pilha.
-  void _showCentroideOptions(BuildContext context, CentroidePilha centroide) {
+  Future<void> _showCentroideOptions(BuildContext context, CentroidePilha centroide) async {
     final mapProvider = context.read<MapProvider>();
     final isVisualizando = mapProvider.talhaoVisualizandoPilhas == centroide.talhaoId;
 
+    // Calcula volumes esperado (JSON) e coletado (campo) antes de abrir o sheet
+    final double volEsperado = centroide.sortimentos
+        .fold(0.0, (sum, s) => sum + (s.volumeEsperadoM3 ?? 0));
+
+    double volColetado = 0;
+    if (centroide.talhaoId != null) {
+      final pilhas = await _pilhaRepo.getPilhasDoTalhao(centroide.talhaoId!);
+      volColetado = pilhas.fold(0.0, (sum, p) => sum + p.calcularVolumesolido());
+    }
+
+    if (!mounted) return;
+
+    final nf2 = volEsperado > 0 ? volEsperado.toStringAsFixed(2) : null;
+    final pct = volEsperado > 0 ? (volColetado / volEsperado * 100) : null;
+
     showModalBottomSheet(
-      context: context,
+      context: this.context,
       builder: (ctx) => Wrap(
         children: [
           ListTile(
@@ -243,6 +359,43 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
             ),
             subtitle: Text('${centroide.nomeFazenda}  •  ${centroide.sortimentos.length} sortimento(s)'),
           ),
+          if (volEsperado > 0 || volColetado > 0) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.bar_chart_outlined, color: Colors.brown, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Coletado: ${volColetado.toStringAsFixed(2)} m³'
+                          '${nf2 != null ? '  /  Esperado: $nf2 m³' : ''}',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        if (pct != null)
+                          Text(
+                            '${pct.toStringAsFixed(1)}% realizado',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: pct >= 90
+                                  ? Colors.green.shade700
+                                  : pct >= 60
+                                      ? Colors.orange.shade700
+                                      : Colors.red.shade600,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.add_circle_outline, color: Colors.brown),
@@ -259,6 +412,19 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
             },
           ),
           ListTile(
+            leading: Icon(Icons.local_shipping_outlined, color: Colors.orange.shade700),
+            title: const Text('Saída de Estoque'),
+            subtitle: const Text('Volume declarado sem medição de seções'),
+            onTap: () async {
+              Navigator.pop(ctx);
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => EstoqueSaidaPage(centroide: centroide)),
+              );
+              if (mounted) mapProvider.recarregarPilhasVisiveis();
+            },
+          ),
+          ListTile(
             leading: Icon(
               isVisualizando ? Icons.visibility_off_outlined : Icons.visibility_outlined,
               color: Colors.orange.shade700,
@@ -271,20 +437,6 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
               }
             },
           ),
-          if (centroide.talhaoId != null)
-            ListTile(
-              leading: const Icon(Icons.download_outlined, color: Colors.teal),
-              title: const Text('Exportar Pilhas do Talhão'),
-              onTap: () {
-                Navigator.pop(ctx);
-                ExportService().exportarPilhasTalhao(
-                  context: context,
-                  talhaoId: centroide.talhaoId!,
-                  nomeTalhao: centroide.nomeTalhao,
-                  nomeFazenda: centroide.nomeFazenda,
-                );
-              },
-            ),
         ],
       ),
     );
@@ -547,6 +699,29 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
                       ),
                     );
                   }).toList(),
+                ),
+
+              // ── Centróides de Silvicultura ────────────────────────────
+              if (_centroidesSilvi.isNotEmpty)
+                MarkerLayer(
+                  markers: _centroidesSilvi.map((c) => Marker(
+                    width: 44,
+                    height: 44,
+                    point: LatLng(c.latitude, c.longitude),
+                    child: GestureDetector(
+                      onTap: () => _showCentroideSilviOptions(context, c),
+                      onLongPress: () => _showCentroideSilviOptions(context, c),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade600,
+                          shape: BoxShape.rectangle,
+                          borderRadius: BorderRadius.circular(6),
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 4, offset: const Offset(2, 2))],
+                        ),
+                        child: const Icon(Icons.eco_outlined, color: Colors.white, size: 22),
+                      ),
+                    ),
+                  )).toList(),
                 ),
 
               // ── Pilhas GPS visíveis do talhão selecionado ─────────────

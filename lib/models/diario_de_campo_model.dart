@@ -23,6 +23,7 @@ class DiarioDeCampo {
   final String? equipeNoCarro;
   final String lastModified;
   final String? locaisTrabalhadosJson;
+  final String? modulo;
 
   DiarioDeCampo({
     this.id,
@@ -45,6 +46,7 @@ class DiarioDeCampo {
     this.equipeNoCarro,
     required this.lastModified,
     this.locaisTrabalhadosJson,
+    this.modulo,
   });
 
   Map<String, dynamic> toMap() {
@@ -68,6 +70,7 @@ class DiarioDeCampo {
       DbDiarioDeCampo.veiculoModelo: veiculoModelo,
       DbDiarioDeCampo.equipeNoCarro: equipeNoCarro,
       DbDiarioDeCampo.lastModified: lastModified,
+      DbDiarioDeCampo.modulo: modulo,
     };
   }
 
@@ -91,7 +94,11 @@ class DiarioDeCampo {
       veiculoPlaca: map[DbDiarioDeCampo.veiculoPlaca],
       veiculoModelo: map[DbDiarioDeCampo.veiculoModelo],
       equipeNoCarro: map[DbDiarioDeCampo.equipeNoCarro],
-      lastModified: map[DbDiarioDeCampo.lastModified],
+      lastModified: map[DbDiarioDeCampo.lastModified] is String
+          ? map[DbDiarioDeCampo.lastModified]
+          : map[DbDiarioDeCampo.lastModified]?.toString() ?? '',
+      locaisTrabalhadosJson: map[DbDiarioDeCampo.locaisTrabalhadosJson],
+      modulo: map[DbDiarioDeCampo.modulo],
     );
   }
 }

@@ -22,8 +22,9 @@ import 'package:geoforestv1/services/import/inventario_import_strategy.dart';
 import 'package:geoforestv1/services/import/cubagem_import_strategy.dart';
 import 'package:geoforestv1/services/import/planejamento_cubagem_import_strategy.dart';
 import 'package:geoforestv1/services/import/pilha_os_import_strategy.dart';
+import 'package:geoforestv1/services/import/silvi_os_import_strategy.dart';
 
-enum TipoImportacao { inventario, cubagem, planejamento, planejamentoCubagem, pilhasOs, desconhecido }
+enum TipoImportacao { inventario, cubagem, planejamento, planejamentoCubagem, pilhasOs, silviOs, desconhecido }
 
 class ImportRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
@@ -46,8 +47,23 @@ class ImportRepository {
     bool hasPlanningData = headers.contains('medir ?') || (headers.contains('long (x)') && headers.contains('lat (y)'));
     bool hasCubingIdentifier = headers.contains('identificador_arvore');
     bool hasPilhasData = headers.any((h) => h.replaceAll(RegExp(r'[^a-z0-9]'), '') == 'identificadorpilha');
+    // Formato unificado da OS: tem tamanho_tora (colheita) + material (operação/sortimento)
+    bool hasOsUnificado = headers.any((h) => h.replaceAll(RegExp(r'[^a-z0-9]'), '').contains('tamanhora') || h.toLowerCase() == 'tamanho_tora');
 
-    // 0. É uma OS DE PILHAS?
+    // 0. É o FORMATO UNIFICADO (pilha + silvi na mesma tabela)? Roda as duas estratégias.
+    // Tratado separadamente em importarArquivoUniversal — marca como pilhasOs para o relatório.
+    if (hasOsUnificado) {
+      return (PilhaOsImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.pilhasOs);
+    }
+
+    // Formato silvi standalone (sem colunas de pilha)
+    bool hasSilviData = headers.any((h) => h.replaceAll(RegExp(r'[^a-z0-9]'), '').contains('operac'))
+        && headers.any((h) => h.replaceAll(RegExp(r'[^a-z0-9]'), '').contains('areaha') || h.contains('area_ha') || h == 'area ha');
+    if (hasSilviData) {
+      return (SilviOsImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.silviOs);
+    }
+
+    // Formato pilha antigo (com identificador_pilha explícito)
     if (hasPilhasData) {
       return (PilhaOsImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel), TipoImportacao.pilhasOs);
     }
@@ -169,34 +185,82 @@ class ImportRepository {
       
       ImportResult finalResult = ImportResult();
       TipoImportacao tipoArquivo = TipoImportacao.desconhecido;
+      int silviCentroidesCriados = 0;
 
       final db = await _dbHelper.database;
+      final bool isOsUnificado = headers.any((h) =>
+          h.replaceAll(RegExp(r'[^a-z0-9]'), '').contains('tamanhora') ||
+          h.toLowerCase() == 'tamanho_tora');
+
+      // Detecção por conteúdo: se qualquer linha tem atividade=SILVI/SILVICULTURA
+      // o header-based pode falhar (nomes de colunas variam); content-based é mais confiável.
+      final hasSilviContent = !isOsUnificado && dataRows.any((row) {
+        final atv = row['atividade']?.toString().trim().toUpperCase() ?? '';
+        return atv == 'SILVI' || atv == 'SILVICULTURA';
+      });
+
       await db.transaction((txn) async {
-        final (strategy, tipo) = _getImportStrategy(
-          headers: headers,
-          txn: txn,
-          projeto: projeto,
-          nomeDoResponsavel: nomeDoResponsavel
-        );
-        
-        tipoArquivo = tipo;
+        CsvImportStrategy? strategy;
+
+        if (hasSilviContent) {
+          strategy = SilviOsImportStrategy(txn: txn, projeto: projeto, nomeDoResponsavel: nomeDoResponsavel);
+          tipoArquivo = TipoImportacao.silviOs;
+        } else {
+          final detected = _getImportStrategy(
+            headers: headers,
+            txn: txn,
+            projeto: projeto,
+            nomeDoResponsavel: nomeDoResponsavel,
+          );
+          strategy = detected.$1;
+          tipoArquivo = detected.$2;
+        }
+
         if (strategy == null) {
           throw Exception("Formato do CSV não reconhecido. Verifique as colunas do cabeçalho.");
         }
 
         finalResult = await strategy.processar(dataRows);
+
+        // Formato unificado: roda silvi na mesma transação para capturar linhas SILVI
+        if (isOsUnificado) {
+          final silviStrategy = SilviOsImportStrategy(
+            txn: txn,
+            projeto: projeto,
+            nomeDoResponsavel: nomeDoResponsavel,
+          );
+          final silviResult = await silviStrategy.processar(dataRows);
+          // Acumula todos os contadores do resultado silvi
+          finalResult.linhasProcessadas += silviResult.linhasProcessadas;
+          finalResult.atividadesCriadas += silviResult.atividadesCriadas;
+          finalResult.fazendasCriadas += silviResult.fazendasCriadas;
+          finalResult.talhoesCriados += silviResult.talhoesCriados;
+          finalResult.parcelasIgnoradas += silviResult.parcelasIgnoradas;
+          silviCentroidesCriados += silviResult.centroidesCriados;
+        }
       });
 
       // Relatório final baseado no tipo detectado
       String report;
       if (tipoArquivo == TipoImportacao.pilhasOs) {
-        report = "OS de Pilhas importada com sucesso!\n\n"
+        final pilhaCentroidesCriados = finalResult.centroidesCriados;
+        report = "OS importada com sucesso!\n\n"
                  "Linhas processadas: ${finalResult.linhasProcessadas}\n\n"
                  "Itens Criados:\n"
                  " - Atividades: ${finalResult.atividadesCriadas}\n"
                  " - Fazendas: ${finalResult.fazendasCriadas}\n"
                  " - Talhões: ${finalResult.talhoesCriados}\n"
-                 " - Pontos de Pilha (centróides): ${finalResult.centroidesCriados}";
+                 " - Pontos de Colheita: $pilhaCentroidesCriados\n"
+                 " - Pontos de Silvicultura: $silviCentroidesCriados";
+      } else if (tipoArquivo == TipoImportacao.silviOs) {
+        report = "OS de Silvicultura importada com sucesso!\n\n"
+                 "Linhas processadas: ${finalResult.linhasProcessadas}\n"
+                 "Linhas ignoradas: ${finalResult.parcelasIgnoradas}\n\n"
+                 "Itens Criados:\n"
+                 " - Atividades: ${finalResult.atividadesCriadas}\n"
+                 " - Fazendas: ${finalResult.fazendasCriadas}\n"
+                 " - Talhões: ${finalResult.talhoesCriados}\n"
+                 " - Pontos de Silvicultura: ${finalResult.centroidesCriados}";
       } else if (tipoArquivo == TipoImportacao.planejamento) {
         report = "Importação de Plano de Amostragem Concluída!\n\n"
                  "Linhas no arquivo: ${finalResult.linhasProcessadas}\n"

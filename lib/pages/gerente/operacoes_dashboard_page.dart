@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:geoforestv1/providers/operacoes_provider.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
 import 'package:geoforestv1/providers/gerente_provider.dart';
+import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/providers/operacoes_filter_provider.dart';
 import 'package:geoforestv1/services/export_service.dart';
 
@@ -97,35 +98,89 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth < 380) {
-              return Column(
-                children: [
-                  _buildPeriodoDropdown(context),
-                  const SizedBox(height: 16),
-                  _buildLiderDropdown(context),
-                  if (context.watch<OperacoesFilterProvider>().periodo == PeriodoFiltro.personalizado)
-                    _buildDatePicker(context),
-                ],
-              );
-            } else {
-              return Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: _buildPeriodoDropdown(context)),
-                      const SizedBox(width: 16),
-                      Expanded(child: _buildLiderDropdown(context)),
-                    ],
-                  ),
-                  if (context.watch<OperacoesFilterProvider>().periodo == PeriodoFiltro.personalizado)
-                    _buildDatePicker(context),
-                ],
-              );
-            }
-          },
+        child: Column(
+          children: [
+            _buildProjetoFilter(context),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: _buildPeriodoDropdown(context)),
+              const SizedBox(width: 16),
+              Expanded(child: _buildLiderDropdown(context)),
+            ]),
+            if (context.watch<OperacoesFilterProvider>().periodo == PeriodoFiltro.personalizado)
+              _buildDatePicker(context),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildProjetoFilter(BuildContext context) {
+    final gerenteProvider = context.watch<GerenteProvider>();
+    final filterProvider = context.watch<OperacoesFilterProvider>();
+    final projetos = gerenteProvider.projetos.where((p) => p.id != null).toList();
+    if (projetos.isEmpty) return const SizedBox.shrink();
+
+    final selecionados = filterProvider.projetoIdsFiltro;
+    final label = selecionados.isEmpty
+        ? 'Todos os Projetos'
+        : selecionados.length == 1
+            ? projetos.firstWhere((p) => p.id == selecionados.first, orElse: () => projetos.first).nome
+            : '${selecionados.length} projetos';
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(4),
+      onTap: () {
+        final tmp = Set<int>.from(selecionados);
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => StatefulBuilder(
+            builder: (ctx, setDlg) => AlertDialog(
+              title: const Text('Filtrar por Projeto'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    CheckboxListTile(
+                      title: const Text('Todos', style: TextStyle(fontWeight: FontWeight.bold)),
+                      value: tmp.isEmpty,
+                      onChanged: (_) => setDlg(() => tmp.clear()),
+                    ),
+                    const Divider(height: 1),
+                    ...projetos.map((p) => CheckboxListTile(
+                      title: Text(p.nome),
+                      value: tmp.contains(p.id),
+                      onChanged: (on) => setDlg(() => on == true ? tmp.add(p.id!) : tmp.remove(p.id)),
+                    )),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () { context.read<OperacoesFilterProvider>().clearProjetos(); Navigator.pop(ctx); },
+                  child: const Text('Limpar'),
+                ),
+                FilledButton(
+                  onPressed: () { context.read<OperacoesFilterProvider>().setProjetoIds(tmp); Navigator.pop(ctx); },
+                  child: const Text('Aplicar'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Projeto',
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          isDense: true,
+        ),
+        child: Row(children: [
+          Expanded(child: Text(label, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))),
+          const Icon(Icons.arrow_drop_down, size: 20),
+        ]),
       ),
     );
   }
@@ -196,31 +251,59 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
   }
 
   Widget _buildKpiCards(BuildContext context, KpiData kpis) {
+    final modulo = context.watch<LicenseProvider>().licenseData?.modulo ?? 'inventario';
+    final showInv = modulo == 'inventario' || modulo == 'todos';
+    final showCol = modulo == 'colheita' || modulo == 'todos';
+    final showSil = modulo == 'silvicultura' || modulo == 'todos';
+
     return Column(
       children: [
         const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(child: _buildKpiCard('Custo Total', _currencyFormat.format(kpis.custoTotalCampo), Icons.monetization_on, Colors.green)),
-            const SizedBox(width: 16),
-            Expanded(child: _buildKpiCard('KM Rodados', '${_numberFormat.format(kpis.kmRodados)} km', Icons.directions_car, Colors.blue)),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            // Exibe as strings formatadas "150/250"
+        // Financeiro (todos os módulos)
+        Row(children: [
+          Expanded(child: _buildKpiCard('Custo Total', _currencyFormat.format(kpis.custoTotalCampo), Icons.monetization_on, Colors.green)),
+          const SizedBox(width: 16),
+          Expanded(child: _buildKpiCard('KM Rodados', '${_numberFormat.format(kpis.kmRodados)} km', Icons.directions_car, Colors.blue)),
+        ]),
+        // Inventário
+        if (showInv) ...[
+          const SizedBox(height: 16),
+          Row(children: [
             Expanded(child: _buildKpiCard('Amostras (Feito/Total)', kpis.progressoAmostras, Icons.checklist, Colors.orange)),
             const SizedBox(width: 16),
             Expanded(child: _buildKpiCard('Cubagens (Feito/Total)', kpis.progressoCubagens, Icons.architecture, Colors.teal)),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-           children: [
-             Expanded(child: _buildKpiCard('Custo / Coleta Realizada', _currencyFormat.format(kpis.custoPorColeta), Icons.attach_money, Colors.red)),
-           ]
-        )
+          ]),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: _buildKpiCard('Custo / Coleta', _currencyFormat.format(kpis.custoPorColeta), Icons.attach_money, Colors.red)),
+          ]),
+        ],
+        // Colheita
+        if (showCol) ...[
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: _buildKpiCard('Pilhas Medidas', '${kpis.totalPilhas}', Icons.layers_outlined, Colors.orange)),
+            const SizedBox(width: 16),
+            Expanded(child: _buildKpiCard('Volume Total', '${kpis.volumeTotalM3.toStringAsFixed(1)} m³', Icons.waves_outlined, Colors.blue)),
+          ]),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: _buildKpiCard('Custo / m³', _currencyFormat.format(kpis.custoPorM3), Icons.price_change_outlined, Colors.red)),
+          ]),
+        ],
+        // Silvicultura
+        if (showSil) ...[
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: _buildKpiCard('Operações Silvi.', '${kpis.totalOperacoesSilvi}', Icons.eco_outlined, Colors.green)),
+            const SizedBox(width: 16),
+            Expanded(child: _buildKpiCard('Área Aplicada', '${kpis.areaTotalHa.toStringAsFixed(1)} ha', Icons.map_outlined, Colors.teal)),
+          ]),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: _buildKpiCard('Custo / ha', _currencyFormat.format(kpis.custoPorHa), Icons.attach_money, Colors.purple)),
+          ]),
+        ],
       ],
     );
   }
@@ -237,7 +320,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
           children: [
             CircleAvatar(
               radius: 20,
-              backgroundColor: color.withOpacity(0.15),
+              backgroundColor: color.withValues(alpha: 0.15),
               child: Icon(icon, color: color, size: 24),
             ),
             const SizedBox(height: 12),
@@ -306,7 +389,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
             backDrawRodData: BackgroundBarChartRodData(
                 show: true,
                 toY: maxY * 1.2,
-                color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade200,
+                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade200,
             ),
           ),
         ],
@@ -420,7 +503,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                     DataCell(Text(_currencyFormat.format(c.custoMedioPorKm))),
                   ])).toList(),
                   DataRow(
-                    color: MaterialStateProperty.all(Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5)),
+                    color: WidgetStateProperty.all(Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)),
                     cells: [
                       const DataCell(Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold))),
                       DataCell(Text(_numberFormat.format(kpis.kmRodados), style: const TextStyle(fontWeight: FontWeight.bold))),
@@ -484,7 +567,7 @@ class _OperacoesDashboardPageState extends State<OperacoesDashboardPage> {
                   
                   // LINHA DE TOTAL
                   DataRow(
-                    color: MaterialStateProperty.all(Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5)),
+                    color: WidgetStateProperty.all(Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)),
                     cells: [
                       DataCell(Text('${diarios.length} DIAS', style: const TextStyle(fontWeight: FontWeight.bold))),
                       const DataCell(Text('')),

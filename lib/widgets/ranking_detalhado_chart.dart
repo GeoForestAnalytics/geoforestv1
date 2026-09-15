@@ -1,4 +1,3 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -8,7 +7,7 @@ class LeaderStats {
   final String name;
   final int amostras;
   final int cubagens;
-  
+
   int get total => amostras + cubagens;
 
   LeaderStats(this.name, this.amostras, this.cubagens);
@@ -19,9 +18,9 @@ class RankingDetalhadoChart extends StatefulWidget {
   final List<CubagemArvore> cubagens;
 
   const RankingDetalhadoChart({
-    super.key, 
-    required this.parcelas, 
-    required this.cubagens
+    super.key,
+    required this.parcelas,
+    required this.cubagens,
   });
 
   @override
@@ -39,67 +38,53 @@ class _RankingDetalhadoChartState extends State<RankingDetalhadoChart> {
 
   void _processData() {
     final Map<String, int> amostrasMap = {};
-    for (var p in widget.parcelas) {
+    for (final p in widget.parcelas) {
       if (p.status == StatusParcela.concluida || p.status == StatusParcela.exportada) {
         final lider = p.nomeLider ?? 'Desconhecido';
         amostrasMap[lider] = (amostrasMap[lider] ?? 0) + 1;
       }
     }
-
     final Map<String, int> cubagensMap = {};
-    for (var c in widget.cubagens) {
+    for (final c in widget.cubagens) {
       if (c.alturaTotal > 0) {
         final lider = c.nomeLider ?? 'Desconhecido';
         cubagensMap[lider] = (cubagensMap[lider] ?? 0) + 1;
       }
     }
-
-    final Set<String> todosLideres = {...amostrasMap.keys, ...cubagensMap.keys};
-    
-    _data = todosLideres.map((lider) {
-      return LeaderStats(
-        lider, 
-        amostrasMap[lider] ?? 0, 
-        cubagensMap[lider] ?? 0
-      );
-    }).toList();
-
-    // Ordena do Maior para o Menor (Top 1 no índice 0)
-    _data.sort((a, b) => b.total.compareTo(a.total));
-    
-    // REMOVIDO: _data = _data.reversed.toList(); 
-    // Sem o reverse, o Índice 0 (Maior) fica no topo do gráfico rotacionado.
+    final Set<String> todos = {...amostrasMap.keys, ...cubagensMap.keys};
+    _data = todos
+        .map((l) => LeaderStats(l, amostrasMap[l] ?? 0, cubagensMap[l] ?? 0))
+        .toList()
+      ..sort((a, b) => b.total.compareTo(a.total));
   }
 
-  String _getInitials(String name) {
-    if (name.isEmpty) return "?";
-    List<String> names = name.trim().split(" ");
-    if (names.length > 1) {
-      return "${names[0][0]}${names[1][0]}".toUpperCase();
-    }
-    return names[0].length > 1 ? names[0].substring(0, 2).toUpperCase() : names[0].toUpperCase();
-  }
-  
-  String _getFirstName(String name) {
-    if (name.isEmpty) return "N/A";
-    return name.trim().split(" ").first;
+  String _initials(String name) {
+    final parts = name.trim().split(' ');
+    if (parts.length > 1) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return name.length > 1 ? name.substring(0, 2).toUpperCase() : name.toUpperCase();
   }
 
-  Color _getRankColor(int rank) {
+  String _firstName(String name) => name.trim().split(' ').first;
+
+  Color _rankColor(int rank) => const [
+        Color(0xFFFFD700),
+        Color(0xFFC0C0C0),
+        Color(0xFFCD7F32),
+      ][rank < 3 ? rank : 2];
+
+  Widget? _rankIcon(int rank) {
     switch (rank) {
-      case 0: return const Color(0xFFFFD700); // Ouro (1º Lugar)
-      case 1: return const Color(0xFFC0C0C0); // Prata (2º Lugar)
-      case 2: return const Color(0xFFCD7F32); // Bronze (3º Lugar)
-      default: return Colors.grey;
-    }
-  }
-
-  Widget? _getRankIcon(int rank) {
-    switch (rank) {
-      case 0: return const Icon(Icons.emoji_events, color: Color(0xFFFFD700), size: 14);
-      case 1: return const Icon(Icons.looks_two, color: Color(0xFFC0C0C0), size: 14);
-      case 2: return const Icon(Icons.looks_3, color: Color(0xFFCD7F32), size: 14);
-      default: return null;
+      case 0:
+        return const Icon(Icons.emoji_events, color: Color(0xFFFFD700), size: 15);
+      case 1:
+        return const Icon(Icons.looks_two, color: Color(0xFFC0C0C0), size: 15);
+      case 2:
+        return const Icon(Icons.looks_3, color: Color(0xFFCD7F32), size: 15);
+      default:
+        return Text(
+          '${rank + 1}',
+          style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold),
+        );
     }
   }
 
@@ -107,215 +92,215 @@ class _RankingDetalhadoChartState extends State<RankingDetalhadoChart> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // --- CORES ---
-    final Color corFundo = isDark ? const Color(0xFF2D3440) : Colors.white;
-    final Color corTextoPrincipal = isDark ? Colors.white : const Color(0xFF023853);
-    final Color corTextoSecundario = isDark ? Colors.white70 : Colors.black54;
-    final Color corIconeFechar = isDark ? Colors.white54 : Colors.grey;
-    
-    // Cores fixas para o gráfico (Amostra/Cubagem)
-    const Color corAmostra = Color.fromARGB(255, 255, 250, 160); // Ouro Vibrante 
-    const Color corCubagem = Color(0xFF00838F); // Ciano/Teal Escuro (para contraste no branco) 
-    
-    final Color corAvatarPadraoBg = isDark ? Colors.white.withOpacity(0.15) : Colors.grey.shade200;
-    final Color corAvatarPadraoTxt = isDark ? Colors.white : Colors.black87;
+    final Color bgCard = isDark ? const Color(0xFF1C2533) : Colors.white;
+    final Color textPrimary = isDark ? Colors.white : const Color(0xFF023853);
+    final Color textSecondary = isDark ? Colors.white60 : Colors.black54;
 
-    final double chartHeight = math.max(_data.length * 90.0, 400.0);
+    const Color corAmostra = Color(0xFFFFC107);   // amber
+    const Color corCubagem = Color(0xFF00838F);    // teal
+
+    final maxTotal = _data.isEmpty
+        ? 1
+        : _data.map((s) => s.total).reduce(math.max);
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(10),
-      child: SingleChildScrollView(
-        child: Container(
-          width: double.infinity,
-          height: chartHeight,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: corFundo,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Cabeçalho
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Ranking Completo (${_data.length})",
-                    style: TextStyle(color: corTextoPrincipal, fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.close, color: corIconeFechar),
-                    onPressed: () => Navigator.of(context).pop(),
-                  )
-                ],
-              ),
-              const SizedBox(height: 10),
-              
-              // Legenda
-              Row(
-                children: [
-                  _buildLegendItem(corAmostra, "Amostras", corTextoSecundario),
-                  const SizedBox(width: 16),
-                  _buildLegendItem(corCubagem, "Cubagens", corTextoSecundario),
-                ],
-              ),
-              const SizedBox(height: 20),
-              
-              // Gráfico
-              Expanded(
-                child: RotatedBox(
-                  quarterTurns: 1, // Gira 90 graus. Índice 0 fica no TOPO.
-                  child: BarChart(
-                    BarChartData(
-                      alignment: BarChartAlignment.spaceAround,
-                      gridData: const FlGridData(show: false),
-                      borderData: FlBorderData(show: false),
-                      
-                      titlesData: FlTitlesData(
-                        show: true,
-                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-
-                        // EIXO DOS NOMES
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 120, 
-                            getTitlesWidget: (value, meta) {
-                              final index = value.toInt();
-                              if (index < 0 || index >= _data.length) return const SizedBox();
-                              
-                              final stats = _data[index];
-                              
-                              // CORREÇÃO: O rank é o próprio índice agora (0 é o primeiro)
-                              final int rank = index; 
-                              final bool isTop3 = rank <= 2;
-                              
-                              final Color corDestaque = isTop3 ? _getRankColor(rank) : corTextoSecundario;
-                              final Widget? iconeRank = _getRankIcon(rank);
-
-                              return RotatedBox(
-                                quarterTurns: -1,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    if (iconeRank != null) ...[
-                                      iconeRank,
-                                      const SizedBox(width: 4),
-                                    ],
-                                    
-                                    // Nome do Líder
-                                    Flexible(
-                                      child: Text(
-                                        _getFirstName(stats.name),
-                                        style: TextStyle(
-                                          color: isTop3 && isDark ? corDestaque : (isTop3 ? Colors.black87 : corTextoSecundario), 
-                                          fontSize: 12, 
-                                          fontWeight: isTop3 ? FontWeight.bold : FontWeight.normal
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    
-                                    // Avatar com Iniciais
-                                    Container(
-                                      width: 32,
-                                      height: 32,
-                                      decoration: BoxDecoration(
-                                        color: isTop3 ? corDestaque.withOpacity(0.2) : corAvatarPadraoBg,
-                                        shape: BoxShape.circle,
-                                        border: isTop3 ? Border.all(color: corDestaque, width: 1.5) : null
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        _getInitials(stats.name),
-                                        style: TextStyle(
-                                          color: isTop3 
-                                            ? (isDark ? corDestaque : Colors.black87)
-                                            : corAvatarPadraoTxt, 
-                                          fontSize: 11, 
-                                          fontWeight: FontWeight.bold
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-
-                      barTouchData: BarTouchData(
-                        enabled: true,
-                        touchTooltipData: BarTouchTooltipData(
-                          getTooltipColor: (_) => const Color(0xFF2D3440),
-                          tooltipPadding: const EdgeInsets.all(8),
-                          tooltipMargin: 8,
-                          rotateAngle: -90,
-                          getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                            final stats = _data[groupIndex];
-                            // CORREÇÃO: O rank no tooltip também é o índice
-                            final int rank = groupIndex;
-                            return BarTooltipItem(
-                              "#${rank + 1} - ${stats.name}",
-                              const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                              children: [
-                                TextSpan(text: '\n\nAmostras: ${stats.amostras}', style: const TextStyle(color: corAmostra, fontSize: 12)),
-                                TextSpan(text: '\nCubagens: ${stats.cubagens}', style: const TextStyle(color: corCubagem, fontSize: 12)),
-                                TextSpan(text: '\nTotal: ${stats.total}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                      
-                      barGroups: _data.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final stats = entry.value;
-                        return BarChartGroupData(
-                          x: index,
-                          barRods: [
-                            BarChartRodData(
-                              toY: stats.cubagens.toDouble(),
-                              color: corCubagem,
-                              width: 14,
-                              borderRadius: const BorderRadius.only(topLeft: Radius.circular(4), topRight: Radius.circular(4)),
-                            ),
-                            BarChartRodData(
-                              toY: stats.amostras.toDouble(),
-                              color: corAmostra,
-                              width: 14,
-                              borderRadius: const BorderRadius.only(topLeft: Radius.circular(4), topRight: Radius.circular(4)),
-                            ),
-                          ],
-                          barsSpace: 6, 
-                        );
-                      }).toList(),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.82,
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        decoration: BoxDecoration(
+          color: bgCard,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 24)],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Cabeçalho
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Ranking Completo (${_data.length})',
+                  style: TextStyle(color: textPrimary, fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close, color: textSecondary),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            // Legenda
+            Row(
+              children: [
+                _legendItem(corAmostra, 'Amostras', textSecondary),
+                const SizedBox(width: 16),
+                _legendItem(corCubagem, 'Cubagens', textSecondary),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // Lista
+            Flexible(
+              child: LayoutBuilder(
+                builder: (ctx, constraints) {
+                  final barAreaWidth = constraints.maxWidth - 116.0; // 108 nome + 8 gap
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _data.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (_, i) => _buildRow(
+                      i, _data[i], barAreaWidth, maxTotal,
+                      isDark, textSecondary, corAmostra, corCubagem,
                     ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(
+    int rank,
+    LeaderStats stats,
+    double barAreaWidth,
+    int maxTotal,
+    bool isDark,
+    Color textSecondary,
+    Color corAmostra,
+    Color corCubagem,
+  ) {
+    final isTop3 = rank < 3;
+    final rankCol = isTop3 ? _rankColor(rank) : textSecondary;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Coluna de nome (fixa 108px)
+        SizedBox(
+          width: 108,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              SizedBox(width: 18, child: Center(child: _rankIcon(rank))),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  _firstName(stats.name),
+                  style: TextStyle(
+                    color: isTop3 ? rankCol : textSecondary,
+                    fontSize: 12,
+                    fontWeight: isTop3 ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: isTop3
+                      ? rankCol.withValues(alpha: isDark ? 0.25 : 0.15)
+                      : (isDark ? Colors.white12 : Colors.grey.shade200),
+                  shape: BoxShape.circle,
+                  border: isTop3 ? Border.all(color: rankCol, width: 1.5) : null,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _initials(stats.name),
+                  style: TextStyle(
+                    color: isTop3 ? rankCol : (isDark ? Colors.white70 : Colors.black87),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
             ],
           ),
         ),
+        const SizedBox(width: 8),
+        // Coluna de barras
+        SizedBox(
+          width: barAreaWidth,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (stats.amostras > 0)
+                _bar(stats.amostras, maxTotal, barAreaWidth, corAmostra, isDark),
+              if (stats.amostras > 0 && stats.cubagens > 0) const SizedBox(height: 3),
+              if (stats.cubagens > 0)
+                _bar(stats.cubagens, maxTotal, barAreaWidth, corCubagem, isDark),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _bar(int value, int maxTotal, double maxWidth, Color color, bool isDark) {
+    const barH = 22.0;
+    const minInsideWidth = 38.0;
+    final barW = (value / maxTotal) * maxWidth;
+    final labelInside = barW >= minInsideWidth;
+
+    // Texto dentro da barra: sempre escuro (amarelo/teal são claros e escuros respectivamente)
+    final labelColor = labelInside
+        ? (color == const Color(0xFFFFC107) ? Colors.black87 : Colors.white)
+        : (isDark ? Colors.white70 : Colors.black54);
+
+    return SizedBox(
+      width: maxWidth,
+      height: barH,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Barra
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(
+              width: math.max(barW, 4),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(5),
+              ),
+            ),
+          ),
+          // Valor
+          Positioned(
+            left: labelInside ? math.max(0, barW - 34) : barW + 5,
+            top: 0,
+            bottom: 0,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '$value',
+                style: TextStyle(
+                  color: labelColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  height: 1,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildLegendItem(Color color, String label, Color textColor) {
+  Widget _legendItem(Color color, String label, Color textColor) {
     return Row(
       children: [
         Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),

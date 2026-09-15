@@ -46,10 +46,17 @@ class AuthService { // A classe começa aqui
     required String displayName,
   }) async {
     try {
-      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      final credential = await _firebaseAuth
+          .createUserWithEmailAndPassword(
+            email: email,
+            password: password,
+          )
+          .timeout(
+            const Duration(seconds: 20),
+            onTimeout: () => throw Exception(
+              'Tempo limite esgotado. Verifique sua conexão com a internet e tente novamente.',
+            ),
+          );
       final user = credential.user;
 
       if (user != null) {
@@ -93,11 +100,34 @@ class AuthService { // A classe começa aqui
           'licenseId': user.uid,
         });
 
-        // 4. Envie as duas operações juntas.
-        await batch.commit();
-        // <<< FIM DA CORREÇÃO >>>
+        // 4. Tenta criar os documentos no Firestore com até 3 tentativas.
+        bool firestoreOk = false;
+        Exception? firestoreErro;
+        for (int tentativa = 1; tentativa <= 3; tentativa++) {
+          try {
+            await batch.commit();
+            firestoreOk = true;
+            break;
+          } catch (e) {
+            firestoreErro = Exception('$e');
+            if (tentativa < 3) {
+              await Future.delayed(Duration(seconds: tentativa * 2));
+            }
+          }
+        }
+
+        if (!firestoreOk) {
+          // Firestore falhou nas 3 tentativas — deleta o usuário do Auth
+          // para não deixar conta criada sem licença.
+          try { await user.delete(); } catch (_) {}
+          throw firestoreErro!;
+        }
+
+        // Desloga após criar a conta — usuário faz login normalmente.
+        // Evita race condition entre authStateChanges e LicenseProvider.
+        await _firebaseAuth.signOut();
       }
-      
+
       return credential;
 
     } on FirebaseAuthException catch (e) {
@@ -106,7 +136,7 @@ class AuthService { // A classe começa aqui
       }
       throw Exception('Ocorreu um erro durante o registro: ${e.message}');
     } catch (e) {
-      throw Exception('Ocorreu um erro inesperado durante o registro.');
+      throw Exception('Erro ao criar conta. Verifique sua conexão e tente novamente.\n\nDetalhe: $e');
     }
   }
   

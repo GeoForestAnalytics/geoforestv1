@@ -1,12 +1,15 @@
 // lib/services/gerente_service.dart (VERSÃO LIMPA E FINAL)
 
 import 'dart:async';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 import 'package:geoforestv1/models/diario_de_campo_model.dart';
+import 'package:geoforestv1/models/pilha_madeira_model.dart';
+import 'package:geoforestv1/models/silvi_model.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 import 'package:geoforestv1/services/licensing_service.dart';
 
@@ -169,11 +172,42 @@ Stream<List<CubagemArvore>> getCubagensGlobalStream({required List<String> licen
           .doc(licenseId)
           .collection('projetos')
           .get();
-      
+
       return snapshot.docs.map((doc) => Projeto.fromMap(doc.data())).toList();
     } catch (e) {
       debugPrint("--- [GerenteService] ERRO ao buscar projetos: $e");
-      rethrow; 
+      rethrow;
     }
+  }
+
+  Stream<List<PilhaMadeira>> getPilhasGlobalStream({required List<String> licenseIds}) {
+    return _getAggregatedStream<PilhaMadeira>(
+      licenseIds: licenseIds,
+      collectionName: 'dados_pilhas',
+      fromMap: (m) {
+        final data = Map<String, dynamic>.from(m);
+        if (data['lastModified'] is Timestamp) {
+          data['lastModified'] = (data['lastModified'] as Timestamp).toDate().toIso8601String();
+        }
+        if (data['secoes'] is List) {
+          data['secoes'] = jsonEncode(data['secoes']);
+        }
+        return PilhaMadeira.fromMap(data);
+      },
+    );
+  }
+
+  Stream<List<OperacaoSilvi>> getOperacoesSilviGlobalStream({required List<String> licenseIds}) {
+    return _getAggregatedStream<OperacaoSilvi>(
+      licenseIds: licenseIds,
+      collectionName: 'dados_operacoes_silvi',
+      fromMap: (m) {
+        final data = Map<String, dynamic>.from(m);
+        if (data['lastModified'] is Timestamp) {
+          data['lastModified'] = (data['lastModified'] as Timestamp).toDate().toIso8601String();
+        }
+        return OperacaoSilvi.fromMap(data);
+      },
+    );
   }
 }

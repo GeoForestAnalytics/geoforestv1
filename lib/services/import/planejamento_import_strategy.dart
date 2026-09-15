@@ -15,9 +15,17 @@ class PlanejamentoImportStrategy extends BaseImportStrategy {
     final result = ImportResult();
     final now = DateTime.now().toIso8601String();
 
+    const aceitas = {'IPC', 'IFC', 'IFQ', 'IFT', 'BIO', 'BIOMETRIA', 'INVENTARIO', 'INV', 'IFCC'};
+
     for (final row in dataRows) {
       result.linhasProcessadas++;
-      
+
+      // Filtra apenas linhas de inventário/biometria
+      if (!BaseImportStrategy.passaFiltroAtividade(row, aceitas)) {
+        result.parcelasIgnoradas++;
+        continue;
+      }
+
       final talhao = await getOrCreateHierarchy(row, result);
       if (talhao == null) continue;
 

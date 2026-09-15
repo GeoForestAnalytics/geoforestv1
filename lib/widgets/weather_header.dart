@@ -177,6 +177,12 @@ class _WeatherHeaderState extends State<WeatherHeader> {
             _isLoading = false;
           });
         }
+      } else {
+        if (mounted) {
+          setState(() {
+            _cidade = "Indisponível"; _temperatura = "--"; _descricao = "Erro ${response.statusCode}"; _iconeClima = Icons.error_outline; _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       if (mounted) setState(() { _cidade = "Erro"; _temperatura = "--"; _descricao = "Erro"; _iconeClima = Icons.error_outline; _isLoading = false; });

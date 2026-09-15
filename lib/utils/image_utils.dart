@@ -45,4 +45,19 @@ class ImageUtils {
       return pathOriginal;
     }
   }
+
+  /// Atualiza a descrição EXIF de uma foto já salva (sem renomear), incluindo
+  /// dados conhecidos só depois da captura (ex.: espécie identificada).
+  /// Best-effort: falha silenciosamente se o arquivo não existir mais ou o EXIF não puder ser gravado.
+  static Future<void> atualizarDescricaoExif({
+    required String path,
+    required String descricao,
+  }) async {
+    try {
+      final exif = await Exif.fromPath(path);
+      await exif.writeAttributes({'UserComment': descricao});
+    } catch (e) {
+      debugPrint("Erro ao atualizar EXIF de $path: $e");
+    }
+  }
 }

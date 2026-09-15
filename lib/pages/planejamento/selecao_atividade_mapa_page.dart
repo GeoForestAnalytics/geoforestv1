@@ -11,6 +11,7 @@ import 'package:geoforestv1/models/projeto_model.dart';
 // ---------------------------------------------
 
 import 'package:geoforestv1/pages/menu/map_import_page.dart';
+import 'package:geoforestv1/providers/license_provider.dart';
 import 'package:geoforestv1/providers/map_provider.dart';
 
 // O import do database_helper foi removido.
@@ -57,16 +58,36 @@ class _SelecaoAtividadeMapaPageState extends State<SelecaoAtividadeMapaPage> {
     }
   }
 
+  static const _tiposColheita = {'PILHA', 'COLHEITA', 'PILHAS'};
+  static const _tiposSilvi = {'SILVI', 'SILVICULTURA'};
+
+  bool _passaFiltroModulo(Atividade a, String modulo) {
+    final tipo = a.tipo.toUpperCase().trim();
+    switch (modulo) {
+      case 'colheita':
+        return _tiposColheita.contains(tipo);
+      case 'silvicultura':
+        return _tiposSilvi.contains(tipo);
+      case 'inventario':
+        return !_tiposColheita.contains(tipo) && !_tiposSilvi.contains(tipo);
+      default: // 'todos' ou gerente geral
+        return true;
+    }
+  }
+
   // --- MÉTODO ATUALIZADO ---
   Future<void> _carregarAtividadesDoProjeto(int projetoId) async {
     if (_atividadesPorProjeto.containsKey(projetoId)) return;
 
+    // Captura o módulo antes do await para evitar uso de context após yield
+    final modulo = context.read<LicenseProvider>().licenseData?.modulo ?? 'todos';
+
     setState(() => _isLoadingAtividades = true);
-    // Usa o AtividadeRepository
-    final atividades = await _atividadeRepository.getAtividadesDoProjeto(projetoId);
+    final todas = await _atividadeRepository.getAtividadesDoProjeto(projetoId);
+    final filtradas = todas.where((a) => _passaFiltroModulo(a, modulo)).toList();
     if (mounted) {
       setState(() {
-        _atividadesPorProjeto[projetoId] = atividades;
+        _atividadesPorProjeto[projetoId] = filtradas;
         _isLoadingAtividades = false;
       });
     }

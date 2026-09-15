@@ -154,7 +154,7 @@ class CubagemRepository {
     final dataFormatadaParaQuery = DateFormat('yyyy-MM-dd').format(dataSelecionada);
 
     // A query verifica se a parte da DATA do campo dataColeta (que é ISO8601 com hora) bate com a data selecionada
-    String whereClause = '${DbCubagensArvores.nomeLider} = ? AND ${DbCubagensArvores.talhaoId} = ? AND DATE(${DbCubagensArvores.dataColeta}) = ?';
+    String whereClause = 'LOWER(${DbCubagensArvores.nomeLider}) = LOWER(?) AND ${DbCubagensArvores.talhaoId} = ? AND DATE(${DbCubagensArvores.dataColeta}) = ?';
     List<dynamic> whereArgs = [nomeLider, talhaoId, dataFormatadaParaQuery];
 
     final List<Map<String, dynamic>> maps = await db.query(
@@ -168,6 +168,37 @@ class CubagemRepository {
       return List.generate(maps.length, (i) => CubagemArvore.fromMap(maps[i]));
     }
     return [];
+  }
+
+  Future<List<String>> getLideresNoDia({
+    required DateTime data,
+    required int talhaoId,
+  }) async {
+    final db = await _dbHelper.database;
+    final dateStr = DateFormat('yyyy-MM-dd').format(data);
+    final maps = await db.rawQuery(
+      'SELECT DISTINCT ${DbCubagensArvores.nomeLider} FROM ${DbCubagensArvores.tableName} '
+      'WHERE ${DbCubagensArvores.talhaoId} = ? AND DATE(${DbCubagensArvores.dataColeta}) = ?',
+      [talhaoId, dateStr],
+    );
+    return maps
+        .map((r) => r[DbCubagensArvores.nomeLider] as String? ?? '')
+        .where((n) => n.isNotEmpty)
+        .toList();
+  }
+
+  Future<List<int>> getTalhaoIdsNaData(String nomeLider, DateTime data) async {
+    final db = await _dbHelper.database;
+    final dateStr = DateFormat('yyyy-MM-dd').format(data);
+    final maps = await db.rawQuery(
+      'SELECT DISTINCT ${DbCubagensArvores.talhaoId} FROM ${DbCubagensArvores.tableName} '
+      'WHERE LOWER(${DbCubagensArvores.nomeLider}) = LOWER(?) AND DATE(${DbCubagensArvores.dataColeta}) = ?',
+      [nomeLider, dateStr],
+    );
+    return maps
+        .map((r) => r[DbCubagensArvores.talhaoId] as int?)
+        .whereType<int>()
+        .toList();
   }
 
   Future<List<CubagemArvore>> getTodasCubagens() async {
@@ -205,6 +236,29 @@ class CubagemRepository {
     return List.generate(maps.length, (i) => CubagemArvore.fromMap(maps[i]));
   }
 
+  /// Cubagens importadas via CSV ficam com isSynced=1 mas secoes='[]' porque
+  /// o campo JSON não é preenchido na importação. Este método as recoloca na
+  /// fila de envio para que o upload inclua as seções de cubagens_secoes.
+  Future<void> reativarCubagensComSecoesLocais() async {
+    final db = await _dbHelper.database;
+    final result = await db.rawQuery('''
+      SELECT DISTINCT ca.id FROM ${DbCubagensArvores.tableName} ca
+      INNER JOIN ${DbCubagensSecoes.tableName} cs ON cs.${DbCubagensSecoes.cubagemArvoreId} = ca.${DbCubagensArvores.id}
+      WHERE ca.${DbCubagensArvores.isSynced} = 1
+        AND (ca.secoes IS NULL OR ca.secoes = '[]')
+    ''');
+    if (result.isEmpty) return;
+    for (final row in result) {
+      await db.update(
+        DbCubagensArvores.tableName,
+        {DbCubagensArvores.isSynced: 0},
+        where: '${DbCubagensArvores.id} = ?',
+        whereArgs: [row[DbCubagensArvores.id]],
+      );
+    }
+    debugPrint('[CubagemRepo] ${result.length} cubagens reativadas para reenvio com seções.');
+  }
+
   Future<CubagemArvore?> getOneUnsyncedCubagem() async {
     final db = await _dbHelper.database;
     final maps = await db.query(
@@ -213,10 +267,14 @@ class CubagemRepository {
       whereArgs: [0],
       limit: 1,
     );
-    if (maps.isNotEmpty) {
-      return CubagemArvore.fromMap(maps.first);
+    if (maps.isEmpty) return null;
+    final arvore = CubagemArvore.fromMap(maps.first);
+    if (arvore.secoes.isEmpty && arvore.id != null) {
+      final secaoMaps = await db.query('cubagens_secoes', where: 'cubagemArvoreId = ?', whereArgs: [arvore.id]);
+      final secoes = secaoMaps.map((m) => CubagemSecao.fromMap(m)).toList();
+      return arvore.copyWith(secoes: secoes);
     }
-    return null;
+    return arvore;
   }
 
   Future<List<CubagemArvore>> getUnexportedCubagens() async {

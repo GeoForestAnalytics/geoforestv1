@@ -15,12 +15,9 @@ import 'package:geoforestv1/data/repositories/projeto_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/repositories/atividade_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
-import 'package:geoforestv1/data/repositories/analise_repository.dart';
-import 'package:geoforestv1/services/ai_validation_service.dart'; 
 import 'package:geoforestv1/services/analysis_service.dart';
 import 'package:geoforestv1/services/pdf_service.dart'; 
 import 'package:geoforestv1/widgets/progress_dialog.dart';
-import 'package:geoforestv1/widgets/chat_ia_dialog.dart'; 
 
 class AnaliseSelecaoPage extends StatefulWidget {
   const AnaliseSelecaoPage({super.key});
@@ -34,7 +31,6 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
   final _atividadeRepository = AtividadeRepository();
   final _fazendaRepository = FazendaRepository();
   final _talhaoRepository = TalhaoRepository();
-  final _analiseRepository = AnaliseRepository();
   final _analysisService = AnalysisService();
   final _pdfService = PdfService();
 
@@ -364,135 +360,6 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
     );
   }
 
-  // --- AÇÕES IA UNIFICADAS ---
-
-  Future<void> _executarAuditoriaInteligente() async {
-    if (_talhoesSelecionados.isEmpty) return;
-    ProgressDialog.show(context, 'IA analisando o estrato...');
-
-    final aiService = AiValidationService();
-    List<Map<String, dynamic>> resumosParaIA = [];
-
-    try {
-      for (int id in _talhoesSelecionados) {
-        final t = _talhoesDisponiveis.firstWhere((element) => element.id == id);
-        final dados = await _analiseRepository.getDadosAgregadosDoTalhao(id);
-        final analise = _analysisService.getTalhaoInsights(t, dados['parcelas'], dados['arvores']);
-        
-        resumosParaIA.add({
-          "talhao": t.nome,
-          "especie": t.especie,
-          "idade": t.idadeAnos ?? 0.0, // Envia 0.0 em vez de texto se estiver nulo
-          "vol_ha": analise.volumePorHectare.toStringAsFixed(1),
-          "cap_medio": analise.mediaCap.toStringAsFixed(1),
-          "arv_ha": analise.arvoresPorHectare
-        });
-      }
-
-      final alertas = await aiService.validarEstrato(resumosParaIA);
-      if (!mounted) return;
-      ProgressDialog.hide(context);
-
-      _mostrarResultadoIA(alertas);
-
-    } catch (e) {
-      if (mounted) {
-        ProgressDialog.hide(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro na IA: $e")));
-      }
-    }
-  }
-
-  void _mostrarResultadoIA(List<String> alertas) {
-    showModalBottomSheet(
-      context: context,
-      // 1. Permite que o modal cresça além do tamanho padrão e gerencie melhor o scroll
-      isScrollControlled: true, 
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
-        // 2. Opcional: Faz o modal abrir em 60% da tela e poder ser arrastado até 90%
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (_, scrollController) => Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Barra de arraste visual (opcional)
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 15),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const Text("🌲 Auditoria do Estrato", 
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const Divider(),
-              
-              // 3. O segredo da rolagem: Usar Expanded + ListView ou SingleChildScrollView
-              Expanded(
-                child: ListView(
-                  controller: scrollController, // Vincula o scroll do modal ao conteúdo
-                  children: [
-                    if (alertas.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
-                        child: Center(child: Text("✅ Nenhuma inconsistência biológica detectada.")),
-                      )
-                    else
-                      ...alertas.map((a) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start, // Alinha ícone no topo do parágrafo
-                          children: [
-                            const Icon(Icons.info_outline, color: Colors.deepPurple, size: 20),
-                            const SizedBox(width: 10),
-                            Expanded(child: Text(a, style: const TextStyle(fontSize: 15, height: 1.4))),
-                          ],
-                        ),
-                      )),
-                    
-                    const SizedBox(height: 20),
-                    
-                    ListTile(
-                      tileColor: Colors.deepPurple.withOpacity(0.05),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      leading: const Icon(Icons.chat_bubble_outline, color: Colors.deepPurple),
-                      title: const Text("Conversar com os dados deste estrato"),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _abrirChatUnificado();
-                      },
-                    ),
-                    const SizedBox(height: 20), // Espaço extra no fim para não colar na borda
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _abrirChatUnificado() async {
-    final dados = await _analiseRepository.getDadosAgregadosDoTalhao(_talhoesSelecionados.first);
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => ChatIaDialog(parcela: dados['parcelas'].first, arvores: dados['arvores']),
-    );
-  }
-
   // --- CONSTRUÇÃO DA INTERFACE ---
 
   @override
@@ -601,15 +468,12 @@ class _AnaliseSelecaoPageState extends State<AnaliseSelecaoPage> {
             onSelected: (val) {
               if (val == 1) _gerarRelatorioComparativo();
               if (val == 2) _navegarParaAnaliseVolumetrica();
-              if (val == 3) _executarAuditoriaInteligente();
               if (val == 4) _gerarPlanosDeCubagemParaEstrato();
             },
             itemBuilder: (ctx) => [
               const PopupMenuItem(value: 1, child: Row(children: [Icon(Icons.table_chart), SizedBox(width: 8), Text("Tabela Comparativa")])),
               const PopupMenuItem(value: 2, child: Row(children: [Icon(Icons.calculate), SizedBox(width: 8), Text("Equação de Volume")])),
               const PopupMenuItem(value: 4, child: Row(children: [Icon(Icons.playlist_add_check_outlined, color: Colors.blue), SizedBox(width: 8), Text("Gerar Planos de Cubagem", style: TextStyle(color: Colors.blue))])),
-              const PopupMenuDivider(),
-              const PopupMenuItem(value: 3, child: Row(children: [Icon(Icons.auto_awesome, color: Colors.deepPurple), SizedBox(width: 8), Text("Auditoria IA", style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold))])),
             ],
           ),
         ],

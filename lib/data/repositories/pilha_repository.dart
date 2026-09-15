@@ -51,6 +51,13 @@ class PilhaRepository {
     return CentroidePilha.fromMap(maps.first);
   }
 
+  Future<List<CentroidePilha>> getTodosCentroides() async {
+    final db = await _dbHelper.database;
+    final maps = await db.query(DbCentroidesPilha.tableName,
+        orderBy: '${DbCentroidesPilha.nomeFazenda}, ${DbCentroidesPilha.nomeTalhao}');
+    return maps.map((m) => CentroidePilha.fromMap(m)).toList();
+  }
+
   Future<List<CentroidePilha>> getCentroidesParaAtividade(int atividadeId) async {
     final db = await _dbHelper.database;
     final maps = await db.rawQuery('''
@@ -219,5 +226,59 @@ class PilhaRepository {
     final db = await _dbHelper.database;
     await db.delete(DbPilhasMadeira.tableName,
         where: '${DbPilhasMadeira.id} = ?', whereArgs: [id]);
+  }
+
+  Future<List<PilhaMadeira>> getPilhasDoDiaPorTalhao({
+    required String nomeLider,
+    required DateTime dataSelecionada,
+    required int talhaoId,
+  }) async {
+    final db = await _dbHelper.database;
+    final m = dataSelecionada.month.toString().padLeft(2, '0');
+    final d = dataSelecionada.day.toString().padLeft(2, '0');
+    final dateStr = '${dataSelecionada.year}-$m-$d';
+    final maps = await db.rawQuery(
+      'SELECT * FROM ${DbPilhasMadeira.tableName} '
+      'WHERE LOWER(${DbPilhasMadeira.nomeLider}) = LOWER(?) '
+      'AND ${DbPilhasMadeira.talhaoId} = ? '
+      'AND ${DbPilhasMadeira.dataColeta} LIKE ?',
+      [nomeLider, talhaoId, '$dateStr%'],
+    );
+    return maps.map((m) => PilhaMadeira.fromMap(m)).toList();
+  }
+
+  Future<List<String>> getLideresNoDia({
+    required DateTime data,
+    required int talhaoId,
+  }) async {
+    final db = await _dbHelper.database;
+    final m = data.month.toString().padLeft(2, '0');
+    final d = data.day.toString().padLeft(2, '0');
+    final dateStr = '${data.year}-$m-$d';
+    final maps = await db.rawQuery(
+      'SELECT DISTINCT ${DbPilhasMadeira.nomeLider} FROM ${DbPilhasMadeira.tableName} '
+      'WHERE ${DbPilhasMadeira.talhaoId} = ? AND ${DbPilhasMadeira.dataColeta} LIKE ?',
+      [talhaoId, '$dateStr%'],
+    );
+    return maps
+        .map((r) => r[DbPilhasMadeira.nomeLider] as String? ?? '')
+        .where((n) => n.isNotEmpty)
+        .toList();
+  }
+
+  Future<List<int>> getTalhaoIdsNaData(String nomeLider, DateTime data) async {
+    final db = await _dbHelper.database;
+    final m = data.month.toString().padLeft(2, '0');
+    final d = data.day.toString().padLeft(2, '0');
+    final dateStr = '${data.year}-$m-$d';
+    final maps = await db.rawQuery(
+      'SELECT DISTINCT ${DbPilhasMadeira.talhaoId} FROM ${DbPilhasMadeira.tableName} '
+      'WHERE LOWER(${DbPilhasMadeira.nomeLider}) = LOWER(?) AND ${DbPilhasMadeira.dataColeta} LIKE ?',
+      [nomeLider, '$dateStr%'],
+    );
+    return maps
+        .map((r) => r[DbPilhasMadeira.talhaoId] as int?)
+        .whereType<int>()
+        .toList();
   }
 }

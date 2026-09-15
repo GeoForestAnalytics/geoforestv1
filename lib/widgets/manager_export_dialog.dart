@@ -3,16 +3,19 @@
 import 'package:flutter/material.dart';
 import 'package:geoforestv1/models/projeto_model.dart';
 
-// A classe ExportFilters continua a mesma
 class ExportFilters {
   final bool isBackup;
   final Set<int> selectedProjetoIds;
   final Set<String> selectedLideres;
+  final Set<String> selectedFazendas;
+  final Set<String> selectedTalhoes;
 
   ExportFilters({
     required this.isBackup,
     required this.selectedProjetoIds,
     required this.selectedLideres,
+    this.selectedFazendas = const {},
+    this.selectedTalhoes = const {},
   });
 }
 
@@ -20,12 +23,16 @@ class ManagerExportDialog extends StatefulWidget {
   final bool isBackup;
   final List<Projeto> projetosDisponiveis;
   final Set<String> lideresDisponiveis;
+  final List<String> fazendasDisponiveis;
+  final List<String> talhoesDisponiveis;
 
   const ManagerExportDialog({
     super.key,
     required this.isBackup,
     required this.projetosDisponiveis,
     required this.lideresDisponiveis,
+    this.fazendasDisponiveis = const [],
+    this.talhoesDisponiveis = const [],
   });
 
   @override
@@ -35,12 +42,16 @@ class ManagerExportDialog extends StatefulWidget {
 class _ManagerExportDialogState extends State<ManagerExportDialog> {
   late Set<int> _selectedProjetoIds;
   late Set<String> _selectedLideres;
+  late Set<String> _selectedFazendas;
+  late Set<String> _selectedTalhoes;
 
   @override
   void initState() {
     super.initState();
     _selectedProjetoIds = {};
     _selectedLideres = {};
+    _selectedFazendas = {};
+    _selectedTalhoes = {};
   }
 
   void _toggleAllProjetos(bool? selectAll) {
@@ -61,6 +72,10 @@ class _ManagerExportDialogState extends State<ManagerExportDialog> {
         _selectedLideres.clear();
       }
     });
+  }
+
+  void _toggleAll(Set<String> set, List<String> all, bool? selectAll) {
+    setState(() => selectAll == true ? set.addAll(all) : set.clear());
   }
 
   @override
@@ -108,7 +123,7 @@ class _ManagerExportDialogState extends State<ManagerExportDialog> {
               ),
               const SizedBox(height: 16),
 
-              // Seção de Equipes agrupada em um Card
+              // Seção de Equipes
               _buildFilterSection(
                 title: 'Equipes',
                 isEmpty: widget.lideresDisponiveis.isEmpty,
@@ -131,7 +146,36 @@ class _ManagerExportDialogState extends State<ManagerExportDialog> {
                   );
                 }).toList(),
               ),
-              // <<< FIM DO REFINAMENTO VISUAL >>>
+              if (widget.fazendasDisponiveis.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _buildFilterSection(
+                  title: 'Fazendas',
+                  isEmpty: false,
+                  emptyText: '',
+                  allSelected: _selectedFazendas.length == widget.fazendasDisponiveis.length,
+                  onToggleAll: (v) => _toggleAll(_selectedFazendas, widget.fazendasDisponiveis, v),
+                  children: widget.fazendasDisponiveis.map((f) => CheckboxListTile(
+                    title: Text(f, overflow: TextOverflow.ellipsis),
+                    value: _selectedFazendas.contains(f),
+                    onChanged: (v) => setState(() => v == true ? _selectedFazendas.add(f) : _selectedFazendas.remove(f)),
+                  )).toList(),
+                ),
+              ],
+              if (widget.talhoesDisponiveis.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _buildFilterSection(
+                  title: 'Talhões',
+                  isEmpty: false,
+                  emptyText: '',
+                  allSelected: _selectedTalhoes.length == widget.talhoesDisponiveis.length,
+                  onToggleAll: (v) => _toggleAll(_selectedTalhoes, widget.talhoesDisponiveis, v),
+                  children: widget.talhoesDisponiveis.map((t) => CheckboxListTile(
+                    title: Text(t, overflow: TextOverflow.ellipsis),
+                    value: _selectedTalhoes.contains(t),
+                    onChanged: (v) => setState(() => v == true ? _selectedTalhoes.add(t) : _selectedTalhoes.remove(t)),
+                  )).toList(),
+                ),
+              ],
             ],
           ),
         ),
@@ -144,6 +188,8 @@ class _ManagerExportDialogState extends State<ManagerExportDialog> {
               isBackup: widget.isBackup,
               selectedProjetoIds: _selectedProjetoIds,
               selectedLideres: _selectedLideres,
+              selectedFazendas: _selectedFazendas,
+              selectedTalhoes: _selectedTalhoes,
             );
             Navigator.of(context).pop(result);
           },

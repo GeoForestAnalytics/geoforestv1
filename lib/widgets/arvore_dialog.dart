@@ -4,6 +4,7 @@
 
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/especie_model.dart';
 import 'package:geoforestv1/data/repositories/especie_repository.dart';
@@ -11,6 +12,10 @@ import 'package:geoforestv1/utils/image_utils.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geoforestv1/models/codigo_florestal_model.dart';
 import 'package:geoforestv1/data/repositories/codigos_repository.dart';
+import 'package:geoforestv1/services/ai_validation_service.dart';
+import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'dart:io';
+import 'package:path/path.dart' as p;
 
 class DialogResult {
   final Arvore arvore;
@@ -43,6 +48,8 @@ class ArvoreDialog extends StatefulWidget {
   final String? atividadeTipo;
   // Instrumento de medição definido no cabeçalho da amostra: 'fita' ou 'suta'. Vale para todas as árvores da parcela.
   final String tipoMedidaCAP;
+  // Usado pra buscar espécies já confirmadas no projeto e dar contexto pra sugestão da IA.
+  final int? projetoId;
 
   const ArvoreDialog({
     super.key,
@@ -55,6 +62,7 @@ class ArvoreDialog extends StatefulWidget {
     required this.fazendaNome,
     required this.talhaoNome,
     required this.idParcela,
+    this.projetoId,
     this.atividadeTipo,
     this.tipoMedidaCAP = 'fita',
   });
@@ -78,6 +86,8 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   final _especieController = TextEditingController();
   
   final _especieRepository = EspecieRepository();
+  final _parcelaRepository = ParcelaRepository();
+  List<String> _especiesConfirmadasNoProjeto = [];
 
   List<CodigoFlorestal> _codigosDisponiveis = [];
   CodigoFlorestal? _regraAtual; 
@@ -89,10 +99,58 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
   List<String> _fotosArvore = [];
   bool _processandoFoto = false;
 
+  double? _latitude;
+  double? _longitude;
+  bool _buscandoLocalizacao = false;
+  String? _erroLocalizacao;
+
+  TextEditingController? _especieFieldCtrl;
+
+  static const _especieDesconhecida = 'Desconhecida';
+
+  final _aiService = AiValidationService();
+  String? _sugestaoIa;
+  bool _buscandoSugestaoIa = false;
+  bool _identificadoPorIa = false;
+  String? _ultimaSugestaoAceitaIa;
+
+  void _marcarComoDesconhecida() {
+    setState(() {
+      _especieController.text = _especieDesconhecida;
+      _especieFieldCtrl?.text = _especieDesconhecida;
+      _identificadoPorIa = false;
+      _sugestaoIa = null;
+    });
+  }
+
+  Future<void> _buscarSugestaoIa(String caminhoFoto) async {
+    setState(() { _buscandoSugestaoIa = true; _sugestaoIa = null; });
+    final sugestao = await _aiService.sugerirEspeciePorFoto(
+      caminhoFoto,
+      especiesJaConfirmadas: _especiesConfirmadasNoProjeto,
+    );
+    if (!mounted) return;
+    setState(() {
+      _buscandoSugestaoIa = false;
+      _sugestaoIa = sugestao;
+    });
+  }
+
+  void _aceitarSugestaoIa() {
+    if (_sugestaoIa == null) return;
+    setState(() {
+      _especieController.text = _sugestaoIa!;
+      _especieFieldCtrl?.text = _sugestaoIa!;
+      _identificadoPorIa = true;
+      _ultimaSugestaoAceitaIa = _sugestaoIa;
+      _sugestaoIa = null;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
-    
+
     _linhaController.text = widget.arvoreParaEditar?.linha.toString() ?? widget.linhaAtual.toString();
     _posicaoController.text = widget.arvoreParaEditar?.posicaoNaLinha.toString() ?? widget.posicaoNaLinhaAtual.toString();
     _fimDeLinha = widget.arvoreParaEditar?.fimDeLinha ?? false;
@@ -105,9 +163,63 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
       _alturaController.text = widget.arvoreParaEditar!.altura?.toString().replaceAll('.', ',') ?? '';
       _alturaDanoController.text = widget.arvoreParaEditar!.alturaDano?.toString().replaceAll('.', ',') ?? '';
       _especieController.text = widget.arvoreParaEditar!.especie ?? '';
+      _latitude = widget.arvoreParaEditar!.latitude;
+      _longitude = widget.arvoreParaEditar!.longitude;
+      _identificadoPorIa = widget.arvoreParaEditar!.identificadoPorIa;
+      _ultimaSugestaoAceitaIa = _identificadoPorIa ? _especieController.text : null;
+    }
+
+    // Coordenada por árvore só se aplica ao modo BIO; plantio não captura GPS aqui.
+    if (widget.isBio && _latitude == null && _longitude == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _obterLocalizacaoAtual();
+      });
+    }
+
+    if (widget.isBio && widget.projetoId != null) {
+      _carregarEspeciesConfirmadas();
     }
 
     _carregarRegras();
+  }
+
+  Future<void> _carregarEspeciesConfirmadas() async {
+    try {
+      final especies = await _parcelaRepository.getEspeciesConfirmadasDoProjeto(widget.projetoId!);
+      if (mounted) setState(() => _especiesConfirmadasNoProjeto = especies);
+    } catch (e) {
+      debugPrint("Erro ao carregar espécies confirmadas do projeto: $e");
+    }
+  }
+
+  Future<void> _obterLocalizacaoAtual() async {
+    setState(() { _buscandoLocalizacao = true; _erroLocalizacao = null; });
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) throw 'GPS desabilitado.';
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) throw 'Permissão negada.';
+      }
+      if (permission == LocationPermission.deniedForever) throw 'Permissão negada permanentemente.';
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 15),
+      );
+
+      if (mounted) {
+        setState(() {
+          _latitude = position.latitude;
+          _longitude = position.longitude;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _erroLocalizacao = e.toString());
+    } finally {
+      if (mounted) setState(() => _buscandoLocalizacao = false);
+    }
   }
 
   Future<void> _carregarRegras() async {
@@ -211,18 +323,23 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     try {
       final linha = _linhaController.text.isEmpty ? "0" : _linhaController.text;
       final pos = _posicaoController.text.isEmpty ? "0" : _posicaoController.text;
-      final String metadados = "Projeto: ${widget.projetoNome} | Talhao: ${widget.talhaoNome} | L:$linha P:$pos";
-      final nomeArquivo = "TREE_${widget.talhaoNome}_L${linha}_P${pos}_${DateTime.now().millisecondsSinceEpoch}";
+      final String metadados = "Projeto: ${widget.projetoNome} | Fazenda: ${widget.fazendaNome} | Talhao: ${widget.talhaoNome} | Amostra: ${widget.idParcela} | L:$linha P:$pos";
+      final nomeArquivo = "TREE_${widget.fazendaNome}_${widget.talhaoNome}_A${widget.idParcela}_L${linha}_P${pos}_${DateTime.now().millisecondsSinceEpoch}";
 
-      await ImageUtils.carimbarMetadadosESalvar(
+      final caminhoFinal = await ImageUtils.carimbarMetadadosESalvar(
         pathOriginal: photo.path,
         informacoesHierarquia: metadados,
         nomeArquivoFinal: nomeArquivo,
       );
 
       setState(() {
-        _fotosArvore.add(photo.path);
+        _fotosArvore.add(caminhoFinal);
       });
+
+      // Dispara em segundo plano — não trava a captura de foto nem exige aguardar a IA.
+      if (widget.isBio) {
+        _buscarSugestaoIa(caminhoFinal);
+      }
 
     } catch (e) {
       debugPrint("Erro: $e");
@@ -286,7 +403,62 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     super.dispose();
   }
 
-  void _submit({bool proxima = false, bool mesmoFuste = false, bool atualizarEProximo = false, bool atualizarEAnterior = false}) {
+  static const Map<String, String> _acentos = {
+    'á': 'a', 'à': 'a', 'ã': 'a', 'â': 'a', 'ä': 'a',
+    'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+    'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+    'ó': 'o', 'ò': 'o', 'õ': 'o', 'ô': 'o', 'ö': 'o',
+    'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
+    'ç': 'c', 'ñ': 'n',
+  };
+
+  String _slugEspecie(String especie) {
+    var texto = especie.toLowerCase();
+    _acentos.forEach((acentuado, simples) => texto = texto.replaceAll(acentuado, simples));
+    texto = texto.replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    texto = texto.replaceAll(RegExp(r'_+'), '_').replaceAll(RegExp(r'^_|_$'), '');
+    return texto;
+  }
+
+  // Núcleo do nome do arquivo termina no timestamp (13 dígitos, milissegundos desde
+  // a captura) — tudo depois disso é a espécie, livre pra ser substituída a cada save.
+  static final RegExp _padraoNucleoArquivo = RegExp(r'^(.*_\d{10,})(?:_.+)?$');
+
+  /// Renomeia as fotos da árvore para incluir a espécie no final do nome do arquivo.
+  /// Ancorado no timestamp (sempre presente desde a captura) para ser idempotente:
+  /// reaplicar não acumula espécies antigas em resalvamentos.
+  Future<List<String>> _renomearFotosComEspecie(String especie) async {
+    final slug = _slugEspecie(especie);
+    if (slug.isEmpty) return _fotosArvore;
+
+    final novosCaminhos = <String>[];
+    for (final caminho in _fotosArvore) {
+      try {
+        final dir = p.dirname(caminho);
+        final nomeAtual = p.basename(caminho);
+        final extensao = p.extension(caminho);
+        final nomeSemExt = p.basenameWithoutExtension(caminho);
+
+        final match = _padraoNucleoArquivo.firstMatch(nomeSemExt);
+        final nucleo = match != null ? match.group(1)! : nomeSemExt;
+
+        final novoNome = '${nucleo}_$slug$extensao';
+        if (novoNome == nomeAtual) {
+          novosCaminhos.add(caminho);
+          continue;
+        }
+        final novoCaminho = p.join(dir, novoNome);
+        final arquivoRenomeado = await File(caminho).rename(novoCaminho);
+        novosCaminhos.add(arquivoRenomeado.path);
+      } catch (e) {
+        debugPrint("Erro ao renomear foto com espécie: $e");
+        novosCaminhos.add(caminho);
+      }
+    }
+    return novosCaminhos;
+  }
+
+  Future<void> _submit({bool proxima = false, bool mesmoFuste = false, bool atualizarEProximo = false, bool atualizarEAnterior = false}) async {
     if (_formKey.currentState!.validate()) {
       
       if (widget.isBio && _especieController.text.trim().isEmpty) {
@@ -322,7 +494,16 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
       bool isDominante = (widget.arvoreParaEditar?.dominante ?? false);
       if (codigoParaSalvar.toUpperCase() == 'H') {
          isDominante = true;
-         codigoParaSalvar = "N"; 
+         codigoParaSalvar = "N";
+      }
+
+      final especieParaSalvar = _especieController.text.trim();
+
+      // Renomeia as fotos pra incluir a espécie no nome do arquivo (só operação de sistema
+      // de arquivos, não decodifica/redesenha a imagem — não trava nem derruba o app).
+      if (widget.isBio && especieParaSalvar.isNotEmpty && _fotosArvore.isNotEmpty) {
+        _fotosArvore = await _renomearFotosComEspecie(especieParaSalvar);
+        if (!mounted) return;
       }
 
       final arvore = Arvore(
@@ -330,7 +511,7 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         cap: cap,
         altura: altura,
         alturaDano: alturaDano,
-        especie: _especieController.text.trim(), 
+        especie: especieParaSalvar,
         linha: linha,
         posicaoNaLinha: posicao,
         codigo: codigoParaSalvar, 
@@ -342,7 +523,20 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         tipoMedidaCAP: widget.tipoMedidaCAP,
         medidaSuta1: medidaSuta1,
         medidaSuta2: medidaSuta2,
+        latitude: widget.isBio ? _latitude : null,
+        longitude: widget.isBio ? _longitude : null,
+        identificadoPorIa: widget.isBio && _identificadoPorIa,
       );
+
+      // Regrava a descrição EXIF das fotos com a espécie agora conhecida — best-effort, sem aguardar.
+      if (widget.isBio && _fotosArvore.isNotEmpty) {
+        final descricao = "Projeto: ${widget.projetoNome} | Fazenda: ${widget.fazendaNome} | "
+            "Talhao: ${widget.talhaoNome} | Amostra: ${widget.idParcela} | L:$linha P:$posicao | "
+            "Especie: ${arvore.especie} | Identificado por IA: ${arvore.identificadoPorIa ? 'Sim' : 'Não'}";
+        for (final caminho in _fotosArvore) {
+          ImageUtils.atualizarDescricaoExif(path: caminho, descricao: descricao);
+        }
+      }
 
       // Lógica de retorno baseada nos botões
       Navigator.of(context).pop(DialogResult(
@@ -480,24 +674,132 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
 
                 // CAMPO BIO (SE NECESSÁRIO)
                 if (widget.isBio) ...[
-                  Autocomplete<Especie>(
-                    optionsBuilder: (textValue) async {
-                      if (textValue.text.length < 2) return const Iterable<Especie>.empty();
-                      return await _especieRepository.buscarPorNome(textValue.text);
-                    },
-                    displayStringForOption: (Especie o) => o.nomeComum,
-                    onSelected: (selection) => _especieController.text = selection.nomeComum,
-                    fieldViewBuilder: (ctx, ctrl, node, onComplete) {
-                      if (_especieController.text.isNotEmpty && ctrl.text.isEmpty) ctrl.text = _especieController.text;
-                      ctrl.addListener(() => _especieController.text = ctrl.text);
-                      return TextFormField(
-                        controller: ctrl,
-                        focusNode: node,
-                        onEditingComplete: onComplete,
-                        decoration: _compactInput('Espécie', icon: Icons.spa),
-                        validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null,
-                      );
-                    },
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Autocomplete<Especie>(
+                          optionsBuilder: (textValue) async {
+                            if (textValue.text.length < 2) return const Iterable<Especie>.empty();
+                            return await _especieRepository.buscarPorNome(textValue.text);
+                          },
+                          displayStringForOption: (Especie o) => o.nomeComum,
+                          onSelected: (selection) {
+                            _especieController.text = selection.nomeComum;
+                            _identificadoPorIa = false;
+                          },
+                          fieldViewBuilder: (ctx, ctrl, node, onComplete) {
+                            _especieFieldCtrl = ctrl;
+                            if (_especieController.text.isNotEmpty && ctrl.text.isEmpty) ctrl.text = _especieController.text;
+                            ctrl.addListener(() {
+                              _especieController.text = ctrl.text;
+                              if (_identificadoPorIa && ctrl.text != _ultimaSugestaoAceitaIa) {
+                                _identificadoPorIa = false;
+                              }
+                            });
+                            return TextFormField(
+                              controller: ctrl,
+                              focusNode: node,
+                              onEditingComplete: onComplete,
+                              decoration: _compactInput('Espécie', icon: Icons.spa),
+                              validator: (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null,
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.help_outline, size: 20),
+                        tooltip: 'Não sei a espécie',
+                        onPressed: _marcarComoDesconhecida,
+                      ),
+                    ],
+                  ),
+                  if (_buscandoSugestaoIa || _sugestaoIa != null) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withAlpha(25),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.purple.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.auto_awesome, size: 16, color: Colors.purple.shade400),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _buscandoSugestaoIa
+                                  ? 'IA analisando a foto...'
+                                  : 'Sugestão IA: $_sugestaoIa',
+                              style: TextStyle(fontSize: 12, color: Colors.purple.shade700),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (_buscandoSugestaoIa)
+                            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                          else ...[
+                            TextButton(
+                              onPressed: _aceitarSugestaoIa,
+                              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(40, 28)),
+                              child: const Text('Usar', style: TextStyle(fontSize: 12)),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 16),
+                              tooltip: 'Descartar sugestão',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () => setState(() => _sugestaoIa = null),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (_identificadoPorIa) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.auto_awesome, size: 14, color: Colors.purple.shade400),
+                        const SizedBox(width: 4),
+                        Text('Identificada por IA — conferir depois', style: TextStyle(fontSize: 11, color: Colors.purple.shade400)),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        _erroLocalizacao != null ? Icons.location_off : Icons.location_on,
+                        size: 16,
+                        color: _erroLocalizacao != null ? Colors.red : Colors.green,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          _buscandoLocalizacao
+                              ? 'Obtendo localização da árvore...'
+                              : _erroLocalizacao != null
+                                  ? 'Sem GPS: $_erroLocalizacao'
+                                  : (_latitude != null && _longitude != null)
+                                      ? 'GPS: ${_latitude!.toStringAsFixed(6)}, ${_longitude!.toStringAsFixed(6)}'
+                                      : 'GPS não capturado.',
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (_buscandoLocalizacao)
+                        const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      else
+                        IconButton(
+                          icon: const Icon(Icons.refresh, size: 16),
+                          tooltip: 'Atualizar localização',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: _obterLocalizacaoAtual,
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                 ],

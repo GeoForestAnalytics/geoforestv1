@@ -200,6 +200,24 @@ class ParcelaRepository {
     return List.generate(maps.length, (i) => Arvore.fromMap(maps[i]));
   }
 
+  /// Espécies já confirmadas (não "Desconhecida"/vazias) em árvores desse projeto —
+  /// usado como contexto pra sugestão de espécie por IA, pra manter consistência de nome
+  /// em vez de sugerir do zero a cada foto.
+  Future<List<String>> getEspeciesConfirmadasDoProjeto(int projetoId) async {
+    final db = await _dbHelper.database;
+    final maps = await db.rawQuery('''
+      SELECT DISTINCT A.especie AS especie
+      FROM ${DbArvores.tableName} A
+      INNER JOIN ${DbParcelas.tableName} P ON A.${DbArvores.parcelaId} = P.${DbParcelas.id}
+      WHERE P.${DbParcelas.projetoId} = ?
+        AND A.especie IS NOT NULL
+        AND A.especie != ''
+        AND A.especie != 'Desconhecida'
+      ORDER BY especie
+    ''', [projetoId]);
+    return maps.map((m) => m['especie'] as String).toList();
+  }
+
   Future<List<Parcela>> getUnsyncedParcelas() async {
     final db = await _dbHelper.database;
     final maps = await db.query(DbParcelas.tableName, where: '${DbParcelas.isSynced} = ?', whereArgs: [0]);
@@ -348,7 +366,7 @@ class ParcelaRepository {
     
     final dataFormatadaParaQuery = DateFormat('yyyy-MM-dd').format(dataSelecionada);
 
-    String whereClause = '${DbParcelas.nomeLider} = ? AND DATE(${DbParcelas.dataColeta}) = ?';
+    String whereClause = 'LOWER(${DbParcelas.nomeLider}) = LOWER(?) AND DATE(${DbParcelas.dataColeta}) = ?';
     List<dynamic> whereArgs = [nomeLider, dataFormatadaParaQuery];
 
     if (talhaoId != 0) {
@@ -372,6 +390,37 @@ class ParcelaRepository {
       return List.generate(maps.length, (i) => Parcela.fromMap(maps[i]));
     }
     return [];
+  }
+
+  Future<List<String>> getLideresNoDia({
+    required DateTime data,
+    required int talhaoId,
+  }) async {
+    final db = await _dbHelper.database;
+    final dateStr = DateFormat('yyyy-MM-dd').format(data);
+    final maps = await db.rawQuery(
+      'SELECT DISTINCT ${DbParcelas.nomeLider} FROM ${DbParcelas.tableName} '
+      'WHERE ${DbParcelas.talhaoId} = ? AND DATE(${DbParcelas.dataColeta}) = ?',
+      [talhaoId, dateStr],
+    );
+    return maps
+        .map((r) => r[DbParcelas.nomeLider] as String? ?? '')
+        .where((n) => n.isNotEmpty)
+        .toList();
+  }
+
+  Future<List<int>> getTalhaoIdsNaData(String nomeLider, DateTime data) async {
+    final db = await _dbHelper.database;
+    final dateStr = DateFormat('yyyy-MM-dd').format(data);
+    final maps = await db.rawQuery(
+      'SELECT DISTINCT ${DbParcelas.talhaoId} FROM ${DbParcelas.tableName} '
+      'WHERE LOWER(${DbParcelas.nomeLider}) = LOWER(?) AND DATE(${DbParcelas.dataColeta}) = ?',
+      [nomeLider, dateStr],
+    );
+    return maps
+        .map((r) => r[DbParcelas.talhaoId] as int?)
+        .whereType<int>()
+        .toList();
   }
 
   /// Busca um talhão pelo seu ID para fins de auditoria/referência

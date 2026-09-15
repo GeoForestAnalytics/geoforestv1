@@ -36,6 +36,13 @@ class Arvore {
   final double? medidaSuta1;
   final double? medidaSuta2;
 
+  // Coordenada individual da árvore (usada no modo BIO; não se aplica ao modo plantio).
+  final double? latitude;
+  final double? longitude;
+
+  // Espécie sugerida e aceita via IA (Gemini) a partir de foto — marca a árvore para conferência.
+  final bool identificadoPorIa;
+
   Arvore({
     this.id, required this.cap, this.altura, this.alturaDano, required this.linha,
     required this.posicaoNaLinha, this.fimDeLinha = false, this.dominante = false,
@@ -50,6 +57,9 @@ class Arvore {
     this.tipoMedidaCAP = 'fita',
     this.medidaSuta1,
     this.medidaSuta2,
+    this.latitude,
+    this.longitude,
+    this.identificadoPorIa = false,
   });
 
   Arvore copyWith({
@@ -61,6 +71,7 @@ class Arvore {
     double? alturaAuditoria, double? volume, List<String>? photoPaths,
     DateTime? lastModified,
     String? tipoMedidaCAP, double? medidaSuta1, double? medidaSuta2,
+    double? latitude, double? longitude, bool? identificadoPorIa,
   }) {
     return Arvore(
       id: id ?? this.id, cap: cap ?? this.cap, altura: altura ?? this.altura,
@@ -78,6 +89,9 @@ class Arvore {
       tipoMedidaCAP: tipoMedidaCAP ?? this.tipoMedidaCAP,
       medidaSuta1: medidaSuta1 ?? this.medidaSuta1,
       medidaSuta2: medidaSuta2 ?? this.medidaSuta2,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      identificadoPorIa: identificadoPorIa ?? this.identificadoPorIa,
     );
   }
 
@@ -105,6 +119,9 @@ class Arvore {
       DbArvores.tipoMedidaCAP: tipoMedidaCAP,
       DbArvores.medidaSuta1: medidaSuta1,
       DbArvores.medidaSuta2: medidaSuta2,
+      DbArvores.latitude: latitude,
+      DbArvores.longitude: longitude,
+      DbArvores.identificadoPorIa: identificadoPorIa ? 1 : 0,
     };
   }
 
@@ -139,8 +156,8 @@ class Arvore {
       fimDeLinha: map[DbArvores.fimDeLinha] == 1,
       dominante: map[DbArvores.dominante] == 1,
       
-      // Recuperação das Strings (Fallback para "N" se nulo)
-      codigo: map[DbArvores.codigo]?.toString() ?? "N",
+      // Recuperação das Strings (Fallback para "0" = Normal)
+      codigo: map[DbArvores.codigo]?.toString() ?? "0",
       codigo2: map[DbArvores.codigo2]?.toString(),
       
       codigo3: map[DbArvores.codigo3],
@@ -153,6 +170,9 @@ class Arvore {
       tipoMedidaCAP: map[DbArvores.tipoMedidaCAP]?.toString() ?? 'fita',
       medidaSuta1: (map[DbArvores.medidaSuta1] as num?)?.toDouble(),
       medidaSuta2: (map[DbArvores.medidaSuta2] as num?)?.toDouble(),
+      latitude: (map[DbArvores.latitude] as num?)?.toDouble(),
+      longitude: (map[DbArvores.longitude] as num?)?.toDouble(),
+      identificadoPorIa: map[DbArvores.identificadoPorIa] == 1,
     );
   }
 }

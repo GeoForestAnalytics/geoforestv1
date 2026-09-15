@@ -11,17 +11,11 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:geoforestv1/pages/projetos/gerenciar_delegacoes_page.dart';
 import 'package:geoforestv1/providers/theme_provider.dart';
 import 'package:geoforestv1/pages/gerente/gerenciar_equipe_page.dart';
-import 'package:geoforestv1/pages/menu/relatorio_diario_page.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
 import 'package:geoforestv1/utils/constants.dart';
 
-// Imports para novas funcionalidades
-import 'package:geoforestv1/services/validation_service.dart';
-import 'package:geoforestv1/pages/menu/consistencia_resultado_page.dart';
-import 'package:geoforestv1/models/parcela_model.dart';
-import 'package:geoforestv1/models/cubagem_arvore_model.dart';
-import 'package:geoforestv1/widgets/progress_dialog.dart';
+import 'package:geoforestv1/pages/menu/lixeira_page.dart';
 
 // <<< Import da nova página de histórico >>>
 import 'package:geoforestv1/pages/menu/historico_diarios_page.dart';
@@ -39,7 +33,6 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
   final _parcelaRepository = ParcelaRepository();
   final _cubagemRepository = CubagemRepository();
   final _licensingService = LicensingService();
-  final _validationService = ValidationService();
 
   Map<String, int>? _deviceUsage;
   bool _isLoadingLicense = true;
@@ -140,46 +133,6 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
     await openAppSettings();
   }
 
-  Future<void> _verificarConsistencia() async {
-    if (!mounted) return;
-    ProgressDialog.show(context, 'Verificando consistência dos dados...');
-
-    try {
-      final List<Parcela> parcelasConcluidas = await _parcelaRepository.getTodasAsParcelas()
-          .then((list) => list.where((p) => p.status == StatusParcela.concluida || p.status == StatusParcela.exportada).toList());
-
-      final List<CubagemArvore> cubagensConcluidas = await _cubagemRepository.getTodasCubagens()
-          .then((list) => list.where((c) => c.alturaTotal > 0).toList());
-
-      final report = await _validationService.performFullConsistencyCheck(
-        parcelas: parcelasConcluidas,
-        cubagens: cubagensConcluidas,
-        parcelaRepo: _parcelaRepository,
-        cubagemRepo: _cubagemRepository,
-      );
-
-      if (!mounted) return;
-      ProgressDialog.hide(context);
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ConsistenciaResultadoPage(
-            report: report,
-            parcelasVerificadas: parcelasConcluidas,
-          ),
-        ),
-      );
-
-    } catch (e) {
-      if (!mounted) return;
-      ProgressDialog.hide(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao verificar consistência: $e'), backgroundColor: Colors.red),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final licenseProvider = context.watch<LicenseProvider>();
@@ -268,19 +221,6 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                   const SizedBox(height: 12),
                   
                   ListTile(
-                    leading: const Icon(Icons.today_outlined, color: Colors.blueGrey),
-                    title: const Text('Gerar Relatório Diário da Equipe'),
-                    subtitle: const Text('Visualize e exporte as coletas de um dia específico.'),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const RelatorioDiarioPage()),
-                      );
-                    },
-                  ),
-                  
-                  // <<< INSERÇÃO DA NOVA OPÇÃO DE MENU >>>
-                  ListTile(
                     leading: const Icon(Icons.history_outlined, color: Colors.blueGrey),
                     title: const Text('Histórico de Diários de Campo'),
                     subtitle: const Text('Visualize ou apague relatórios já salvos.'),
@@ -294,10 +234,10 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
                   // <<< FIM DA INSERÇÃO >>>
 
                   ListTile(
-                    leading: const Icon(Icons.rule_folder_outlined, color: Colors.indigo),
-                    title: const Text('Verificar Consistência dos Dados'),
-                    subtitle: const Text('Busca por erros de sequência, outliers e afilamento.'),
-                    onTap: _verificarConsistencia,
+                    leading: const Icon(Icons.delete_outline, color: Colors.red),
+                    title: const Text('Lixeira de Projetos'),
+                    subtitle: const Text('Visualize e gere comprovantes de projetos excluídos.'),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LixeiraPage())),
                   ),
 
                   if (isGerente)

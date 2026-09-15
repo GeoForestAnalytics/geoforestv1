@@ -337,7 +337,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     final String nomeF = "PARC_${_parcelaAtual.nomeTalhao}_P${_idParcelaController.text}_${DateTime.now().millisecondsSinceEpoch}";
 
     // 7. Salva usando o método ultra-leve (Sem abrir pixels na RAM)
-    await ImageUtils.carimbarMetadadosESalvar(
+    final caminhoFinal = await ImageUtils.carimbarMetadadosESalvar(
       pathOriginal: pickedFile.path,
       informacoesHierarquia: infoCompleta,
       nomeArquivoFinal: nomeF,
@@ -345,7 +345,7 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
 
     // 8. Atualiza a lista de fotos e salva no banco local
     setState(() {
-        _parcelaAtual.photoPaths.add(pickedFile.path);
+        _parcelaAtual.photoPaths.add(caminhoFinal);
     });
     
     await _salvarAlteracoes(showSnackbar: false);

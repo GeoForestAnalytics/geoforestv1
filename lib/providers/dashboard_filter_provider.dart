@@ -20,6 +20,9 @@ class DashboardFilterProvider with ChangeNotifier {
   List<String> _fazendasDisponiveis = [];
   Set<String> _selectedFazendaNomes = {};
 
+  List<String> _talhoesDisponiveis = [];
+  Set<String> _selectedTalhaoNomes = {};
+
   PeriodoFiltro _periodo = PeriodoFiltro.todos;
   DateTimeRange? _periodoPersonalizado;
   
@@ -38,6 +41,9 @@ class DashboardFilterProvider with ChangeNotifier {
   List<String> get fazendasDisponiveis => _fazendasDisponiveis;
   Set<String> get selectedFazendaNomes => _selectedFazendaNomes;
 
+  List<String> get talhoesDisponiveis => _talhoesDisponiveis;
+  Set<String> get selectedTalhaoNomes => _selectedTalhaoNomes;
+
   PeriodoFiltro get periodo => _periodo;
   DateTimeRange? get periodoPersonalizado => _periodoPersonalizado;
   
@@ -53,9 +59,9 @@ class DashboardFilterProvider with ChangeNotifier {
     } else {
       _selectedProjetoIds.add(projetoId);
     }
-    // Ao mudar o projeto, limpa filtros dependentes para evitar inconsistências
     _selectedAtividadeTipos.clear();
     _selectedFazendaNomes.clear();
+    _selectedTalhaoNomes.clear();
     _lideresSelecionados.clear();
     notifyListeners();
   }
@@ -67,6 +73,26 @@ class DashboardFilterProvider with ChangeNotifier {
     } else {
       _selectedFazendaNomes.add(nomeFazenda);
     }
+    _selectedTalhaoNomes.clear();
+    notifyListeners();
+  }
+
+  void toggleTalhaoSelection(String nomeTalhao) {
+    if (_selectedTalhaoNomes.contains(nomeTalhao)) {
+      _selectedTalhaoNomes.remove(nomeTalhao);
+    } else {
+      _selectedTalhaoNomes.add(nomeTalhao);
+    }
+    notifyListeners();
+  }
+
+  void setSelectedTalhoes(Set<String> newSelection) {
+    _selectedTalhaoNomes = newSelection;
+    notifyListeners();
+  }
+
+  void clearTalhaoSelection() {
+    _selectedTalhaoNomes.clear();
     notifyListeners();
   }
 
@@ -74,6 +100,7 @@ class DashboardFilterProvider with ChangeNotifier {
     _selectedProjetoIds.clear();
     _selectedAtividadeTipos.clear();
     _selectedFazendaNomes.clear();
+    _selectedTalhaoNomes.clear();
     _lideresSelecionados.clear();
     _periodo = PeriodoFiltro.todos;
     _periodoPersonalizado = null;
@@ -85,9 +112,12 @@ class DashboardFilterProvider with ChangeNotifier {
   void updateFiltersFrom(GerenteProvider gerenteProvider) {
     _updateProjetosDisponiveis(gerenteProvider.projetos);
 
-    List<Atividade> atividadesParaFiltro = _selectedProjetoIds.isEmpty
-        ? gerenteProvider.atividades
-        : gerenteProvider.atividades.where((a) => _selectedProjetoIds.contains(a.projetoId)).toList();
+    const tiposNaoInventario = {'PILHA', 'COLHEITA', 'PILHAS', 'SILVI', 'SILVICULTURA'};
+    List<Atividade> atividadesParaFiltro = (_selectedProjetoIds.isEmpty
+            ? gerenteProvider.atividades
+            : gerenteProvider.atividades.where((a) => _selectedProjetoIds.contains(a.projetoId)).toList())
+        .where((a) => !tiposNaoInventario.contains(a.tipo.toUpperCase()))
+        .toList();
     _updateAtividadesDisponiveis(atividadesParaFiltro);
 
     List<Parcela> parcelasParaFiltroDeFazenda = gerenteProvider.parcelasSincronizadas;
@@ -110,6 +140,14 @@ class DashboardFilterProvider with ChangeNotifier {
     }
     
     _updateFazendasDisponiveis(parcelasParaFiltroDeFazenda);
+
+    List<Parcela> parcelasParaFiltroTalhao = parcelasParaFiltroDeFazenda;
+    if (_selectedFazendaNomes.isNotEmpty) {
+      parcelasParaFiltroTalhao = parcelasParaFiltroDeFazenda
+          .where((p) => p.nomeFazenda != null && _selectedFazendaNomes.contains(p.nomeFazenda!))
+          .toList();
+    }
+    _updateTalhoesDisponiveis(parcelasParaFiltroTalhao);
   }
   
   void _updateProjetosDisponiveis(List<Projeto> novosProjetos) {
@@ -120,6 +158,16 @@ class DashboardFilterProvider with ChangeNotifier {
   void _updateAtividadesDisponiveis(List<Atividade> atividades) {
     _atividadesDisponiveis = atividades;
     _selectedAtividadeTipos.removeWhere((tipo) => !_atividadesDisponiveis.any((a) => a.tipo == tipo));
+  }
+
+  void _updateTalhoesDisponiveis(List<Parcela> parcelas) {
+    final nomes = parcelas
+        .where((p) => p.nomeTalhao != null && p.nomeTalhao!.isNotEmpty)
+        .map((p) => p.nomeTalhao!)
+        .toSet()
+        .toList()..sort();
+    _talhoesDisponiveis = nomes;
+    _selectedTalhaoNomes.removeWhere((n) => !_talhoesDisponiveis.contains(n));
   }
 
   void _updateFazendasDisponiveis(List<Parcela> parcelas) {
@@ -142,6 +190,7 @@ class DashboardFilterProvider with ChangeNotifier {
     _selectedProjetoIds = newSelection;
     _selectedAtividadeTipos.clear();
     _selectedFazendaNomes.clear();
+    _selectedTalhaoNomes.clear();
     _lideresSelecionados.clear();
     notifyListeners();
   }
@@ -165,12 +214,14 @@ class DashboardFilterProvider with ChangeNotifier {
     _selectedProjetoIds.clear();
     _selectedAtividadeTipos.clear();
     _selectedFazendaNomes.clear();
+    _selectedTalhaoNomes.clear();
     _lideresSelecionados.clear();
     notifyListeners();
   }
-  
+
   void clearFazendaSelection() {
     _selectedFazendaNomes.clear();
+    _selectedTalhaoNomes.clear();
     notifyListeners();
   }
 
@@ -182,9 +233,17 @@ class DashboardFilterProvider with ChangeNotifier {
 
   void setSingleLider(String? lider) {
     _lideresSelecionados.clear();
-    if (lider != null) {
-      _lideresSelecionados.add(lider);
-    }
+    if (lider != null) _lideresSelecionados.add(lider);
+    notifyListeners();
+  }
+
+  void setSelectedLideres(Set<String> newSelection) {
+    _lideresSelecionados = newSelection;
+    notifyListeners();
+  }
+
+  void clearLideresSelection() {
+    _lideresSelecionados.clear();
     notifyListeners();
   }
 }
@@ -211,6 +270,8 @@ extension DashboardFilterProviderClone on DashboardFilterProvider {
     newInstance._selectedAtividadeTipos = Set.from(this._selectedAtividadeTipos);
     newInstance._fazendasDisponiveis = List.from(this._fazendasDisponiveis);
     newInstance._selectedFazendaNomes = Set.from(this._selectedFazendaNomes);
+    newInstance._talhoesDisponiveis = List.from(this._talhoesDisponiveis);
+    newInstance._selectedTalhaoNomes = Set.from(this._selectedTalhaoNomes);
     newInstance._periodo = this._periodo;
     newInstance._periodoPersonalizado = this._periodoPersonalizado;
     newInstance._lideresDisponiveis = List.from(this._lideresDisponiveis);

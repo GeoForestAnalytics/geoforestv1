@@ -31,7 +31,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 73,
+      version: 79,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -175,6 +175,9 @@ class DatabaseHelper {
         ${DbArvores.tipoMedidaCAP} TEXT,
         ${DbArvores.medidaSuta1} REAL,
         ${DbArvores.medidaSuta2} REAL,
+        ${DbArvores.latitude} REAL,
+        ${DbArvores.longitude} REAL,
+        ${DbArvores.identificadoPorIa} INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (${DbArvores.parcelaId}) REFERENCES ${DbParcelas.tableName} (${DbParcelas.id}) ON DELETE CASCADE
       )
     ''');
@@ -294,6 +297,7 @@ class DatabaseHelper {
         ${DbDiarioDeCampo.veiculoModelo} TEXT,
         ${DbDiarioDeCampo.equipeNoCarro} TEXT,
         ${DbDiarioDeCampo.lastModified} TEXT NOT NULL,
+        ${DbDiarioDeCampo.modulo} TEXT,
         UNIQUE(${DbDiarioDeCampo.dataRelatorio}, ${DbDiarioDeCampo.nomeLider})
       )
     ''');
@@ -315,6 +319,69 @@ class DatabaseHelper {
         observacoes TEXT,
         fotos_avarias TEXT,
         lastModified TEXT NOT NULL
+      )
+    ''');
+
+    // ── Silvicultura ──────────────────────────────────────────────────────────
+    await db.execute('''
+      CREATE TABLE ${DbCentroidesSilvi.tableName} (
+        ${DbCentroidesSilvi.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+        ${DbCentroidesSilvi.talhaoId} INTEGER,
+        ${DbCentroidesSilvi.fazendaId} TEXT,
+        ${DbCentroidesSilvi.nomeFazenda} TEXT,
+        ${DbCentroidesSilvi.nomeTalhao} TEXT,
+        ${DbCentroidesSilvi.latitude} REAL NOT NULL,
+        ${DbCentroidesSilvi.longitude} REAL NOT NULL,
+        ${DbCentroidesSilvi.areaTotalHa} REAL,
+        ${DbCentroidesSilvi.operacoesPlanejadas} TEXT,
+        ${DbCentroidesSilvi.lastModified} TEXT NOT NULL,
+        FOREIGN KEY (${DbCentroidesSilvi.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE ${DbOperacoesSilvi.tableName} (
+        ${DbOperacoesSilvi.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+        ${DbOperacoesSilvi.centroideId} INTEGER,
+        ${DbOperacoesSilvi.talhaoId} INTEGER,
+        ${DbOperacoesSilvi.fazendaId} TEXT,
+        ${DbOperacoesSilvi.nomeFazenda} TEXT,
+        ${DbOperacoesSilvi.nomeTalhao} TEXT,
+        ${DbOperacoesSilvi.tipo} TEXT NOT NULL,
+        ${DbOperacoesSilvi.areaAplicadaHa} REAL,
+        ${DbOperacoesSilvi.areaGeoJson} TEXT,
+        ${DbOperacoesSilvi.dataExecucao} TEXT,
+        ${DbOperacoesSilvi.status} TEXT NOT NULL DEFAULT 'concluida',
+        ${DbOperacoesSilvi.observacoes} TEXT,
+        ${DbOperacoesSilvi.nomeLider} TEXT,
+        ${DbOperacoesSilvi.fotos} TEXT,
+        ${DbOperacoesSilvi.latitude} REAL,
+        ${DbOperacoesSilvi.longitude} REAL,
+        ${DbOperacoesSilvi.exportada} INTEGER NOT NULL DEFAULT 0,
+        ${DbOperacoesSilvi.isSynced} INTEGER NOT NULL DEFAULT 0,
+        ${DbOperacoesSilvi.lastModified} TEXT NOT NULL,
+        FOREIGN KEY (${DbOperacoesSilvi.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE ${DbEstoqueSaida.tableName} (
+        ${DbEstoqueSaida.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+        ${DbEstoqueSaida.talhaoId} INTEGER,
+        ${DbEstoqueSaida.centroideId} INTEGER,
+        ${DbEstoqueSaida.fazendaId} TEXT,
+        ${DbEstoqueSaida.nomeFazenda} TEXT NOT NULL DEFAULT '',
+        ${DbEstoqueSaida.nomeTalhao} TEXT NOT NULL DEFAULT '',
+        ${DbEstoqueSaida.sortimento} TEXT NOT NULL,
+        ${DbEstoqueSaida.numeroCaminhoes} INTEGER NOT NULL DEFAULT 0,
+        ${DbEstoqueSaida.volumeM3} REAL NOT NULL,
+        ${DbEstoqueSaida.nomeLider} TEXT,
+        ${DbEstoqueSaida.dataRegistro} TEXT NOT NULL,
+        ${DbEstoqueSaida.observacoes} TEXT,
+        ${DbEstoqueSaida.exportada} INTEGER NOT NULL DEFAULT 0,
+        ${DbEstoqueSaida.isSynced} INTEGER NOT NULL DEFAULT 0,
+        ${DbEstoqueSaida.lastModified} TEXT NOT NULL,
+        FOREIGN KEY (${DbEstoqueSaida.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
       )
     ''');
 
@@ -858,6 +925,114 @@ class DatabaseHelper {
               await db.execute('ALTER TABLE ${DbTalhoes.tableName} ADD COLUMN ${DbTalhoes.volumeTotalTalhao} REAL');
               debugPrint("V73: coluna volumeTotalTalhao adicionada.");
             } catch (e) { debugPrint("V73: erro: $e"); }
+          }
+          break;
+        case 74:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V74 (Silvicultura: centroides e operações) <<<");
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS ${DbCentroidesSilvi.tableName} (
+              ${DbCentroidesSilvi.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+              ${DbCentroidesSilvi.talhaoId} INTEGER,
+              ${DbCentroidesSilvi.fazendaId} TEXT,
+              ${DbCentroidesSilvi.nomeFazenda} TEXT,
+              ${DbCentroidesSilvi.nomeTalhao} TEXT,
+              ${DbCentroidesSilvi.latitude} REAL NOT NULL,
+              ${DbCentroidesSilvi.longitude} REAL NOT NULL,
+              ${DbCentroidesSilvi.areaTotalHa} REAL,
+              ${DbCentroidesSilvi.operacoesPlanejadas} TEXT,
+              ${DbCentroidesSilvi.lastModified} TEXT NOT NULL,
+              FOREIGN KEY (${DbCentroidesSilvi.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS ${DbOperacoesSilvi.tableName} (
+              ${DbOperacoesSilvi.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+              ${DbOperacoesSilvi.centroideId} INTEGER,
+              ${DbOperacoesSilvi.talhaoId} INTEGER,
+              ${DbOperacoesSilvi.fazendaId} TEXT,
+              ${DbOperacoesSilvi.nomeFazenda} TEXT,
+              ${DbOperacoesSilvi.nomeTalhao} TEXT,
+              ${DbOperacoesSilvi.tipo} TEXT NOT NULL,
+              ${DbOperacoesSilvi.areaAplicadaHa} REAL,
+              ${DbOperacoesSilvi.areaGeoJson} TEXT,
+              ${DbOperacoesSilvi.dataExecucao} TEXT,
+              ${DbOperacoesSilvi.status} TEXT NOT NULL DEFAULT 'concluida',
+              ${DbOperacoesSilvi.observacoes} TEXT,
+              ${DbOperacoesSilvi.nomeLider} TEXT,
+              ${DbOperacoesSilvi.fotos} TEXT,
+              ${DbOperacoesSilvi.latitude} REAL,
+              ${DbOperacoesSilvi.longitude} REAL,
+              ${DbOperacoesSilvi.exportada} INTEGER NOT NULL DEFAULT 0,
+              ${DbOperacoesSilvi.isSynced} INTEGER NOT NULL DEFAULT 0,
+              ${DbOperacoesSilvi.lastModified} TEXT NOT NULL,
+              FOREIGN KEY (${DbOperacoesSilvi.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
+            )
+          ''');
+          debugPrint("V74: tabelas silvicultura criadas.");
+          break;
+        case 75:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V75 (Estoques de saída) <<<");
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS ${DbEstoqueSaida.tableName} (
+              ${DbEstoqueSaida.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+              ${DbEstoqueSaida.talhaoId} INTEGER,
+              ${DbEstoqueSaida.centroideId} INTEGER,
+              ${DbEstoqueSaida.fazendaId} TEXT,
+              ${DbEstoqueSaida.nomeFazenda} TEXT NOT NULL DEFAULT '',
+              ${DbEstoqueSaida.nomeTalhao} TEXT NOT NULL DEFAULT '',
+              ${DbEstoqueSaida.sortimento} TEXT NOT NULL,
+              ${DbEstoqueSaida.numeroCaminhoes} INTEGER NOT NULL DEFAULT 0,
+              ${DbEstoqueSaida.volumeM3} REAL NOT NULL,
+              ${DbEstoqueSaida.nomeLider} TEXT,
+              ${DbEstoqueSaida.dataRegistro} TEXT NOT NULL,
+              ${DbEstoqueSaida.observacoes} TEXT,
+              ${DbEstoqueSaida.exportada} INTEGER NOT NULL DEFAULT 0,
+              ${DbEstoqueSaida.isSynced} INTEGER NOT NULL DEFAULT 0,
+              ${DbEstoqueSaida.lastModified} TEXT NOT NULL,
+              FOREIGN KEY (${DbEstoqueSaida.talhaoId}) REFERENCES ${DbTalhoes.tableName} (${DbTalhoes.id}) ON DELETE CASCADE
+            )
+          ''');
+          debugPrint("V75: tabela estoques_saida criada.");
+          break;
+        case 76:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V76 (modulo em diario_de_campo) <<<");
+          await db.execute('ALTER TABLE ${DbDiarioDeCampo.tableName} ADD COLUMN ${DbDiarioDeCampo.modulo} TEXT');
+          debugPrint("V76: coluna modulo adicionada a diario_de_campo.");
+          break;
+        case 77:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V77 (coordenada por árvore - modo BIO) <<<");
+          for (final coluna in [DbArvores.latitude, DbArvores.longitude]) {
+            if (!await _columnExists(db, DbArvores.tableName, coluna)) {
+              try {
+                await db.execute('ALTER TABLE ${DbArvores.tableName} ADD COLUMN $coluna REAL');
+                debugPrint("V77: coluna $coluna adicionada em ARVORES.");
+              } catch (e) { debugPrint("V77: erro col $coluna: $e"); }
+            }
+          }
+          break;
+        case 78:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V78 (placeholder 'Desconhecida' em especies) <<<");
+          try {
+            await db.update(
+              'especies',
+              {
+                'nome_cientifico': 'A identificar',
+                'nome_comum': 'Desconhecida',
+                'familia': '-',
+              },
+              where: 'nome_cientifico = ? AND nome_comum = ?',
+              whereArgs: ['identificar', 'id'],
+            );
+            debugPrint("V78: placeholder de espécie desconhecida corrigido.");
+          } catch (e) { debugPrint("V78: erro: $e"); }
+          break;
+        case 79:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V79 (identificadoPorIa em arvores) <<<");
+          if (!await _columnExists(db, DbArvores.tableName, DbArvores.identificadoPorIa)) {
+            try {
+              await db.execute('ALTER TABLE ${DbArvores.tableName} ADD COLUMN ${DbArvores.identificadoPorIa} INTEGER NOT NULL DEFAULT 0');
+              debugPrint("V79: coluna identificadoPorIa adicionada.");
+            } catch (e) { debugPrint("V79: erro: $e"); }
           }
           break;
       }

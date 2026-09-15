@@ -45,6 +45,15 @@ abstract class BaseImportStrategy implements CsvImportStrategy {
     return null;
   }
 
+  /// Filtra a linha pelo código da coluna "Atividade".
+  /// Se a coluna não existir na linha (null) → aceita (arquivo puro de um tipo).
+  /// Se existir mas o valor não estiver em [aceitas] → rejeita.
+  static bool passaFiltroAtividade(Map<String, dynamic> row, Set<String> aceitas) {
+    final raw = getValue(row, ['atividade'])?.toUpperCase();
+    if (raw == null) return true;
+    return aceitas.contains(raw);
+  }
+
   Future<Talhao?> getOrCreateHierarchy(Map<String, dynamic> row, ImportResult result) async {
     final now = DateTime.now().toIso8601String();
     
@@ -55,7 +64,7 @@ abstract class BaseImportStrategy implements CsvImportStrategy {
     if (atividade == null) {
         atividade = (await txn.query('atividades', where: 'projetoId = ? AND tipo = ?', whereArgs: [projeto.id!, tipoAtividadeStr])).map(Atividade.fromMap).firstOrNull;
         if (atividade == null) {
-            atividade = Atividade(projetoId: projeto.id!, tipo: tipoAtividadeStr, descricao: 'Importado via CSV', dataCriacao: DateTime.now());
+            atividade = Atividade(projetoId: projeto.id!, tipo: tipoAtividadeStr, descricao: '', dataCriacao: DateTime.now());
             final aId = await txn.insert('atividades', atividade.toMap()..['lastModified'] = now);
             atividade = atividade.copyWith(id: aId);
             result.atividadesCriadas++;

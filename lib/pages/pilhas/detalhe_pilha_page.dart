@@ -98,11 +98,13 @@ class _DetalhePilhaPageState extends State<DetalhePilhaPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Volume Estéreo',
-                          style: TextStyle(color: Colors.brown.shade600, fontSize: 13)),
-                      Text(
-                        '${vol.toStringAsFixed(2)} st',
-                        style: TextStyle(fontSize: 14, color: Colors.brown.shade600),
-                      ),
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                              fontSize: 13)),
+                      Text('${vol.toStringAsFixed(2)} st',
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -118,7 +120,7 @@ class _DetalhePilhaPageState extends State<DetalhePilhaPage> {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
-                          color: Colors.brown.shade700,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
                     ],
@@ -151,7 +153,9 @@ class _DetalhePilhaPageState extends State<DetalhePilhaPage> {
                 },
                 children: [
                   TableRow(
-                    decoration: BoxDecoration(color: Colors.brown.shade50),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    ),
                     children: const [
                       _TableHeader('Nº'),
                       _TableHeader('Distância'),
@@ -258,7 +262,10 @@ class _DetalhePilhaPageState extends State<DetalhePilhaPage> {
           children: [
             SizedBox(
               width: 130,
-              child: Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+              child: Text(label,
+                  style: TextStyle(
+                      color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.6),
+                      fontSize: 13)),
             ),
             Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
           ],

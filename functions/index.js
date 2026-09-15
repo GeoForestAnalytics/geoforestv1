@@ -30,14 +30,14 @@ exports.updateUserLicenseClaim = functions
         if (userIsMemberAfter) {
           const cargo = usersAfter[uid].cargo;
           if (!cargo) continue;
-          
-          // Define os claims: licenseId (empresa) e cargo
-          const promise = auth.setCustomUserClaims(uid, { licenseId: licenseId, cargo: cargo });
+          const modulo = usersAfter[uid].modulo || 'inventario';
+
+          // Claims incluem licenseId, cargo E modulo (necessário para validação server-side)
+          const promise = auth.setCustomUserClaims(uid, { licenseId, cargo, modulo });
           promises.push(promise);
-          console.log(`Claims atualizados para ${uid}: Empresa ${licenseId}, Cargo ${cargo}`);
+          console.log(`Claims atualizados para ${uid}: Empresa ${licenseId}, Cargo ${cargo}, Módulo ${modulo}`);
         } else if (userWasMemberBefore && !userIsMemberAfter) {
-          // Remove os claims se o usuário foi removido da equipe
-          const promise = auth.setCustomUserClaims(uid, { licenseId: null, cargo: null });
+          const promise = auth.setCustomUserClaims(uid, { licenseId: null, cargo: null, modulo: null });
           promises.push(promise);
           console.log(`Claims revogados para ${uid}`);
         }
@@ -63,6 +63,26 @@ exports.adicionarMembroEquipe = functions
       }
 
       const managerLicenseId = context.auth.token.licenseId;
+      const managerModulo = context.auth.token.modulo || 'inventario';
+
+      // Segurança: gerente restrito só pode criar membros do próprio módulo
+      // Gerente 'todos' pode criar qualquer módulo
+      if (managerModulo !== 'todos') {
+        const moduloEfetivo = modulo || 'inventario';
+        if (moduloEfetivo !== managerModulo) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            `Sua licença (${managerModulo}) não permite criar membros do módulo '${moduloEfetivo}'.`
+          );
+        }
+        // Gerente restrito também não pode criar outro gerente do módulo 'todos'
+        if (cargo === 'gerente' && moduloEfetivo === 'todos') {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Você não tem permissão para criar gerentes com acesso total."
+          );
+        }
+      }
 
       try {
         // 1. Cria no Auth
@@ -79,7 +99,7 @@ exports.adicionarMembroEquipe = functions
         batch.update(clienteDocRef, {
             [`usuariosPermitidos.${userRecord.uid}`]: {
                 cargo: cargo,
-                modulo: cargo === 'gerente' ? (modulo || 'inventario') : null,
+                modulo: modulo || 'inventario',
                 email: email,
                 nome: name,
                 adicionadoEm: admin.firestore.FieldValue.serverTimestamp()

@@ -29,7 +29,7 @@ class _InventarioPageState extends State<InventarioPage> {
   final _projetoRepository = ProjetoRepository();
   final _codigosRepository = CodigosRepository(); // Repositório de regras
   
-  String _projetoNome = "GeoForest Analytics";
+  String _projetoNome = "Geo Forest Analytics";
 
   late Parcela _parcelaAtual;
   List<Arvore> _arvoresColetadas = [];
@@ -462,6 +462,7 @@ class _InventarioPageState extends State<InventarioPage> {
         idParcela: _parcelaAtual.idParcela,
         atividadeTipo: _parcelaAtual.atividadeTipo,
         tipoMedidaCAP: _parcelaAtual.tipoMedidaCAP,
+        projetoId: _parcelaAtual.projetoId,
       ),
     );
 
@@ -490,6 +491,7 @@ class _InventarioPageState extends State<InventarioPage> {
         idParcela: _parcelaAtual.idParcela,
         atividadeTipo: _parcelaAtual.atividadeTipo,
         tipoMedidaCAP: _parcelaAtual.tipoMedidaCAP,
+        projetoId: _parcelaAtual.projetoId,
       ),
     );
 
@@ -639,7 +641,15 @@ class _InventarioPageState extends State<InventarioPage> {
                             if (regra != null && regra.requerAlturaDano) {
                               backgroundColor = isDark ? Colors.red.shade900.withAlpha(180) : Colors.red.shade50;
                             }
-                            // 2. Prioridade: Dominante (Baseado no App: booleano dominante)
+                            // 2. Prioridade: Espécie pendente de identificação (modo BIO)
+                            else if (arvore.especie == 'Desconhecida') {
+                              backgroundColor = isDark ? Colors.amber.shade900.withAlpha(180) : Colors.amber.shade100;
+                            }
+                            // 3. Prioridade: Espécie sugerida por IA, ainda sem conferência humana
+                            else if (arvore.identificadoPorIa) {
+                              backgroundColor = isDark ? Colors.purple.shade900.withAlpha(180) : Colors.purple.shade50;
+                            }
+                            // 4. Prioridade: Dominante (Baseado no App: booleano dominante)
                             else if (arvore.dominante) {
                               backgroundColor = isDark ? Colors.blue.shade900.withAlpha(180) : Colors.blue.shade50;
                             }
@@ -694,9 +704,14 @@ class _InventarioPageState extends State<InventarioPage> {
                                       _DataCell(arvore.altura?.toStringAsFixed(1) ?? '-', flex: 20),
                                       _DataCell(
                                         codigoDisplay,
-                                        flex: 30, 
+                                        flex: 30,
                                         isBold: true
                                       ),
+                                      if (arvore.identificadoPorIa)
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 4),
+                                          child: Icon(Icons.auto_awesome, size: 14, color: Colors.purple.shade400),
+                                        ),
                                     ],
                                   ),
                                 ),

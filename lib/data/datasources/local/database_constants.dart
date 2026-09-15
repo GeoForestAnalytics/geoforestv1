@@ -116,6 +116,9 @@ class DbArvores {
   static const String tipoMedidaCAP = 'tipoMedidaCAP';
   static const String medidaSuta1 = 'medidaSuta1';
   static const String medidaSuta2 = 'medidaSuta2';
+  static const String latitude = 'latitude';
+  static const String longitude = 'longitude';
+  static const String identificadoPorIa = 'identificadoPorIa';
 }
 
 class DbCubagensArvores {
@@ -206,6 +209,62 @@ class DbPilhasMadeira {
   static const String lastModified = 'lastModified';
 }
 
+class DbCentroidesSilvi {
+  static const String tableName = 'pontos_centroide_silvi';
+  static const String id = 'id';
+  static const String talhaoId = 'talhaoId';
+  static const String fazendaId = 'fazendaId';
+  static const String nomeFazenda = 'nomeFazenda';
+  static const String nomeTalhao = 'nomeTalhao';
+  static const String latitude = 'latitude';
+  static const String longitude = 'longitude';
+  static const String areaTotalHa = 'areaTotalHa';
+  static const String operacoesPlanejadas = 'operacoesPlanejadas'; // JSON
+  static const String lastModified = 'lastModified';
+}
+
+class DbOperacoesSilvi {
+  static const String tableName = 'operacoes_silviculturais';
+  static const String id = 'id';
+  static const String centroideId = 'centroideId';
+  static const String talhaoId = 'talhaoId';
+  static const String fazendaId = 'fazendaId';
+  static const String nomeFazenda = 'nomeFazenda';
+  static const String nomeTalhao = 'nomeTalhao';
+  static const String tipo = 'tipo';
+  static const String areaAplicadaHa = 'areaAplicadaHa';
+  static const String areaGeoJson = 'areaGeoJson';
+  static const String dataExecucao = 'dataExecucao';
+  static const String status = 'status';
+  static const String observacoes = 'observacoes';
+  static const String nomeLider = 'nomeLider';
+  static const String fotos = 'fotos';
+  static const String latitude = 'latitude';
+  static const String longitude = 'longitude';
+  static const String exportada = 'exportada';
+  static const String isSynced = 'isSynced';
+  static const String lastModified = 'lastModified';
+}
+
+class DbEstoqueSaida {
+  static const String tableName = 'estoques_saida';
+  static const String id = 'id';
+  static const String talhaoId = 'talhaoId';
+  static const String centroideId = 'centroideId';
+  static const String fazendaId = 'fazendaId';
+  static const String nomeFazenda = 'nomeFazenda';
+  static const String nomeTalhao = 'nomeTalhao';
+  static const String sortimento = 'sortimento';
+  static const String numeroCaminhoes = 'numeroCaminhoes';
+  static const String volumeM3 = 'volumeM3';
+  static const String nomeLider = 'nomeLider';
+  static const String dataRegistro = 'dataRegistro';
+  static const String observacoes = 'observacoes';
+  static const String exportada = 'exportada';
+  static const String isSynced = 'isSynced';
+  static const String lastModified = 'lastModified';
+}
+
 class DbDiarioDeCampo {
   static const String tableName = 'diario_de_campo';
   static const String id = 'id';
@@ -227,4 +286,6 @@ class DbDiarioDeCampo {
   static const String veiculoModelo = 'veiculo_modelo';
   static const String equipeNoCarro = 'equipe_no_carro';
   static const String lastModified = 'lastModified';
+  static const String modulo = 'modulo';
+  static const String locaisTrabalhadosJson = 'locais_trabalhados_json';
 }

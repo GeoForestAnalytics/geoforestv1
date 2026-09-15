@@ -1,5 +1,6 @@
 // lib/pages/menu/equipe_page.dart
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -24,7 +25,10 @@ class _EquipePageState extends State<EquipePage> {
     // Carrega os nomes usando o Provider assim que a tela é construída
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final teamProvider = Provider.of<TeamProvider>(context, listen: false);
-      _liderController.text = teamProvider.lider ?? '';
+      final savedLider = teamProvider.lider ?? '';
+      _liderController.text = savedLider.isNotEmpty
+          ? savedLider
+          : (FirebaseAuth.instance.currentUser?.displayName ?? '');
       _ajudantesController.text = teamProvider.ajudantes ?? '';
     });
   }

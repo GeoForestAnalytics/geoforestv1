@@ -249,37 +249,24 @@ class _AnaliseVolumetricaPageState extends State<AnaliseVolumetricaPage> {
           .toList();
     }
 
-    // 2. Busca os talhões de CUBAGEM (procurando a atividade irmã)
+    // 2. Busca os talhões de CUBAGEM diretamente pelas árvores cubadas na mesma fazenda.
+    // Estratégia robusta: não depende de nome de atividade ("CUB", "Cubagem", etc).
+    // Busca por nomeFazenda (case-insensitive) direto nas árvores cubadas.
     List<Talhao> talhoesCubagemEncontrados = [];
-    
-    final todasAtividadesDoProjeto = await _atividadeRepository.getAtividadesDoProjeto(_projetoSelecionado!.id!);
-    
-    // Tenta encontrar uma atividade que contenha "CUB" no nome
-    final atividadeCub = todasAtividadesDoProjeto
-        .firstWhereOrNull((a) => a.tipo.toUpperCase().contains('CUB'));
+    {
+      final todasCubagens = await _cubagemRepository.getTodasCubagens();
+      final fazendaNome = _fazendaSelecionada!.nome.toLowerCase().trim();
 
-    if (atividadeCub != null) {
-      // Se achou a atividade de cubagem, busca a fazenda CORRESPONDENTE (pelo nome)
-      final fazendasDaAtividadeCub = await _fazendaRepository.getFazendasDaAtividade(atividadeCub.id!);
-      
-      final fazendaCub = fazendasDaAtividadeCub
-          .firstWhereOrNull((f) => f.nome == _fazendaSelecionada!.nome);
+      final talhoesIdsComCubagem = todasCubagens
+          .where((c) =>
+              c.alturaTotal > 0 &&
+              c.talhaoId != null &&
+              c.nomeFazenda.toLowerCase().trim() == fazendaNome)
+          .map((c) => c.talhaoId!)
+          .toSet();
 
-      if (fazendaCub != null) {
-        // Se achou a fazenda na cubagem, pega os talhões dela
-        final todosTalhoesDaFazendaCub = await _talhaoRepository.getTalhoesDaFazenda(fazendaCub.id, fazendaCub.atividadeId);
-        
-        final todasCubagens = await _cubagemRepository.getTodasCubagens();
-        
-        // Filtra talhões que tenham árvores com altura total > 0 (cubagem feita)
-        final talhoesCompletosCubIds = todasCubagens
-            .where((c) => c.alturaTotal > 0 && c.talhaoId != null)
-            .map((c) => c.talhaoId!)
-            .toSet();
-            
-        talhoesCubagemEncontrados = todosTalhoesDaFazendaCub
-            .where((t) => talhoesCompletosCubIds.contains(t.id))
-            .toList();
+      if (talhoesIdsComCubagem.isNotEmpty) {
+        talhoesCubagemEncontrados = await _talhaoRepository.getTalhoesPorIds(talhoesIdsComCubagem.toList());
       }
     }
 

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:firebase_vertexai/firebase_vertexai.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
@@ -10,6 +11,50 @@ class AiValidationService {
     _model = FirebaseVertexAI.instance.generativeModel(
       model: 'gemini-2.0-flash',
     );
+  }
+
+  /// Sugere a espécie de uma árvore a partir de uma foto (casca/folha/copa).
+  /// Best-effort: retorna null se não conseguir identificar, sem sinal, ou em caso de erro/timeout.
+  /// Nunca deve bloquear o fluxo de coleta — chamador decide se aguarda ou segue em paralelo.
+  Future<String?> sugerirEspeciePorFoto(String caminhoFoto, {List<String> especiesJaConfirmadas = const []}) async {
+    try {
+      final bytes = await File(caminhoFoto).readAsBytes();
+
+      final contextoProjeto = especiesJaConfirmadas.isEmpty
+          ? ''
+          : '''
+
+            Espécies já confirmadas neste mesmo projeto: ${especiesJaConfirmadas.join(', ')}.
+            Se a árvore da foto bater com uma dessas, prefira responder com o nome exatamente
+            igual ao da lista (mesma grafia), pra manter consistência. Só sugira uma espécie
+            fora dessa lista se tiver certeza de que é diferente.
+          ''';
+
+      final prompt = [
+        Content.multi([
+          TextPart('''
+            Você é um botânico especialista em flora brasileira, incluindo árvores de arborização urbana.
+            Olhe a foto e identifique a espécie da árvore (casca, folha, copa ou outro detalhe visível).
+            $contextoProjeto
+            Responda APENAS com o nome popular mais comum da espécie em português, sem explicação, sem pontuação extra.
+            Se não conseguir identificar com razoável confiança, responda exatamente: Desconhecida
+          '''),
+          InlineDataPart('image/jpeg', bytes),
+        ]),
+      ];
+
+      final response = await _model
+          .generateContent(prompt)
+          .timeout(const Duration(seconds: 20));
+
+      final texto = response.text?.trim();
+      if (texto == null || texto.isEmpty || texto.toLowerCase().contains('desconhecida')) {
+        return null;
+      }
+      return texto;
+    } catch (e) {
+      return null;
+    }
   }
 
   /// 1. MÉTODO PARA O CHAT (Manual Técnico e Suporte ao App)
@@ -129,6 +174,39 @@ class AiValidationService {
       final decoded = jsonDecode(response.text ?? '{"alertas": []}');
       return List<String>.from(decoded['alertas'] ?? []);
     } catch (e) { return ["Erro na auditoria do estrato."]; }
+  }
+
+  /// Chat com contexto agregado de todos os módulos (Hub IA Analista)
+  Future<String> perguntarContextoGlobal(String pergunta, Map<String, dynamic> contexto) async {
+    final prompt = [
+      Content.text('''
+Você é o GeoForest AI, assistente analítico de operações florestais.
+
+SUA PERSONA:
+- Engenheiro Florestal sênior com expertise em inventário, colheita e silvicultura
+- Analista de dados operacionais de campo
+- Comunicativo, direto, usa linguagem técnica mas acessível
+
+DADOS CONSOLIDADOS DO SISTEMA (todos os módulos):
+${jsonEncode(contexto)}
+
+CAPACIDADES:
+- Analise produtividade por projeto, fazenda, talhão ou líder de equipe
+- Compare módulos (inventário, colheita, silvicultura)
+- Gere resumos executivos e recomendações
+- Identifique gargalos, atrasos ou inconsistências nos dados
+- Responda perguntas em linguagem natural sobre os dados acima
+
+INSTRUÇÃO: Responda à pergunta "$pergunta" de forma clara e objetiva.
+Use os dados do contexto como base. Se a informação não estiver disponível, diga isso.
+'''),
+    ];
+    try {
+      final response = await _model.generateContent(prompt);
+      return response.text ?? 'Não foi possível gerar uma resposta.';
+    } catch (e) {
+      return 'Erro ao consultar a IA: $e';
+    }
   }
 
   /// Auxiliar atualizado para incluir Fuste e Altura de Dano

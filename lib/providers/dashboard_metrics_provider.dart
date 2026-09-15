@@ -128,6 +128,7 @@ class DashboardMetricsProvider with ChangeNotifier {
     final lideres = {
       ...gerenteProvider.parcelasSincronizadas.map((p) => p.nomeLider),
       ...gerenteProvider.cubagensSincronizadas.map((c) => c.nomeLider),
+      ...gerenteProvider.silviSincronizadas.map((s) => s.nomeLider),
     }.where((nome) => nome != null && nome.isNotEmpty).cast<String>().toSet().toList();
     
     filterProvider.updateLideresDisponiveis(lideres);
@@ -171,6 +172,7 @@ class DashboardMetricsProvider with ChangeNotifier {
     return !setEquals(newFilter.selectedProjetoIds, oldFilter.selectedProjetoIds) ||
            !setEquals(newFilter.selectedAtividadeTipos, oldFilter.selectedAtividadeTipos) ||
            !setEquals(newFilter.selectedFazendaNomes, oldFilter.selectedFazendaNomes) ||
+           !setEquals(newFilter.selectedTalhaoNomes, oldFilter.selectedTalhaoNomes) ||
            newFilter.periodo != oldFilter.periodo ||
            newFilter.periodoPersonalizado != oldFilter.periodoPersonalizado ||
            !setEquals(newFilter.lideresSelecionados, oldFilter.lideresSelecionados);
@@ -201,6 +203,10 @@ class DashboardMetricsProvider with ChangeNotifier {
 
       if (filterProvider.selectedFazendaNomes.isNotEmpty) {
         if (p.nomeFazenda == null || !filterProvider.selectedFazendaNomes.contains(p.nomeFazenda!)) return false;
+      }
+
+      if (filterProvider.selectedTalhaoNomes.isNotEmpty) {
+        if (p.nomeTalhao == null || !filterProvider.selectedTalhaoNomes.contains(p.nomeTalhao!)) return false;
       }
 
       if (filterProvider.lideresSelecionados.isNotEmpty) {

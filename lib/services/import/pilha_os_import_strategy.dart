@@ -17,10 +17,18 @@ class PilhaOsImportStrategy extends BaseImportStrategy {
     final Map<int, int> centroideIdCache = {};
     final Map<int, List<SortimentoConfig>> sortimentosCache = {};
 
+    const aceitas = {'PILHA', 'COLHEITA', 'PILHAS'};
+
     for (final row in dataRows) {
       result.linhasProcessadas++;
 
-      // Respeita o filtro Medir? = SIM (igual às outras OS)
+      // Filtra apenas linhas de colheita/pilha
+      if (!BaseImportStrategy.passaFiltroAtividade(row, aceitas)) {
+        result.parcelasIgnoradas++;
+        continue;
+      }
+
+      // Respeita o filtro Medir? = SIM
       final medir = BaseImportStrategy.getValue(row, ['medir ?', 'medir'])?.toUpperCase();
       if (medir != null && medir != 'SIM') {
         result.parcelasIgnoradas++;
@@ -70,9 +78,11 @@ class PilhaOsImportStrategy extends BaseImportStrategy {
       final dapMaxStr = BaseImportStrategy.getValue(row, ['classe_b', 'dap_max', 'diametro_max']);
       final comprToraStr = BaseImportStrategy.getValue(row, ['tamanho_tora', 'comprimento_tora', 'comp_tora']);
       final volEsperadoStr = BaseImportStrategy.getValue(row, [
-        'volume_esperado_m3', 'vol_esperado', 'volume_m3',
+        'volume_espe', 'volume_esperado_m3', 'vol_esperado', 'volume_m3',
         'volume_esperado', 'm3_esperado', 'm_esperado', 'classe',
       ]);
+      final fatorOsStr = BaseImportStrategy.getValue(row, ['fator', 'fator_forma', 'fatorforma', 'fatorempilhamento']);
+      final fatorOs = double.tryParse(fatorOsStr?.replaceAll(',', '.') ?? '');
 
       final sortimentoConfig = SortimentoConfig(
         nome: nomeSortimento,
@@ -80,6 +90,7 @@ class PilhaOsImportStrategy extends BaseImportStrategy {
         dapMax: double.tryParse(dapMaxStr?.replaceAll(',', '.') ?? ''),
         comprimentoTora: double.tryParse(comprToraStr?.replaceAll(',', '.') ?? '') ?? 2.4,
         volumeEsperadoM3: double.tryParse(volEsperadoStr?.replaceAll(',', '.') ?? ''),
+        fatorEmpilhamento: (fatorOs != null && fatorOs > 0 && fatorOs <= 1) ? fatorOs : 0.65,
       );
 
       final talhaoId = talhao.id!;

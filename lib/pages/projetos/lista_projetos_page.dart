@@ -8,6 +8,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 // Imports do projeto
@@ -134,15 +135,35 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
           duration: Duration(seconds: 10)));
     }
 
+    final licenseId = context.read<LicenseProvider>().licenseData?.id;
+    final user = FirebaseAuth.instance.currentUser;
+
     bool houveErro = false;
     for (final id in _selectedProjetos) {
       try {
+        final projetoLocal = await _projetoRepository.getProjetoById(id);
+
+        // Grava na lixeira antes de excluir
+        if (licenseId != null && projetoLocal != null) {
+          await FirebaseFirestore.instance
+              .collection('clientes')
+              .doc(licenseId)
+              .collection('lixeira')
+              .add({
+            'projetoId': id,
+            'projetoNome': projetoLocal.nome,
+            'deletadoPorNome': user?.displayName ?? '—',
+            'deletadoPorEmail': user?.email ?? '—',
+            'deletadoEm': FieldValue.serverTimestamp(),
+            'licenseId': licenseId,
+          });
+        }
+
         final functions =
             FirebaseFunctions.instanceFor(region: 'southamerica-east1');
         final callable = functions.httpsCallable('deletarProjeto');
         await callable.call({'projetoId': id});
 
-        final projetoLocal = await _projetoRepository.getProjetoById(id);
         if (projetoLocal != null) {
           await _projetoRepository
               .updateProjeto(projetoLocal.copyWith(status: 'deletado'));
@@ -412,7 +433,7 @@ class _ListaProjetosPageState extends State<ListaProjetosPage> {
             title: const Text('Resultado da Importação'),
             content: SingleChildScrollView(child: Text(message)),
             actions: [
-              TextButton(
+              FilledButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('OK'))
             ],
