@@ -1,243 +1,561 @@
-NomeCientifico;NomeComum;Familia;FatorForma;Regiao
-A identificar;Desconhecida;-;0,5;Todas
-Pouteria torta;Abiu;Sapotaceae;0,5;Cerrado
-Pouteria torta;Abiu do cerrado;Sapotaceae;0,5;Cerrado
-Luehea paniculata;A oita Cavalo;Malvaceae;0,5;Cerrado
-Vatairea macrocarpa;Amargoso;Leguminosae-Papilionoideae;0,5;Cerrado
-Pterogyne nitens;Amendoim bravo;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Acosmium subelegans;Amendoim falso;Leguminosae-Papilionoideae;0,5;Cerrado
-Protium heptaphyllum;Amescla;Burseraceae;0,5;Cerrado
-Andira anthelmia;Angelim;Leguminosae-Papilionoideae;0,5;Cerrado
-Andira anthelmia;Angelim de morcego;Leguminosae-Papilionoideae;0,5;Cerrado
-Anadenanthera peregrina;Angico;Leguminosae-Mimosoideae;0,5;Cerrado
-Anadenanthera columbrina;Angico branco;Leguminosae-Mimosoideae;0,5;Cerrado
-Anadenanthera falcata;Angico do cerrado;Leguminosae-Mimosoideae;0,5;Cerrado
-Acacia polyphylla;Angico preto;Leguminosae-Mimosoideae;0,5;Cerrado
-Anadenanthera macrocarpa;Angico vermelho;Leguminosae-Mimosoideae;0,5;Cerrado
-Psidium firmum;Ara  ;Myrtaceae;0,5;Cerrado
-Annona coriacea;Araticum;Annonaceae;0,5;Cerrado
-Annona crassiflora;Araticum corti a;Annonaceae;0,5;Cerrado
-Annona crassiflora;Araticum do cerrado;Annonaceae;0,5;Cerrado
-Annona coriacea;Araticum do mato;Annonaceae;0,5;Cerrado
-Astronium urundeuva ;Aroeira;Anacardiaceae;0,5;Cerrado
-Lithraea molleoides;Aroeirinha;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Annona cornifolia;Ata;Annonaceae;0,5;Cerrado
-Acrocomia aculeata;Bacaiuva;Arecaceae;0,5;Cerrado
-Diptychandra aurantiaca;Balsaminho;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Diptychandra aurantiaca;Balsimi;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Stryphnodendron adstringens;Barbatim o;Leguminosae-Mimosoideae;0,5;Cerrado
-Prosopis rubriflora;Barreiro preto;Leguminosae-Mimosoideae;0,5;Cerrado
-Dipteryx alata;Baru;Leguminosae-Papilionoideae;0,5;Cerrado
-Eriotheca gracilipes;Bingueiro;Malvaceae;0,5;Cerrado
-Casearia sylvestris;Bugreiro;Salicaceae;0,5;Cerrado
-Mauritia flexuosa;Buriti;Arecaceae;0,5;Cerrado
-Rhamnidium elaeocarpus;Cabrito;Rhamnaceae;0,5;Cerrado
-Casearia sylvestris;Cafezinho do mato;Salicaceae;0,5;Cerrado
-Spondias macrocarpa;Caja;Anacardiaceae;0,5;Cerrado
-Anacardium humile;Cajuzinho do cerrado;Anacardiaceae;0,5;Cerrado
-Aloysia virgata;Camar ;Verbenaceae;0,5;Cerrado
-Aloysia virgata;Camar  de lixa;Verbenaceae;0,5;Cerrado
-Vochysia divergens;Cambara;Vochysiaceae;0,5;Cerrado
-Vochysia haenkeana;Cambara amarelo;Vochysiaceae;0,5;Cerrado
-Cupania vernalis;Camboata;Sapindaceae;0,5;Cerrado
-Piptocarpha rotundifolia;Candeia;Asteraceae;0,5;Cerrado
-Helietta apiculata;Canela de veado;Rutaceae;0,5;Cerrado
-Miconia albicans;Canela de velho;Melastomataceae;0,5;Cerrado
-Nectandra cissiflora;Canela grande;Lauraceae;0,5;Cerrado
-Ocotea corymbosa;Canela merda;Lauraceae;0,5;Cerrado
-Ocotea corymbosa;Canela preta;Lauraceae;0,5;Cerrado
-Peltophorum dubium;Canfistula;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Byrsonima orbignyana;Canjiquinha;Malpighiaceae;0,5;Cerrado
-Terminalia argentia;Capit o;Combretaceae;0,5;Cerrado
-Terminalia brasiliensis;Capit ozinho;Combretaceae;0,5;Cerrado
-Diospyros hispida;Caqui do mato;Ebenaceae;0,5;Cerrado
-Copernicia prunifera;Caranda;Arecaceae;0,5;Cerrado
-Roupala montana ;Carne de vaca;Proteaceae;0,5;Cerrado
-Jacaranda brasiliana;Caroba;Bignoniaceae;0,5;Cerrado
-Callisthene fasciculata;Carv o;Vochysiaceae;0,5;Cerrado
-Diptychandra aurantiaca;Carv o vermelho;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Sclerolobium paniculatum;Carvoeiro;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Calycophyllum multiflorum;Castelo;Rubiaceae;0,5;Cerrado
-Trichilia hirta;Catigua;Meliaceae;0,5;Cerrado
-Dalbergia miscolobium;Caviuna;Leguminosae-Papilionoideae;0,5;Cerrado
-Machaerium hirtum;Cebol o;Leguminosae-Papilionoideae;0,5;Cerrado
-Amburana cearensis;Cerejeira/amburana;Leguminosae-Papilionoideae;0,5;Cerrado
-Sterculia apetala;Chicha;Sterculiaceae;0,5;Cerrado
-Hirtella ciliata;Chor o;Chrysobalanaceae;0,5;Cerrado
-Piptocarpha rotundifolia;Cinzeiro;Asteraceae;0,5;Cerrado
-Cipo;Cip ;Cipo;0,5;Cerrado
-Salvertia convallariaeodora;Colher de vaqueiro;Vochysiaceae;0,5;Cerrado
-Rollinia sylvatica;Conde do mato;Annonaceae;0,5;Cerrado
-Copaifera langsdorffii;Copa ba;Leguminosae-Papilionoideae;0,5;Cerrado
-Mouriri elliptica;Coroa;Memecylaceae;0,5;Cerrado
-Mouriri elliptica;Croada;Memecylaceae;0,5;Cerrado
-Dipteryx alata;Cumbaru;Leguminosae-Papilionoideae;0,5;Cerrado
-Lafoensia pacari;Dedaleiro;Lythraceae;0,5;Cerrado
-Lafoensia pacari;Didal;Lythraceae;0,5;Cerrado
-Cecropia pachystachya;Embauba;Urticaceae;0,5;Cerrado
-Bocageopsis mattogrossensis;Embira;Annonaceae;0,5;Cerrado
-Casearia gossypiosperma;Espeteiro;Salicaceae;0,5;Cerrado
-Eucalyptus sp;Eucalipto;Myrtaceae;0,5;Cerrado
-Coccoloba mollis;Falso novateiro;Polygonaceae;0,5;Cerrado
-Dimorphandra mollis;Faveiro;Leguminosae-Mimosoideae;0,5;Cerrado
-Ficus guaranitica;Figueira;Moraceae;0,5;Cerrado
-Triplaris brasiliana;Formigueiro;Polygonaceae;0,5;Cerrado
-Couepia grandiflora;Fruta de ema;Chrysobalanaceae;0,5;Cerrado
-Simarouba versicolor;Fruta de perdiz;Simaroubaceae;0,5;Cerrado
-Pouteria ramiflora;Fruta de veado;Sapotaceae;0,5;Cerrado
-Apuleia leiocarpa;Garapa;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Acosmium subelegans;Genciana;Leguminosae-Papilionoideae;0,5;Cerrado
-Genipa americana;Genipapo;Rubiaceae;0,5;Cerrado
-Astronium fraxinifolium;Gon alo;Anacardiaceae;0,5;Cerrado
-Brachiaria humidicola;Gra Agulha;Graminea;0,5;Cerrado
-Baccharis dracunculifolia;Gra Alecrim;Graminea;0,5;Cerrado
-Digitaria insularis;Gra Amargoso;Graminea;0,5;Cerrado
-Andropogon bicornis;Gra Braquiar o;Graminea;0,5;Cerrado
-Brachiaria brizantha;Gra Braquiaria;Graminea;0,5;Cerrado
-Senna obtusifolia;Gra Capim 1;Graminea;0,5;Cerrado
-Andropogon fastigiatus Sw;Gra Capim-andropogom;Graminea;0,5;Cerrado
-Saccharum asperum (Nees) Steud.;Gra Capim-macega-estaladeira-branca;Graminea;0,5;Cerrado
-Andropogon leocostachus Kunt;Gra Capim-membeca;Graminea;0,5;Cerrado
-Cenchrus echinatus;Gra Carrapixo;Graminea;0,5;Cerrado
-Sporobolus indicus;Gra Cerdinha;Graminea;0,5;Cerrado
-Cenchrus polystachios;Gra Espiga;Graminea;0,5;Cerrado
-Solanum palinacanthum;Gra Espinho;Graminea;0,5;Cerrado
-Eragrostis neesii;Gra Flecha;Graminea;0,5;Cerrado
-Sida sp.;Gra Ganchuma;Graminea;0,5;Cerrado
-Paspalum notatum;Gra Grama;Graminea;0,5;Cerrado
-Stylosantes capitata;Gra Grama flor;Graminea;0,5;Cerrado
-Paspalum oteroi Swallen;Gra Grama-tio-pedro;Graminea;0,5;Cerrado
-Mimosa sp.;Gra Malicia;Graminea;0,5;Cerrado
-Gymnopogon foliosus;Gra P  de galinha;Graminea;0,5;Cerrado
-Bidens pilosa;Gra Pic o;Graminea;0,5;Cerrado
-Fimbristylis autumnalis;Gra Salom o;Graminea;0,5;Cerrado
-Cyperus odoratus;Gra Tiririca;Graminea;0,5;Cerrado
-Aristida adscensionis;Gra Vassourinha;Graminea;0,5;Cerrado
-Patagonula americana;Guajuvira;Boraginaceae;0,5;Cerrado
-Myrcia rostrata;Guamirim da folha mi da;Myrtaceae;0,5;Cerrado
-Calophyllum brasiliensis ;Guanandi;Clusiaceae;0,5;Cerrado
-Aspidosperma subincanum;Guatambu;Apocynaceae;0,5;Cerrado
-Aspidosperma macrocarpon;Guatambu branco;Apocynaceae;0,5;Cerrado
-Aspidosperma macrocarpon;Guatambu do cerrado;Apocynaceae;0,5;Cerrado
-Campomanesia adamantium;Guavira;Myrtaceae;0,5;Cerrado
-Inga edulis;Inga;Leguminosae-Mimosoideae;0,5;Cerrado
-Inga edulis;Inga amarelo;Leguminosae-Mimosoideae;0,5;Cerrado
-Inga laurina;Inga branco;Leguminosae-Mimosoideae;0,5;Cerrado
-Samanea tubulosa;Inga seco;Leguminosae-Mimosoideae;0,5;Cerrado
-Inga sessilis;Inga vermelho;Leguminosae-Mimosoideae;0,5;Cerrado
-Tabebuia ochracea;Ip  amarelo;Bignoniaceae;0,5;Cerrado
-Tabebuia roseo-alba;Ip  branco;Bignoniaceae;0,5;Cerrado
-Tabebuia ochracea;Ip  do cerrado;Bignoniaceae;0,5;Cerrado
-Artocarpus heterophyllus;Jaca;Moraceae;0,5;Cerrado
-Machaerium acustifolium;Jacaranda;Leguminosae-Papilionoideae;0,5;Cerrado
-Machaerium acustifolium;Jacaranda bico de pato;Leguminosae-Papilionoideae;0,5;Cerrado
-Machaerium acustifolium;Jacaranda do campo;Leguminosae-Papilionoideae;0,5;Cerrado
-Hymenaea stigonocarpa;Jatob ;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Hymenaea stigonocarpa;Jatob  do cerrado;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Cariniana estrellensis;Jequitiba;Lecythidaceae;0,5;Cerrado
-Piptocarpha rotundifolia;Laranjinha;Asteraceae;0,5;Cerrado
-Sapium glandulosum;Leiteiro;Euphorbiaceae;0,5;Cerrado
-Salvertia convallariaeodora;Liana;Vochysiaceae;0,5;Cerrado
-Curatella americana;Lixeira;Dilleniaceae;0,5;Cerrado
-Curatella americana;Lixeirinha;Dilleniaceae;0,5;Cerrado
-Solanum lycocarpum;Lobeira;Solanaceae;0,5;Cerrado
-Cordia sellowiana;Loro;Boraginaceae;0,5;Cerrado
-Cordia trichotoma;Loro preto;Boraginaceae;0,5;Cerrado
-Vatairea macrocarpa;M  Leitoso;Leguminosae-Papilionoideae;0,5;Cerrado
-Brosimum gaudichaudii;Mama cadela;Moraceae;0,5;Cerrado
-Zanthoxylum hasslerianum;Mamica;Rutaceae;0,5;Cerrado
-Didymopanax morototoni;Mandioc o;Araliaceae;0,5;Cerrado
-Austroplenckia populnea;Mangaba;Celastraceae;0,5;Cerrado
-Austroplenckia populnea;Mangabeira brava;Celastraceae;0,5;Cerrado
-Dilodendron bipinnatum;Maria pobre;Sapindaceae;0,5;Cerrado
-Mimosa bimucronata;Maric ;Leguminosae-Mimosoideae;0,5;Cerrado
-Guarea guidonia;Marinheiro;Meliaceae;0,5;Cerrado
-Alibertia edulis;Marmeleiro;Rubiaceae;0,5;Cerrado
-Licania humilis;Marmelinho do cerrado;Chrysobalanaceae;0,5;Cerrado
-Alibertia edulis;Marmelo;Rubiaceae;0,5;Cerrado
-Alibertia edulis;Marmelo de cavalo;Rubiaceae;0,5;Cerrado
-Annona coriacea;Marolo;Annonaceae;0,5;Cerrado
-Simarouba versicolor;Mata cachorro;Simaroubaceae;0,5;Cerrado
-Miconia cuspidata;Miconia;Melastomataceae;0,5;Cerrado
-Salvertia convallariaeodora;Moliana;Vochysiaceae;0,5;Cerrado
-Andira anthelmia;Morcegueiro;Leguminosae-Papilionoideae;0,5;Cerrado
-Maclura tinctoria;Moreira;Moraceae;0,5;Cerrado
-Morta - N o identificada;Morta - N o identificada;Morta - N o identificada;0,5;Cerrado
-Byrsonima basiloba;Murici;Malpighiaceae;0,5;Cerrado
-Byrsonima coccolobifolia;Murici do cerrado;Malpighiaceae;0,5;Cerrado
-Diospyros burchellii;Muriciz o;Ebenaceae;0,5;Cerrado
-Byrsonima basiloba;Muricizeiro;Malpighiaceae;0,5;Cerrado
-Guazuma ulmifolia;Mutambo;Malvaceae;0,5;Cerrado
-Siparuna guianesis;Negamina;Siparunaceae;0,5;Cerrado
-Heteropterys tomentosa;N  de cachorro;Malpighiaceae;0,5;Cerrado
-Ormosia arborea;Olho de cabra;Leguminosae-Papilionoideae;0,5;Cerrado
-Cnidoscolus vitifolius;Ortiga;Euphorbiaceae;0,5;Cerrado
-Pseudobombax grandiflorum;Paineira;Malvaceae;0,5;Cerrado
-Tabebuia caraiba;Paratudo;Bignoniaceae;0,5;Cerrado
-Bauhinia forficata;Pata de vaca;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Sclerolobium aureum;Pau bosta;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Emmotum nitens;Pau de sobre;Icacinaceae;0,5;Cerrado
-Vochysia cinnamomea;Pau doce;Vochysiaceae;0,5;Cerrado
-Agonandra brasiliensis;Pau marfim;Opiliaceae;0,5;Cerrado
-Copaifera langsdorffii;Pau oleo;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Tabebuia caraiba;Pau paratudo;Bignoniaceae;0,5;Cerrado
-Kielmeyera variabilis;Pau santo;Clusiaceae;0,5;Cerrado
-Qualea grandiflora;Pau terra;Vochysiaceae;0,5;Cerrado
-Qualea grandiflora;Pau terra comum;Vochysiaceae;0,5;Cerrado
-Qualea dichotoma;Pau terra da mata;Vochysiaceae;0,5;Cerrado
-Qualea multiflora;Pau terra liso;Vochysiaceae;0,5;Cerrado
-Qualea parviflora;Pau terra mirim;Vochysiaceae;0,5;Cerrado
-Qualea parviflora;Pau terrinha;Vochysiaceae;0,5;Cerrado
-Priogymnanthus hasslerianus;Pau vidro;Oleaceae;0,5;Cerrado
-Tapirira guianensis;Peito de pombo;Anacardiaceae;0,5;Cerrado
-Apeiba tibourbou;Pente de macaco;Malvaceae;0,5;Cerrado
-Caryocar brasiliense;Pequi;Caryocaraceae;0,5;Cerrado
-Simarouba versicolor;Perdiz;Simaroubaceae;0,5;Cerrado
-Aspidosperma cylindrocarpon;Peroba a rosa;Apocynaceae;0,5;Cerrado
-Xylopia aromatica;Pimenta de macaco;Annonaceae;0,5;Cerrado
-Xylopia aromatica;Pimenteira;Annonaceae;0,5;Cerrado
-Licania parvifolia;Pimenteira pantanal;Chrysobalanaceae;0,5;Cerrado
-Xylopia emarginata;Pinda ba;Annonaceae;0,5;Cerrado
-Syagrus romanzoffiana;Pind ;Arecaceae;0,5;Cerrado
-Pinus sp;Pinus;Pinaceae;0,5;Cerrado
-Eugenia uniflora;Pitangueira;Myrtaceae;0,5;Cerrado
-Talisia esculenta;Pitomba;Sapindaceae;0,5;Cerrado
-Tabebuia avellanedae;Piuva;Bignoniaceae;0,5;Cerrado
-Miconia cuspidata;Pixirica/Pixiric o;Melastomataceae;0,5;Cerrado
-Tapirira guianensis;Pombo;Anacardiaceae;0,5;Cerrado
-Rapanea guianensis;Pororoca;Myrsinaceae;0,5;Cerrado
-Strychnos pseudo-quina;Quina;Loganiaceae;0,5;Cerrado
-Strychnos pseudo-quina;Quina do cerrado;Loganiaceae;0,5;Cerrado
-Vochysia cinnamomea;Quina doce;Vochysiaceae;0,5;Cerrado
-Myrocarpus frondosus;Quina morada;Leguminosae-Papilionoideae;0,5;Cerrado
-Agonandra brasiliensis;Quinze cuia;Opiliaceae;0,5;Cerrado
-Peltogyne confertiflora;Roxinho;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Sapindus saponaria;Saboeiro;Sapindaceae;0,5;Cerrado
-Croton urucurana;Sangra d' gua;Euphorbiaceae;0,5;Cerrado
-Lecythis chartacea;Sapucaia;Lecythidaceae;0,5;Cerrado
-Leptolobium dasycarpum;Sena;Leguminosae-Papilionoideae;0,5;Cerrado
-Poincianella pluviosa;Sibipiruna;Leguminosae-Caesalpinoideae;0,5;Cerrado
-Salacia elliptica;Siputa;Hippocrateaceae;0,5;Cerrado
-Emmotum nitens;Sobre;Icacinaceae;0,5;Cerrado
-Styrax camporum;Stirax;Styracaceae;0,5;Cerrado
-Pterodon emarginatus;Sucupira branca;Leguminosae-Papilionoideae;0,5;Cerrado
-Bowdichia virgilioides;Sucupira preta;Leguminosae-Papilionoideae;0,5;Cerrado
-Celtis iguanaea;Talerinha;Cannabaceae;0,5;Cerrado
-Connarus suberosus;Tamanco;Connaraceae;0,5;Cerrado
-Crataeva tapia;Tapia;Capparaceae;0,5;Cerrado
-Mezilaurus navalium;Tapinho ;Lauraceae;0,5;Cerrado
-Vitex montevidensis;Tarum ;Lamiaceae;0,5;Cerrado
-Buchenavia tomentosa;Tarumarana;Combretaceae;0,5;Cerrado
-Magonia pubescens;Tigui do cerrado;Sapindaceae;0,5;Cerrado
-Magonia pubescens;Timbo;Sapindaceae;0,5;Cerrado
-Enterolobium contortisiliquum;Timbori do cerrado;Leguminosae-Mimosoideae;0,5;Cerrado
-Enterolobium contortisiliquum;Timboril/Timbouva;Leguminosae-Mimosoideae;0,5;Cerrado
-Erythrina mulungu;Tiriceiro;Leguminosae-Papilionoideae;0,5;Cerrado
-Esenbeckia febrifuga;Tres folhas;Rutaceae;0,5;Cerrado
-Leptolobium dasycarpum;Unha de anta;Leguminosae-Papilionoideae;0,5;Cerrado
-Mimosa claussenii;Unha de gato;Leguminosae-Mimosoideae;0,5;Cerrado
-Vernonia discolor;Vassoura;Asteraceae;0,5;Cerrado
-Hirtella glandulosa;Vermelh o;Chrysobalanaceae;0,5;Cerrado
-Plathymenia reticulata;Vinhatico;Leguminosae-Mimosoideae;0,5;Cerrado
-Virala sebifera;Xilop o;Miristicaceae;0,5;Cerrado
-Enterolobium contortisiliquum;Ximbuva;Leguminosae-Mimosoideae;0,5;Cerrado
+﻿NomeCientifico;NomeComum;Familia;FatorForma;Regiao;Area de Ocorrencia;Descricao-Area de Ocorrencia
+A identificar;Desconhecida;Desconhecida;0,5;Todas;;
+Pouteria torta;Abiu;Sapotaceae;0,5;Cerrado;;
+Pouteria torta;Abiu Do Cerrado;Sapotaceae;0,5;Cerrado;;
+Luehea paniculata;Açoita Cavalo;Malvaceae;0,5;Cerrado;;
+Vatairea macrocarpa;Amargoso;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Pterogyne nitens;Amendoim Bravo;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Acosmium subelegans;Amendoim Falso;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Protium heptaphyllum;Amescla;Burseraceae;0,5;Cerrado;;
+Andira anthelmia;Angelim;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Andira anthelmia;Angelim De Morcego;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Anadenanthera peregrina;Angico;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Anadenanthera columbrina;Angico Branco;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Anadenanthera falcata;Angico Do Cerrado;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Acacia polyphylla;Angico Preto;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Anadenanthera macrocarpa;Angico Vermelho;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Psidium firmum;Araçá;Myrtaceae;0,5;Cerrado;;
+Annona coriacea;Araticum;Annonaceae;0,5;Cerrado;;
+Annona crassiflora;Araticum Cortiça;Annonaceae;0,5;Cerrado;;
+Annona crassiflora;Araticum Do Cerrado;Annonaceae;0,5;Cerrado;;
+Annona coriacea;Araticum Do Mato;Annonaceae;0,5;Cerrado;;
+Astronium urundeuva;Aroeira;Anacardiaceae;0,5;Cerrado;;
+Lithraea molleoides;Aroeirinha;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Annona cornifolia;Ata;Annonaceae;0,5;Cerrado;;
+Acrocomia aculeata;Bacaiuva;Arecaceae;0,5;Cerrado;;
+Diptychandra aurantiaca;Balsaminho;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Diptychandra aurantiaca;Balsimi;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Stryphnodendron adstringens;Barbatimão;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Prosopis rubriflora;Barreiro Preto;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Dipteryx alata;Baru;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Eriotheca gracilipes;Bingueiro;Malvaceae;0,5;Cerrado;;
+Casearia sylvestris;Bugreiro;Salicaceae;0,5;Cerrado;;
+Mauritia flexuosa;Buriti;Arecaceae;0,5;Cerrado;;
+Rhamnidium elaeocarpus;Cabrito;Rhamnaceae;0,5;Cerrado;;
+Casearia sylvestris;Cafezinho Do Mato;Salicaceae;0,5;Cerrado;;
+Spondias macrocarpa;Caja;Anacardiaceae;0,5;Cerrado;;
+Anacardium humile;Cajuzinho Do Cerrado;Anacardiaceae;0,5;Cerrado;;
+Aloysia virgata;Camará;Verbenaceae;0,5;Cerrado;;
+Aloysia virgata;Camará De Lixa;Verbenaceae;0,5;Cerrado;;
+Vochysia divergens;Cambara;Vochysiaceae;0,5;Cerrado;;
+Vochysia haenkeana;Cambara Amarelo;Vochysiaceae;0,5;Cerrado;;
+Cupania vernalis;Camboata;Sapindaceae;0,5;Cerrado;;
+Piptocarpha rotundifolia;Candeia;Asteraceae;0,5;Cerrado;;
+Helietta apiculata;Canela De Veado;Rutaceae;0,5;Cerrado;;
+Miconia albicans;Canela De Velho;Melastomataceae;0,5;Cerrado;;
+Nectandra cissiflora;Canela Grande;Lauraceae;0,5;Cerrado;;
+Ocotea corymbosa;Canela Merda;Lauraceae;0,5;Cerrado;;
+Ocotea corymbosa;Canela Preta;Lauraceae;0,5;Cerrado;;
+Peltophorum dubium;Canfistula;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Byrsonima orbignyana;Canjiquinha;Malpighiaceae;0,5;Cerrado;;
+Terminalia argentia;Capitão;Combretaceae;0,5;Cerrado;;
+Terminalia brasiliensis;Capitãozinho;Combretaceae;0,5;Cerrado;;
+Diospyros hispida;Caqui Do Mato;Ebenaceae;0,5;Cerrado;;
+Copernicia prunifera;Caranda;Arecaceae;0,5;Cerrado;;
+Roupala montana;Carne De Vaca;Proteaceae;0,5;Cerrado;;
+Jacaranda brasiliana;Caroba;Bignoniaceae;0,5;Cerrado;;
+Callisthene fasciculata;Carvão;Vochysiaceae;0,5;Cerrado;;
+Diptychandra aurantiaca;Carvão Vermelho;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Sclerolobium paniculatum;Carvoeiro;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Calycophyllum multiflorum;Castelo;Rubiaceae;0,5;Cerrado;;
+Trichilia hirta;Catigua;Meliaceae;0,5;Cerrado;;
+Dalbergia miscolobium;Caviuna;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Machaerium hirtum;Cebolão;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Amburana cearensis;Cerejeira/Amburana;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Sterculia apetala;Chicha;Sterculiaceae;0,5;Cerrado;;
+Hirtella ciliata;Chorão;Chrysobalanaceae;0,5;Cerrado;;
+Piptocarpha rotundifolia;Cinzeiro;Asteraceae;0,5;Cerrado;;
+Cipo;Cipó;Cipo;0,5;Cerrado;;
+Salvertia convallariaeodora;Colher De Vaqueiro;Vochysiaceae;0,5;Cerrado;;
+Rollinia sylvatica;Conde Do Mato;Annonaceae;0,5;Cerrado;;
+Copaifera langsdorffii;Copaíba;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Mouriri elliptica;Coroa;Memecylaceae;0,5;Cerrado;;
+Mouriri elliptica;Croada;Memecylaceae;0,5;Cerrado;;
+Dipteryx alata;Cumbaru;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Lafoensia pacari;Dedaleiro;Lythraceae;0,5;Cerrado;;
+Lafoensia pacari;Didal;Lythraceae;0,5;Cerrado;;
+Cecropia pachystachya;Embauba;Urticaceae;0,5;Cerrado;;
+Bocageopsis mattogrossensis;Embira;Annonaceae;0,5;Cerrado;;
+Casearia gossypiosperma;Espeteiro;Salicaceae;0,5;Cerrado;;
+Eucalyptus sp;Eucalipto;Myrtaceae;0,5;Cerrado;;
+Coccoloba mollis;Falso Novateiro;Polygonaceae;0,5;Cerrado;;
+Dimorphandra mollis;Faveiro;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Ficus guaranitica;Figueira;Moraceae;0,5;Cerrado;;
+Triplaris brasiliana;Formigueiro;Polygonaceae;0,5;Cerrado;;
+Couepia grandiflora;Fruta De Ema;Chrysobalanaceae;0,5;Cerrado;;
+Simarouba versicolor;Fruta De Perdiz;Simaroubaceae;0,5;Cerrado;;
+Pouteria ramiflora;Fruta De Veado;Sapotaceae;0,5;Cerrado;;
+Apuleia leiocarpa;Garapa;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Acosmium subelegans;Genciana;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Genipa americana;Genipapo;Rubiaceae;0,5;Cerrado;;
+Astronium fraxinifolium;Gonçalo;Anacardiaceae;0,5;Cerrado;;
+Brachiaria humidicola;Gra Agulha;Graminea;0,5;Cerrado;;
+Baccharis dracunculifolia;Gra Alecrim;Graminea;0,5;Cerrado;;
+Digitaria insularis;Gra Amargoso;Graminea;0,5;Cerrado;;
+Andropogon bicornis;Gra Braquiarão;Graminea;0,5;Cerrado;;
+Brachiaria brizantha;Gra Braquiaria;Graminea;0,5;Cerrado;;
+Senna obtusifolia;Gra Capim 1;Graminea;0,5;Cerrado;;
+Andropogon fastigiatus Sw;Gra Capim-Andropogom;Graminea;0,5;Cerrado;;
+Saccharum asperum (Nees) Steud.;Gra Capim-Macega-Estaladeira-Branca;Graminea;0,5;Cerrado;;
+Andropogon leocostachus Kunt;Gra Capim-Membeca;Graminea;0,5;Cerrado;;
+Cenchrus echinatus;Gra Carrapixo;Graminea;0,5;Cerrado;;
+Sporobolus indicus;Gra Cerdinha;Graminea;0,5;Cerrado;;
+Cenchrus polystachios;Gra Espiga;Graminea;0,5;Cerrado;;
+Solanum palinacanthum;Gra Espinho;Graminea;0,5;Cerrado;;
+Eragrostis neesii;Gra Flecha;Graminea;0,5;Cerrado;;
+Sida sp.;Gra Ganchuma;Graminea;0,5;Cerrado;;
+Paspalum notatum;Gra Grama;Graminea;0,5;Cerrado;;
+Stylosantes capitata;Gra Grama Flor;Graminea;0,5;Cerrado;;
+Paspalum oteroi Swallen;Gra Grama-Tio-Pedro;Graminea;0,5;Cerrado;;
+Mimosa sp.;Gra Malicia;Graminea;0,5;Cerrado;;
+Gymnopogon foliosus;Gra Pé De Galinha;Graminea;0,5;Cerrado;;
+Bidens pilosa;Gra Picão;Graminea;0,5;Cerrado;;
+Fimbristylis autumnalis;Gra Salomão;Graminea;0,5;Cerrado;;
+Cyperus odoratus;Gra Tiririca;Graminea;0,5;Cerrado;;
+Aristida adscensionis;Gra Vassourinha;Graminea;0,5;Cerrado;;
+Patagonula americana;Guajuvira;Boraginaceae;0,5;Cerrado;;
+Myrcia rostrata;Guamirim Da Folha Miúda;Myrtaceae;0,5;Cerrado;;
+Calophyllum brasiliensis;Guanandi;Clusiaceae;0,5;Cerrado;;
+Aspidosperma subincanum;Guatambu;Apocynaceae;0,5;Cerrado;;
+Aspidosperma macrocarpon;Guatambu Branco;Apocynaceae;0,5;Cerrado;;
+Aspidosperma macrocarpon;Guatambu Do Cerrado;Apocynaceae;0,5;Cerrado;;
+Campomanesia adamantium;Guavira;Myrtaceae;0,5;Cerrado;;
+Inga edulis;Inga;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Inga edulis;Inga Amarelo;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Inga laurina;Inga Branco;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Samanea tubulosa;Inga Seco;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Inga sessilis;Inga Vermelho;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Tabebuia ochracea;Ipê Amarelo;Bignoniaceae;0,5;Cerrado;;
+Tabebuia roseo-alba;Ipê Branco;Bignoniaceae;0,5;Cerrado;;
+Tabebuia ochracea;Ipê Do Cerrado;Bignoniaceae;0,5;Cerrado;;
+Artocarpus heterophyllus;Jaca;Moraceae;0,5;Cerrado;;
+Machaerium acustifolium;Jacaranda;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Machaerium acustifolium;Jacaranda Bico De Pato;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Machaerium acustifolium;Jacaranda Do Campo;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Hymenaea stigonocarpa;Jatobá;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Hymenaea stigonocarpa;Jatobá Do Cerrado;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Cariniana estrellensis;Jequitiba;Lecythidaceae;0,5;Cerrado;;
+Piptocarpha rotundifolia;Laranjinha;Asteraceae;0,5;Cerrado;;
+Sapium glandulosum;Leiteiro;Euphorbiaceae;0,5;Cerrado;;
+Salvertia convallariaeodora;Liana;Vochysiaceae;0,5;Cerrado;;
+Curatella americana;Lixeira;Dilleniaceae;0,5;Cerrado;;
+Curatella americana;Lixeirinha;Dilleniaceae;0,5;Cerrado;;
+Solanum lycocarpum;Lobeira;Solanaceae;0,5;Cerrado;;
+Cordia sellowiana;Loro;Boraginaceae;0,5;Cerrado;;
+Cordia trichotoma;Loro Preto;Boraginaceae;0,5;Cerrado;;
+Vatairea macrocarpa;Mata Leitoso;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Brosimum gaudichaudii;Mama Cadela;Moraceae;0,5;Cerrado;;
+Zanthoxylum hasslerianum;Mamica;Rutaceae;0,5;Cerrado;;
+Didymopanax morototoni;Mandiocão;Araliaceae;0,5;Cerrado;;
+Austroplenckia populnea;Mangaba;Celastraceae;0,5;Cerrado;;
+Austroplenckia populnea;Mangabeira Brava;Celastraceae;0,5;Cerrado;;
+Dilodendron bipinnatum;Maria Pobre;Sapindaceae;0,5;Cerrado;;
+Mimosa bimucronata;Maricá;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Guarea guidonia;Marinheiro;Meliaceae;0,5;Cerrado;;
+Alibertia edulis;Marmeleiro;Rubiaceae;0,5;Cerrado;;
+Licania humilis;Marmelinho Do Cerrado;Chrysobalanaceae;0,5;Cerrado;;
+Alibertia edulis;Marmelo;Rubiaceae;0,5;Cerrado;;
+Alibertia edulis;Marmelo De Cavalo;Rubiaceae;0,5;Cerrado;;
+Annona coriacea;Marolo;Annonaceae;0,5;Cerrado;;
+Simarouba versicolor;Mata Cachorro;Simaroubaceae;0,5;Cerrado;;
+Miconia cuspidata;Miconia;Melastomataceae;0,5;Cerrado;;
+Salvertia convallariaeodora;Moliana;Vochysiaceae;0,5;Cerrado;;
+Andira anthelmia;Morcegueiro;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Maclura tinctoria;Moreira;Moraceae;0,5;Cerrado;;
+Morta - N o identificada;Morta - Não Identificada;Morta - N o identificada;0,5;Cerrado;;
+Byrsonima basiloba;Murici;Malpighiaceae;0,5;Cerrado;;
+Byrsonima coccolobifolia;Murici Do Cerrado;Malpighiaceae;0,5;Cerrado;;
+Diospyros burchellii;Muricizão;Ebenaceae;0,5;Cerrado;;
+Byrsonima basiloba;Muricizeiro;Malpighiaceae;0,5;Cerrado;;
+Guazuma ulmifolia;Mutambo;Malvaceae;0,5;Cerrado;;
+Siparuna guianesis;Negamina;Siparunaceae;0,5;Cerrado;;
+Heteropterys tomentosa;Nó De Cachorro;Malpighiaceae;0,5;Cerrado;;
+Ormosia arborea;Olho De Cabra;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Cnidoscolus vitifolius;Ortiga;Euphorbiaceae;0,5;Cerrado;;
+Pseudobombax grandiflorum;Paineira;Malvaceae;0,5;Cerrado;;
+Tabebuia caraiba;Paratudo;Bignoniaceae;0,5;Cerrado;;
+Bauhinia forficata;Pata De Vaca;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Sclerolobium aureum;Pau Bosta;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Emmotum nitens;Pau De Sobre;Icacinaceae;0,5;Cerrado;;
+Vochysia cinnamomea;Pau Doce;Vochysiaceae;0,5;Cerrado;;
+Agonandra brasiliensis;Pau Marfim;Opiliaceae;0,5;Cerrado;;
+Copaifera langsdorffii;Pau Oleo;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Tabebuia caraiba;Pau Paratudo;Bignoniaceae;0,5;Cerrado;;
+Kielmeyera variabilis;Pau Santo;Clusiaceae;0,5;Cerrado;;
+Qualea grandiflora;Pau Terra;Vochysiaceae;0,5;Cerrado;;
+Qualea grandiflora;Pau Terra Comum;Vochysiaceae;0,5;Cerrado;;
+Qualea dichotoma;Pau Terra Da Mata;Vochysiaceae;0,5;Cerrado;;
+Qualea multiflora;Pau Terra Liso;Vochysiaceae;0,5;Cerrado;;
+Qualea parviflora;Pau Terra Mirim;Vochysiaceae;0,5;Cerrado;;
+Qualea parviflora;Pau Terrinha;Vochysiaceae;0,5;Cerrado;;
+Priogymnanthus hasslerianus;Pau Vidro;Oleaceae;0,5;Cerrado;;
+Tapirira guianensis;Peito De Pombo;Anacardiaceae;0,5;Cerrado;;
+Apeiba tibourbou;Pente De Macaco;Malvaceae;0,5;Cerrado;;
+Caryocar brasiliense;Pequi;Caryocaraceae;0,5;Cerrado;;
+Simarouba versicolor;Perdiz;Simaroubaceae;0,5;Cerrado;;
+Aspidosperma cylindrocarpon;Peroba Rosa;Apocynaceae;0,5;Cerrado;;
+Xylopia aromatica;Pimenta De Macaco;Annonaceae;0,5;Cerrado;;
+Xylopia aromatica;Pimenteira;Annonaceae;0,5;Cerrado;;
+Licania parvifolia;Pimenteira Pantanal;Chrysobalanaceae;0,5;Cerrado;;
+Xylopia emarginata;Pindaíba;Annonaceae;0,5;Cerrado;;
+Syagrus romanzoffiana;Pindó;Arecaceae;0,5;Cerrado;;
+Pinus sp;Pinus;Pinaceae;0,5;Cerrado;;
+Eugenia uniflora;Pitangueira;Myrtaceae;0,5;Cerrado;;
+Talisia esculenta;Pitomba;Sapindaceae;0,5;Cerrado;;
+Tabebuia avellanedae;Piuva;Bignoniaceae;0,5;Cerrado;;
+Miconia cuspidata;Pixirica/Pixiricão;Melastomataceae;0,5;Cerrado;;
+Tapirira guianensis;Pombo;Anacardiaceae;0,5;Cerrado;;
+Rapanea guianensis;Pororoca;Myrsinaceae;0,5;Cerrado;;
+Strychnos pseudo-quina;Quina;Loganiaceae;0,5;Cerrado;;
+Strychnos pseudo-quina;Quina Do Cerrado;Loganiaceae;0,5;Cerrado;;
+Vochysia cinnamomea;Quina Doce;Vochysiaceae;0,5;Cerrado;;
+Myrocarpus frondosus;Quina Morada;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Agonandra brasiliensis;Quinze Cuia;Opiliaceae;0,5;Cerrado;;
+Peltogyne confertiflora;Roxinho;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Sapindus saponaria;Saboeiro;Sapindaceae;0,5;Cerrado;;
+Croton urucurana;Sangra D'Água;Euphorbiaceae;0,5;Cerrado;;
+Lecythis chartacea;Sapucaia;Lecythidaceae;0,5;Cerrado;;
+Leptolobium dasycarpum;Sena;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Poincianella pluviosa;Sibipiruna Cerrado;Leguminosae-Caesalpinoideae;0,5;Cerrado;;
+Salacia elliptica;Siputa;Hippocrateaceae;0,5;Cerrado;;
+Emmotum nitens;Sobre;Icacinaceae;0,5;Cerrado;;
+Styrax camporum;Stirax;Styracaceae;0,5;Cerrado;;
+Pterodon emarginatus;Sucupira Branca;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Bowdichia virgilioides;Sucupira Preta;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Celtis iguanaea;Talerinha;Cannabaceae;0,5;Cerrado;;
+Connarus suberosus;Tamanco;Connaraceae;0,5;Cerrado;;
+Crataeva tapia;Tapia;Capparaceae;0,5;Cerrado;;
+Mezilaurus navalium;Tapinhoã;Lauraceae;0,5;Cerrado;;
+Vitex montevidensis;Tarumã;Lamiaceae;0,5;Cerrado;;
+Buchenavia tomentosa;Tarumarana;Combretaceae;0,5;Cerrado;;
+Magonia pubescens;Tigui Do Cerrado;Sapindaceae;0,5;Cerrado;;
+Magonia pubescens;Timbo;Sapindaceae;0,5;Cerrado;;
+Enterolobium contortisiliquum;Timbori Do Cerrado;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Enterolobium contortisiliquum;Timboril/Timbouva;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Erythrina mulungu;Tiriceiro;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Esenbeckia febrifuga;Tres Folhas;Rutaceae;0,5;Cerrado;;
+Leptolobium dasycarpum;Unha De Anta;Leguminosae-Papilionoideae;0,5;Cerrado;;
+Mimosa claussenii;Unha De Gato;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Vernonia discolor;Vassoura;Asteraceae;0,5;Cerrado;;
+Hirtella glandulosa;Vermelhão;Chrysobalanaceae;0,5;Cerrado;;
+Plathymenia reticulata;Vinhatico;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Virala sebifera;Xilopó;Miristicaceae;0,5;Cerrado;;
+Enterolobium contortisiliquum;Ximbuva;Leguminosae-Mimosoideae;0,5;Cerrado;;
+Carpotroche brasiliensis (Raddi) A Gray;Ruchuchu;ACHARIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Anacardium occidentale L.;Cajueiro;ANACARDIACEAE;0,5;Mata Atlantica;RE;Restinga (Vegetação com influência marinha)
+Astronium fraxinifolium Schott;Gonçalo-Alves;ANACARDIACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Astronium graveolens Jacq.;Guaritá;ANACARDIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Schinus terebinthifolius Raddi;Aroeira;ANACARDIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Spondias mombin L.;Cajá-Mirim;ANACARDIACEAE;0,5;Mata Atlantica;FE*;Floresta Estacional
+Tapirira guianensis Aubl.;Pau-Pombo;ANACARDIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Annona cacans Warm;Araticum-Cagão;ANNONACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Annona dolabripetala Raddi.;Pinha Do Mato;ANNONACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Annona mucosa Jacq.;Biribá;ANNONACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Annona sylvatica A.St.-Hil.;Araticum-Da-Mata;ANNONACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Xylopia sericea A. St.-Hil.;Imbiú;ANNONACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Aspidosperma cylindrocarpon Mull. Arg.;Peroba-Rosa;APOCYNACEAE;0,5;Mata Atlantica;FE*;Floresta Estacional
+Aspidosperma parvifolium A. DC.;Guatambu-Oliva;APOCYNACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Aspidosperma ramiflorum Müll.Arg.;Guatambu-Amarelo;APOCYNACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Aspidosperma subincanum Mart.;Guatambú-Vermelho;APOCYNACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Himatanthus bracteatus (A. DC.) Woodson;Sucuba;APOCYNACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Tabernaemontana hystrix Steud.;Leiteira;APOCYNACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Tabernaemontana catharinensis A.DC.;Leiteira;APOCYNACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Allagoptera arenaria (Gomes) Kuntze;Guriri;ARECACEAE;0,5;Mata Atlantica;RE;Restinga (Vegetação com influência marinha)
+Allagoptera caudescens (Mart.) Kuntze;Palmito-Amargo;ARECACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Attalea dubia (Mart.) Burret;Indaiá;ARECACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Bactris setosa Mart.;Tucum;ARECACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Euterpe edulis Mart.;Palmito-Juçara;ARECACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Syagrus romanzoffiana (Cham.) Glassman;Jerivá;ARECACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Moquiniastrum polymorphum (Less.) G. Sancho;Camará;ASTERACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Piptocarpha axillaris (Less.) Baker;Cambará-Do-Campo;ASTERACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Stifftia chrysantha J. C. Mikan;Diadema;ASTERACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cybistax antisyphilitica (Mart.) Mart.;Ipê-Mandioca;BIGNONIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Handroanthus albus (Charm.) Mattos;Ipê-Da-Serra;BIGNONIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Handroanthus chrysotrichus (Mart. ex DC.) Mattos;Ipê-Dourado;BIGNONIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Handroanthus heptaphyllus (Vell.) Mattos;Ipê-Roxo;BIGNONIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Handroanthus impetiginosus (Mart. ex DC.) Mattos;Ipê-Rosa;BIGNONIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Handroanthus ochraceus (Cham.) Mattos;Ipê-Cascudo;BIGNONIACEAE;0,5;Mata Atlantica;FE sobre rochas;Floresta Estacional Sobre Rochas
+Handroanthus serratifolius (A.H.Gentry) S.Grose;Ipê-Amarelo;BIGNONIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Handroanthus umbellatus (Sond.) Mattos;Ipê-Amarelo-Do-Brejo;BIGNONIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Handroanthus vellosoi (Toledo) Mattos;Ipê-Peto;BIGNONIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Jacaranda macrantha Cham.;Carobão;BIGNONIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Jacaranda micrantha Cham.;Caroba;BIGNONIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Jacaranda puberula Cham.;Caroba-Roxa;BIGNONIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Sparattosperma leucanthum (Vell.) K. Schum.;Ipê-Cinco-Folhas;BIGNONIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Tabebuia cassinoides (Lam.) DC.;Pau-Tamanco;BIGNONIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Tabebuia roseoalba (Ridl.) Sand.;Ipê-Branco;BIGNONIACEAE;0,5;Mata Atlantica;FE*;Floresta Estacional
+Zeyheria tuberculosa (Vell.) Bureau ex Verl.;Ipê-Felpudo;BIGNONIACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Bixa orellana L.;Urucum;BIXACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Cordia superba Cham.;Babosa-Branca;BORAGINACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cordia trichotoma (Vell.) Arrab. ex Steud;Louro-Pardo;BORAGINACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Protium brasiliense (Spreng.) Engl.;Amescla;BURSERACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Protium heptaphyllum (Aubl.) Marchand;Breu;BURSERACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Calophyllum brasiliense Cambess.;Guanandi;CALOPHYLLACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Kielmeyera membranacea Casar.;Pequiá-Branco;CALOPHYLLACEAE;0,5;Mata Atlantica;RE;Restinga (Vegetação com influência marinha)
+Trema micrantha (L.) Blume;Crindiúva;CANNABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Crateva tapia L.;Fruta-De-Gambá;CAPPARACEAE;0,5;Mata Atlantica;RE*;Restinga (Vegetação com influência marinha)
+Cynophalla flexuosa (L.) J.Presl;Timbó;CAPPARACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Jacaratia spinosa (Aubl.) A. DC.;Mamão-Jaracatiá;CARICACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Maytenus communis Reissek;Café-Do-Mato-Grande;CELASTRACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Maytenus obtusifolia Mart.;Maitenus;CELASTRACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Clethra scabra Pers.;Canela-Abacate;CLETHRACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Clusia fluminensis Planch. & Triana;Clúsia;CLUSIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Clusia lanceolata Cambess.;Cebola-Do-Mato;CLUSIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Garcinia brasiliensis Mart.;Bacupari;CLUSIACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Garcinia gardneriana (Planch. & Triana) Zappi;Bacupari;CLUSIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Symphonia globulifera L. f.;Anani;CLUSIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Tovomitopsis paniculata (Spreng.) Planch. & Triana;Azedinha;CLUSIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Terminalia glabrescens Mart.;Capitãozinho;COMBRETACEAE;0,5;Mata Atlantica;FE*;Floresta Estacional
+Diospyros inconstans Jacq.;Caqui-Da-Restinga;EBENACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Sloanea hirsuta (Schott) Planch. ex Benth.;Gindiba;ELAEOCARPACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Erythroxylum pulchrum A.St.-Hil.;Arco-De-Pipa;ERYTHROXYLACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Erythroxylum deciduum A. St.- Hil.;Jaboticaba-Da-Praia;ERYTHROXYLACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Alchornea glandulosa Poepp. & Endl.;Moquequeira;EUPHORBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Alchornea triplinervia (Spreng.) Mull. Arg.;Tapiá;EUPHORBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Aparisthmium cordatum (A.Juss.) Baill.;Marmeleiro;EUPHORBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Croton floribundus Spreng.;Capixingui;EUPHORBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Croton urucurana Baill.;Sangra D'Água;EUPHORBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Joannesia princeps Vell.;Cutieira;EUPHORBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Mabea fistulifera Mart.;Canudo-De-Pito;EUPHORBIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Sapium glandulosum (L.) Morong;Leiteiro;EUPHORBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Tetrorchidium rubrivenium Poepp.;Sucanga;EUPHORBIACEAE;0,5;Mata Atlantica;MZ;Manguezal (Vegetação com influência fluviomarinha)
+Albizia niopoides (Spruce ex Benth.) Burkart;Farinha-Seca;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Albizia polycephala (Benth.) Killip ex Record;Farinha-Seca;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Anadenanthera colubrina (Vell.) Brenan;Angico-Branco;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Anadenanthera peregrina (L.) Speg.;Angico-Cascudo;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Andira anthelmia (Vell.) Benth.;Angelim-Pedra;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Andira fraxinifolia Benth.;Angelim-Doce;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Andira legalis (Vell.) Toledo;Angelim-Coco;FABACEAE;0,5;Mata Atlantica;RE;Restinga (Vegetação com influência marinha)
+Apuleia leiocarpa (Vogel) J.F. Macbr.;Garapa;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Bauhinia forficata Link;Pata-De-Vaca;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Bauhinia longifolia (Bong.) Steud.;Unha-De-Vaca;FABACEAE;0,5;Mata Atlantica;FE*;Floresta Estacional
+Caesalpinia echinata Lam.;Pau-Brasil;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cassia ferruginea (Schrad.) Schrad. ex DC.;Canafístula;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Cassia grandis L. f.;Cássia-Rosa;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Centrolobium robustum (Vell.) Mart. ex Benth;Araribá;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Centrolobium tomentosum Guillem. ex Benth.;Araribá-Rosa;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Chamaecrista ensiformis (Vell.) H.S. Irwin & Barneby;Macanaíba;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Chloroleucon tortum (Mart.) Pittier;Tataré;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Copaifera langsdorffii Desf.;Copaíba;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Copaifera trapezifolia Hayne;Óleo-De-Copaíba;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Dalbergia foliolosa Benth.;Caviúna-Do-Campo;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Dalbergia nigra (Vell.) Allemão ex Benth.;Caviúna;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Enterolobium contortisiliquun (Vell.) Morong;Orelha-De-Macaco;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Erythrina cristagalli L.;Corticeira;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Erythrina falcata Benth.;Mulungu;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Erythrina fusca Lour.;Feijão-Bravo;FABACEAE;0,5;Mata Atlantica;RE*;Restinga (Vegetação com influência marinha)
+Erythrina speciosa Andrews;Suinã;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Erythrina verna Vell.;Mulungu;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Hymenaea courbaril L.;Jatobá;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Inga edulis Mart.;Ingá-Cipó;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Inga lenticellata Benth.;Ingá;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Inga laurina (Sw.) Willd.;Ingá-Do-Brejo;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Inga marginata Willd.;Ingá-Feijão;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Inga sessilis (Vell.) Mart.;Ingá-Ferradura;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Inga thibaudiana DC.;Ingá-Ferro;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Inga vera Wild.;Ingá-Banana;FABACEAE;0,5;Mata Atlantica;FE*;Floresta Estacional
+Libidibia ferrea (Mart. ex Tul.) L.P.Queiroz;Pau-Ferro;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Lonchocarpus cultratus (Vell.) A. M. G. Azevedo & H. C. Lima;Embira-De-Sapo;FABACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Machaerium brasiliense Vogel;Jacarandá-Bico-De-Pato;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Machaerium hirtum (Vell.) Stellfeld;Pau-Angu;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Machaerium incorruptibile (Vell.) Benth.;Jacarandá-Preto;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Machaerium nyctitans (Vell.) Benth.;Guaximbé;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Machaerium paraguariense Hassl.;Jacarandá-Branco;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Machaerium pedicellatum Vogel;Jacarandá-Fruto-Grande;FABACEAE;0,5;Mata Atlantica;FE*;Floresta Estacional
+Machaerium stipitatum (DC.) Vogel;Sapuva;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Melanoxylon brauna Schott;Braúna;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Mimosa bimucronata (DC.) Kuntze;Maricá;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Mimosa caesalpiniifolia Benth.;Sabiá;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Moldenhawera polysperma (Vell.) Stellfeld;Caingá;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Myrocarpus frondosus Allemão;Cabreúva;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Myroxylon peruiferum L. f.;Bálsamo;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Ormosia arborea (Vell.) Harms;Olho-De-Cabra;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Parapiptadenia pterosperma (Benth.) Brenan;Angico-Roxo;FABACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Peltophorum dubium (Spreng.) Taub.;Angico-Amarelo;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Piptadenia gonoacantha (Mart.) J. F. Macbr.;Monjolo-Jacaré;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Piptadenia paniculata Benth.;Maminha-De-Porca;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Plathymenia reticulata Benth.;Vinhático;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Platycyamus regnellii Benth.;Mangalô;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Platypodium elegans Vogel;Faveiro;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Poincianella pluviosa (DC.) L.P.Queiroz;Sibipiruna;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Pseudopiptadenia contorta (DC.) G.P.Lewis & M.P. Lima;Angico-Foice;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Pseudopiptadenia inaequalis (Benth.) Rauschert;Monjolo-Caixa-D'Água;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Pseudopiptadenia warmingii (Benth.) G.P.Lewis & M.P.Lima;Cambuí-Vinhático;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Pterocarpus rohrii Vahl;Aldrago;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Pterogyne nitens Tul.;Amendoim-Bravo;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Schizolobium parahyba (Vell.) Blake;Guapuruvú;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Senegalia polyphylla (DC.) Britton & Rose;Monjoleiro;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Senna alata (L.) Roxb.;Candelabro;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Senna macranthera (DC. ex Collad.) H. S. Irwin & Barneby;Fedegoso;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Senna multijuga (Rich.) H. S. Irwin & Barneby;Aleluia;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Senna silvestris (Vell.) H.S. Irwin & Barneby;Fedegoso-Do-Mato;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Sophora tomentosa L.;Sofora;FABACEAE;0,5;Mata Atlantica;RE;Restinga (Vegetação com influência marinha)
+Stryphnodendron polyphyllum Mart.;Barbatimão-Da-Mata;FABACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Swartzia apetala Raddi;Arruda-Vermelha;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Swartzia flaemingii Raddi;Tamarindo-De-Boi;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Swartzia langsdorffii Raddi;Mal-Casado;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Swartzia myrtifolia Sm.;Mata-Cachorro;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Tachigali denudata (Vogel) Oliveira-Filho;Angá;FABACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Tachigali rugosa (Mart. ex Benth.) Zarucchi & Pipoly;Angá-Rugoso;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Vatairea heteroptera (Allemão) Ducke;Angelim-Roxo;FABACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Lacistema pubescens Mart.;Café-Do-Mato;LACISTEMACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Aegiphila integrifolia (Jacq.) Moldenke;Tamanqueiro;LAMIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Vitex polygama Cham.;Vitex;LAMIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Nectandra megapotamica (Spreng.) Mez;Canela-Preta;LAURACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Nectandra membranacea (Sw.) Griseb.;Canelão;LAURACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Nectandra oppositifolia Nees;Canela-Ferrugem;LAURACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Nectandra reticulata (Ruiz & Pav.) Mez;Canela-Jacú;LAURACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Cariniana estrellensis (Raddi) Kuntze;Jequitibá-Branco;LECYTHIDACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cariniana legalis (Mart.) Kuntze;Jequitibá-Rosa;LECYTHIDACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Couratari macrosperma A.C.Sm.;Imbirema;LECYTHIDACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Lecythis lurida (Miers) S.A. Mori;Inuíba-Vermelha;LECYTHIDACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Lecythis pisonis Cambess.;Sapucaia;LECYTHIDACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Bunchosia maritima (Vell.) J.F.Macbr.;Cachita;MALPIGHIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Byrsonima sericea DC.;Murici;MALPIGHIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Apeiba tibourbou Aubl.;Pau-Jangada;MALVACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Basiloxylon brasiliensis (All.) K.Schum.;Pau-Rei;MALVACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Ceiba erianthos (Cav) K. Schum.;Paineira-Das-Pedras;MALVACEAE;0,5;Mata Atlantica;RE (sobre afloramentos rochososos);Restinga (Vegetação com influência marinha) Sobre Rochas
+Ceiba speciosa (A. St.-Hil.) Ravenna;Paineira-Rosa;MALVACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eriotheca candolleana (K.Schum.) A.Robyns;Embiruçu;MALVACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Eriotheca pentaphylla (Vell. & K. Schum.) A. Robyns;Embiruçu-Branco;MALVACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Luehea divaricata Mart. & Zucc.;Açoita-Cavalo;MALVACEAE;0,5;Mata Atlantica;FE*;Floresta Estacional
+Luehea grandiflora Mart. & Zucc.;Ivitinga;MALVACEAE;0,5;Mata Atlantica;FE*;Floresta Estacional
+Luehea paniculata Mart.& Zucc.;Açoita-Cavalo;MALVACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Guazuma ulmifolia Lam.;Mutambo;MALVACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Pseudobombax grandiflorum (Cav.) A. Robyns;Embiruçu;MALVACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Pseudobombax longiflorum (Mart. & Zucc.) A.Robyns;Embiruçú-Cinco-Quinas;MALVACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Talipariti pernambucense (Arruda) Bovini;Algodoeiro-De-Restinga;MALVACEAE;0,5;Mata Atlantica;MZ;Manguezal (Vegetação com influência fluviomarinha)
+Schwartzia brasiliensis (Choisy) Bedell ex Gir.-Cañas;Norantea;MARCGRAVIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Miconia cinerascens Miq.;Jacatirão;MELASTOMATACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Miconia cinnamomifolia (DC.) Naudin;Jacatirão-Açú;MELASTOMATACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Miconia holosericea (L.) DC.;Pixiricão;MELASTOMATACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Miconia mirabilis (Aubl.) L. O. Williams.;Pixirica-Roxa;MELASTOMATACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Tibouchina granulosa (Desr.) Cogn;Quaresmeira;MELASTOMATACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Tibouchina mutabilis (Vell.) Cogn.;Manacá-Da-Serra;MELASTOMATACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cabralea canjerana (Vell.) Mart.;Canjerana;MELIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Cedrela fissilis Vell.;Cedro-Rosa;MELIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cedrela odorata L.;Cedro-Branco;MELIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Guarea guidonia (L.) Sleumer;Carrapeta;MELIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Guarea macrophylla Vahl.;Carrapeta-Amarela;MELIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Trichilia casaretti C. DC.;Catinguá-Da-Restinga;MELIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Ficus enormis Mart. ex Miq.;Figueira-Da-Pedra;MORACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Sorocea guilleminiana Gaudich.;Folha-De-Serra;MORACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Calyptranthes brasiliensis Spreng.;Caliptrantes;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Calyptranthes lucida Mart. ex DC.;Caliptrantes-Do-Mato;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Campomanesia eugenioides (Cambess.) D.Legrand ex Landrum;Guavira-Laranja;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Campomanesia schlechtendaliana (O.Berg) Nied.;Guabiroba;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eugenia astringens Cambess.;Aperta-Guela;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eugenia brasiliensis Lam.;Grumixama;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eugenia candolleana DC.;Ameixa-Da-Mata;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eugenia copacabanensis Kiaeskr.;Princesinha-De-Copacabana;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eugenia florida DC.;Guamirim;MYRTACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Eugenia leonorae Mattos;Guamirim-Leonora;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eugenia magnifica Spring ex Mart.;Jamelão-Do-Mato;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eugenia pisiformis Cambess.;Cambuí-Tanguá;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eugenia punicifolia (Kunth) DC.;Cereja-Da-Praia;MYRTACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Eugenia pyriformis Cambess.;Uvaia;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eugenia selloi B.D.Jacks.;Pitangão;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eugenia speciosa Cambess.;Laranjinha-Do-Mato;MYRTACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Eugenia sulcata Spring ex Mart.;Pitanga-Preta;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Eugenia uniflora L.;Pitangueira;MYRTACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Myrcia aethusa (O.Berg.)N. Silveira;Guamirim-Da-Beira;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Myrcia anceps (Spreng.) O.Berg;Azeitona-Da-Beira;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Myrcia insularis Gardner;Canela-Do-Brejo;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Myrcia multiflora (Lam.) DC;Guamirim-Da-Praia;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Myrcia splendens (Sw.) DC.;Guamirim-Chorão;MYRTACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Myrciaria glazioviana (Kiaersk.) D.M. Barroso ex Sobral;Cabeludinha;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Neomitranthes obscura (DC.) N. Silveira;Cambuí-Da-Restinga;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Plinia cauliflora (Mart.) Kausel;Jaboticabeira;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Plinia complanata M.L.Kawas. & B.Holst;Cambucá-Vermelho;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Plinia edulis (Vell.) Sobral;Cambucá;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Plinia peruviana (Poir.) Govaerts;Jaboticaba-Mirim;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Psidium cattleianum Sabine;Araçá-Da-Praia;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Psidium guineense Sw;Araçá-Do-Campo;MYRTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Guapira opposita (Vell.) Reitz;Maria-Mole;NYCTAGINACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Guapira pernambucensis (Casar.) Lundell;João-Mole;NYCTAGINACEAE;0,5;Mata Atlantica;RE;Restinga (Vegetação com influência marinha)
+Ouratea cuspidata (A.St.-Hil.) Engl.;Oratéia;OCHNACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Ouratea stipulata (Vell.) Engl.;Ouratéia-Estipulada;OCHNACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Heisteria silvianii Schwacke;Flor-De-Cera;OLACACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Pera glabrata (Schott) Poepp. ex. Baill;Bucho-De-Sapo;PERACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Pera heteranthera (Schrank) I.M. Johnst;Tabocuva;PERACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Hyeronima alchorneoides Allemão;Urucurana;PHYLLANTHACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Margaritaria nobilis L. f.;Figueirinha;PHYLLANTHACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Gallesia integrifolia (Spreng.) Harms;Pau-D'Alho;PHYTOLACCACEAE;0,5;Mata Atlantica;RE*;Restinga (Vegetação com influência marinha)
+Seguieria langsdorffii Moq.;Limoeiro-Do-Mato;PHYTOLACCACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Coccoloba alnifolia Casar.;Bolo;POLYGONACEAE;0,5;Mata Atlantica;FE*;Floresta Estacional
+Coccoloba arborescens R. A. Howard;Cocoloba;POLYGONACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Myrsine coriacea R.Br. ex Roem. & Schult.;Capororoca-Ferrugem;PRIMULACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Myrsine gardneriana A.DC.;Capororoca-Branca;PRIMULACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Myrsine guianensis (Aubl.) Kuntze;Capororoca;PRIMULACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Myrsine umbellata Mart.;Capororocão;PRIMULACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Colubrina glandulosa Perkins;Sobrasil;RHAMNACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Scutia arenicola (Casar.) Reissek;Quixabinha;RHAMNACEAE;0,5;Mata Atlantica;RE;Restinga (Vegetação com influência marinha)
+Coutarea hexandra (Jacq.) K.Schum.;Quina;RUBIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Faramea multiflora A. Rich. ex DC.;Faramea-Azul;RUBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Genipa americana L.;Jenipapo;RUBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Posoqueria acutifolia Mart.;Baga-De-Macaco;RUBIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Posoqueria latifolia (Rudge) Schult.;Apuruí;RUBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Psychotria carthagenensis Jacq.;Juruvarana;RUBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Psychotria vellosiana Benth.;Árvore-De-Natal;RUBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Randia armata (Sw.) DC.;Limão-Do-Mato;RUBIACEAE;0,5;Mata Atlantica;FE*;Floresta Estacional
+Simira sampaioana (Standl.) Steyerm.;Negramina;RUBIACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Tocoyena bullata (Vell.) Mart.;Tocoiena;RUBIACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Tocoyena sellowiana (Cham. & Schltdl.) K.Schum.;Jenipapo-Bravo;RUBIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Dictyoloma vandellianum A. Juss.;Tingui;RUTACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Zanthoxylum rhoifolium Lam.;Mamica-De-Porca;RUTACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Meliosma itatiaiae Urb.;Pau-Macuco;SABIACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Casearia sylvestris Sw.;Pau-Lagarto;SALICACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Allophylus edulis (A.St.-Hil. et al.) Hieron. ex Niederl.;Baga-De-Morcego;SAPINDACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Allophylus petiolulatus Radlk.;Chau-Chau;SAPINDACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Cupania emarginata Cambess.;Camboatá-Da-Restinga;SAPINDACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cupania fluminensis Acev.-Rodr.;Camboatá-Peludo;SAPINDACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cupania oblongifolia Mart.;Camboata;SAPINDACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cupania racemosa (Vell.) Radlk;Camboatá-Miúdo;SAPINDACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cupania vernalis Cambess.;Cambotá-Vermelho;SAPINDACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Matayba guianensis Aubl.;Camboatá-Branco;SAPINDACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Sapindus saponaria L.;Sabão-De-Soldado;SAPINDACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Talisia esculenta (Cambess.) Radlk.;Pitomba;SAPINDACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Tripterodendron filicifolium Radlk.;Pau-Samambaia;SAPINDACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Chrysophyllum gonocarpum (Mart. & Eichler ex Miq.) Engl.;Bacubixá;SAPOTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Ecclinusa ramiflora Mart.;Acá-Peludo;SAPOTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Manilkara subsericea (Mart.) Dubard;Maçarandubinha;SAPOTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Pouteria caimito (Ruiz & Pav.) Radlk;Abiuzeiro;SAPOTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Pouteria grandiflora (A. DC.) Baehni;Abiu-Do-Mato;SAPOTACEAE;0,5;Mata Atlantica;RE;Restinga (Vegetação com influência marinha)
+Pouteria psammophila (Mart.) Radlk.;Abiu-Da-Restinga;SAPOTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Pouteria torta (Mart.) Radlk.;Acá;SAPOTACEAE;0,5;Mata Atlantica;FE;Floresta Estacional
+Pradosia lactescens (Vell.) Radlk.;Marmixa;SAPOTACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Sideroxylon obtusifolium (Roem. & Schult.) T. D. Penn.;Quixabeira;SAPOTACEAE;0,5;Mata Atlantica;RE;Restinga (Vegetação com influência marinha)
+Simarouba amara Aubl.;Caixeta;SIMAROUBACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Acnistus arborescens (L.) Schltdl.;Marianeira;SOLANACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Solanum pseudoquina A. St.-Hil.;Grão-De-Galo;SOLANACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Symplocos estrellensis Casar.;Congonha;SYMPLOCACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cecropia hololeuca Miq.;Embaúba-Prateada;URTICACEAE;0,5;Mata Atlantica;FO;Floresta Ombrófila
+Cecropia pachystachya Trécul;Embaúba-Branca;URTICACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Pourouma guianensis Aubl.;Embaúba-Da-Mata;URTICACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Citharexyllum myrianthum Cham.;Tarumã;VERBENACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Vochysia tucanorum Mart.;Canela-Santa;VOCHYSIACEAE;0,5;Mata Atlantica;FO*;Floresta Ombrófila
+Araucaria angustifolia (Bertol.) Kuntze;Araucária;ARAUCARIACEAE;0,5;Mata Atlantica;;
+Araucaria angustifolia (Bertol.) Kuntze;Pinheiro-Do-Paraná;ARAUCARIACEAE;0,5;Mata Atlantica;;
+Hovenia dulcis Thunb.;Uva-Do-Japão;RHAMNACEAE;0,5;Urbana/Exotica;;
+Mangifera indica L.;Mangueira;ANACARDIACEAE;0,5;Urbana/Exotica;;
+Persea americana Mill.;Abacateiro;LAURACEAE;0,5;Urbana/Exotica;;
+Morus nigra L.;Amoreira-Preta;MORACEAE;0,5;Urbana/Exotica;;
+Delonix regia (Bojer ex Hook.) Raf.;Flamboyant;FABACEAE;0,5;Urbana/Exotica;;
+Jacaranda mimosifolia D.Don;Jacarandá-Mimoso;BIGNONIACEAE;0,5;Urbana/Exotica;;
+Licania tomentosa (Benth.) Fritsch;Oiti;CHRYSOBALANACEAE;0,5;Mata Atlantica;;
+Terminalia catappa L.;Amendoeira;COMBRETACEAE;0,5;Urbana/Exotica;;
+Azadirachta indica A.Juss.;Nim;MELIACEAE;0,5;Urbana/Exotica;;
+Psidium guajava L.;Goiabeira;MYRTACEAE;0,5;Urbana/Exotica;;
+Malpighia emarginata DC.;Aceroleira;MALPIGHIACEAE;0,5;Urbana/Exotica;;
+Citrus limon (L.) Osbeck;Limoeiro;RUTACEAE;0,5;Urbana/Exotica;;
+Citrus sinensis (L.) Osbeck;Laranjeira;RUTACEAE;0,5;Urbana/Exotica;;
+Cocos nucifera L.;Coqueiro-Da-Baía;ARECACEAE;0,5;Urbana/Exotica;;
+Casuarina equisetifolia L.;Casuarina;CASUARINACEAE;0,5;Urbana/Exotica;;
+Lagerstroemia indica L.;Resedá;LYTHRACEAE;0,5;Urbana/Exotica;;
+Cassia fistula L.;Chuva-De-Ouro;FABACEAE;0,5;Urbana/Exotica;;
+Ligustrum lucidum W.T.Aiton;Alfeneiro;OLEACEAE;0,5;Urbana/Exotica;;
+Melia azedarach L.;Cinamomo;MELIACEAE;0,5;Urbana/Exotica;;
+Grevillea robusta A.Cunn. ex R.Br.;Grevílea;PROTEACEAE;0,5;Urbana/Exotica;;
+Tamarindus indica L.;Tamarindeiro;FABACEAE;0,5;Urbana/Exotica;;
+Eriobotrya japonica (Thunb.) Lindl.;Nespereira;ROSACEAE;0,5;Urbana/Exotica;;
+Bauhinia variegata L.;Pata-De-Vaca-Exótica;FABACEAE;0,5;Urbana/Exotica;;

@@ -44,14 +44,27 @@ PADRAO_NOME = re.compile(
     re.IGNORECASE,
 )
 
+# "E:589452 N:7398201 Zona 22S" -> (589452, 7398201)
+PADRAO_UTM = re.compile(r'E:(?P<e>-?\d+(?:\.\d+)?)\s+N:(?P<n>-?\d+(?:\.\d+)?)')
+
 CAMPOS_CSV = [
     "id", "arquivo",
     # Nomeadas igual às colunas da planilha principal (export do app/web), pra dar pra
     # cruzar com PROCV/PROCX sem precisar de coluna auxiliar/fórmula.
     "ID_Coleta_Parcela", "Linha", "Posicao_na_Linha",
     "arvore", "especie", "fazenda", "talhao", "projeto",
+    "Easting", "Northing", "utm",
     "identificado_por_ia", "comentario_exif_bruto",
 ]
+
+
+def extrair_easting_northing(utm_texto):
+    if not utm_texto:
+        return "", ""
+    m = PADRAO_UTM.search(utm_texto)
+    if not m:
+        return "", ""
+    return m.group("e"), m.group("n")
 
 
 # ───────────────────────────── Leitura EXIF / nome de arquivo ─────────────────────────────
@@ -167,6 +180,7 @@ def extrair(pasta, csv_path):
         fazenda = campos_exif.get("fazenda") or campos_nome.get("fazenda_arquivo") or ""
         talhao = campos_exif.get("talhao") or campos_nome.get("talhao_arquivo") or ""
         projeto = campos_exif.get("projeto") or ""
+        utm = campos_exif.get("utm") or ""
         identificado_ia = campos_exif.get("identificado por ia") or "Desconhecido"
 
         amostra = campos_exif.get("amostra") or campos_nome.get("amostra_arquivo") or ""
@@ -174,6 +188,8 @@ def extrair(pasta, csv_path):
         posicao = campos_nome.get("posicao_arquivo") or ""
         # Amostra entra na chave da árvore: L1P2 se repete entre amostras diferentes do mesmo talhão.
         arvore = f"A{amostra}_L{linha}P{posicao}" if linha and posicao else ""
+
+        easting, northing = extrair_easting_northing(utm)
 
         linhas.append({
             "id": i,
@@ -186,6 +202,9 @@ def extrair(pasta, csv_path):
             "fazenda": fazenda,
             "talhao": talhao,
             "projeto": projeto,
+            "Easting": easting,
+            "Northing": northing,
+            "utm": utm,
             "identificado_por_ia": identificado_ia,
             "comentario_exif_bruto": comentario or "",
         })
@@ -219,7 +238,7 @@ def carregar_fonte(tamanho, negrito=False):
     return ImageFont.load_default()
 
 
-def desenhar_marca_dagua(img, titulo, subtitulo):
+def desenhar_marca_dagua(img, titulo, linhas_subtitulo):
     img = img.convert("RGB")
     largura, altura = img.size
 
@@ -230,8 +249,9 @@ def desenhar_marca_dagua(img, titulo, subtitulo):
     padding = max(10, largura // 80)
 
     linhas = [(titulo, fonte_titulo)] if titulo else []
-    if subtitulo:
-        linhas.append((subtitulo, fonte_subtitulo))
+    for texto_sub in linhas_subtitulo:
+        if texto_sub:
+            linhas.append((texto_sub, fonte_subtitulo))
 
     if not linhas:
         return img
@@ -296,15 +316,22 @@ def marcar(pasta, csv_path, saida):
         if especie == "Desconhecida":
             pendentes_sem_especie.append(arquivo)
 
+        fazenda = (row.get("fazenda") or "").strip()
         talhao = (row.get("talhao") or "").strip()
         projeto = (row.get("projeto") or "").strip()
+        amostra = (row.get("ID_Coleta_Parcela") or "").strip()
+        linha_pos = (row.get("Linha") or "").strip()
+        posicao_pos = (row.get("Posicao_na_Linha") or "").strip()
+        utm = (row.get("utm") or "").strip()
 
         titulo = especie
-        partes_sub = [p for p in [f"Talhão: {talhao}" if talhao else None, projeto] if p]
-        subtitulo = " | ".join(partes_sub)
+        linha1 = " | ".join(p for p in [f"Projeto: {projeto}" if projeto else None, f"Fazenda: {fazenda}" if fazenda else None] if p)
+        posicao_str = f"Amostra: {amostra} | L:{linha_pos} P:{posicao_pos}" if linha_pos and posicao_pos else (f"Amostra: {amostra}" if amostra else None)
+        linha2 = " | ".join(p for p in [f"Talhão: {talhao}" if talhao else None, posicao_str] if p)
+        linha3 = f"Coordenada: {utm}" if utm else None
 
         with Image.open(foto) as img:
-            img_marcada = desenhar_marca_dagua(img, titulo, subtitulo)
+            img_marcada = desenhar_marca_dagua(img, titulo, [linha1, linha2, linha3])
             img_marcada.save(saida / arquivo, quality=90)
 
         marcadas += 1

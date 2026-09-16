@@ -31,7 +31,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     return await openDatabase(
       join(await getDatabasesPath(), 'geoforestv1.db'),
-      version: 79,
+      version: 80,
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -1034,6 +1034,14 @@ class DatabaseHelper {
               debugPrint("V79: coluna identificadoPorIa adicionada.");
             } catch (e) { debugPrint("V79: erro: $e"); }
           }
+          break;
+        case 80:
+          debugPrint(">>> EXECUTANDO MIGRAÇÃO V80 (recarrega catálogo de espécies do CSV) <<<");
+          try {
+            await db.delete('especies');
+            await _popularTabelaEspecies(db);
+            debugPrint("V80: catálogo de espécies recarregado.");
+          } catch (e) { debugPrint("V80: erro: $e"); }
           break;
       }
     }

@@ -28,10 +28,11 @@ import 'package:geoforestv1/utils/app_router.dart';
 import 'package:geoforestv1/utils/app_config.dart';
 
 void initializeProj4Definitions() {
+  // Projection.get() retorna null (não lança exceção) quando a projeção não existe,
+  // então um try/get()/catch/add() nunca cai no catch — Projection.add() precisa ser
+  // chamado sempre; é idempotente/seguro registrar de novo se já existir.
   void addProjectionIfNotExists(String name, String definition) {
-    try {
-      proj4.Projection.get(name);
-    } catch (_) {
+    if (proj4.Projection.get(name) == null) {
       proj4.Projection.add(name, definition);
     }
   }

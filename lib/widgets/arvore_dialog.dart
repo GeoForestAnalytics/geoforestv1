@@ -14,6 +14,10 @@ import 'package:geoforestv1/models/codigo_florestal_model.dart';
 import 'package:geoforestv1/data/repositories/codigos_repository.dart';
 import 'package:geoforestv1/services/ai_validation_service.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
+import 'package:proj4dart/proj4dart.dart' as proj4;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geoforestv1/utils/constants.dart';
+import 'package:geoforestv1/data/datasources/local/database_helper.dart' show proj4Definitions;
 import 'dart:io';
 import 'package:path/path.dart' as p;
 
@@ -222,6 +226,38 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     }
   }
 
+  /// Converte a coordenada da árvore pra UTM, mesma zona configurada nas amostras
+  /// (padrão SIRGAS 2000 / UTM Zona 22S). Retorna "UTM N/A" se não houver coordenada.
+  Future<String> _coordenadaUtm() async {
+    if (_latitude == null || _longitude == null) return "UTM N/A";
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
+      final codigoEpsg = zonasUtmSirgas2000[nomeZona] ?? 31982;
+
+      // Garante que a projeção está registrada — não depende só do registro global de
+      // main.dart (que já teve bug de não registrar de fato; mesmo corrigido, é mais
+      // seguro registrar aqui também, igual o export_service.dart já faz).
+      if (proj4.Projection.get('EPSG:4326') == null) {
+        proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+      }
+      if (proj4.Projection.get('EPSG:$codigoEpsg') == null) {
+        final def = proj4Definitions[codigoEpsg];
+        if (def != null) proj4.Projection.add('EPSG:$codigoEpsg', def);
+      }
+
+      final projWGS84 = proj4.Projection.get('EPSG:4326');
+      final projUTM = proj4.Projection.get('EPSG:$codigoEpsg');
+      if (projWGS84 == null || projUTM == null) return "UTM N/A";
+
+      final pUtm = projWGS84.transform(projUTM, proj4.Point(x: _longitude!, y: _latitude!));
+      // Sem "|" aqui de propósito — é o separador usado no comentário EXIF geral (ver descricao no _submit).
+      return "E:${pUtm.x.toInt()} N:${pUtm.y.toInt()} ${nomeZona.split('/').last.trim()}";
+    } catch (e) {
+      return "UTM N/A";
+    }
+  }
+
   Future<void> _carregarRegras() async {
     String tipo = widget.atividadeTipo ?? "IPC"; 
     
@@ -330,6 +366,9 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         pathOriginal: photo.path,
         informacoesHierarquia: metadados,
         nomeArquivoFinal: nomeArquivo,
+        // Não manda pra galeria ainda — a espécie só fica definitiva ao salvar a árvore
+        // (ver ImageUtils.salvarNaGaleria, chamado no _submit).
+        salvarNaGaleria: false,
       );
 
       setState(() {
@@ -528,14 +567,26 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
         identificadoPorIa: widget.isBio && _identificadoPorIa,
       );
 
-      // Regrava a descrição EXIF das fotos com a espécie agora conhecida — best-effort, sem aguardar.
+      // Regrava a descrição EXIF das fotos com a espécie e a coordenada (UTM) agora conhecidas.
       if (widget.isBio && _fotosArvore.isNotEmpty) {
+        final utm = await _coordenadaUtm();
+        if (!mounted) return;
         final descricao = "Projeto: ${widget.projetoNome} | Fazenda: ${widget.fazendaNome} | "
             "Talhao: ${widget.talhaoNome} | Amostra: ${widget.idParcela} | L:$linha P:$posicao | "
-            "Especie: ${arvore.especie} | Identificado por IA: ${arvore.identificadoPorIa ? 'Sim' : 'Não'}";
+            "Especie: ${arvore.especie} | Identificado por IA: ${arvore.identificadoPorIa ? 'Sim' : 'Não'} | "
+            "UTM: $utm";
         for (final caminho in _fotosArvore) {
-          ImageUtils.atualizarDescricaoExif(path: caminho, descricao: descricao);
+          await ImageUtils.atualizarDescricaoExif(path: caminho, descricao: descricao);
         }
+        if (!mounted) return;
+      }
+
+      // Só agora manda pra galeria pública — nome do arquivo e EXIF já estão definitivos.
+      if (_fotosArvore.isNotEmpty) {
+        for (final caminho in _fotosArvore) {
+          await ImageUtils.salvarNaGaleria(caminho);
+        }
+        if (!mounted) return;
       }
 
       // Lógica de retorno baseada nos botões
