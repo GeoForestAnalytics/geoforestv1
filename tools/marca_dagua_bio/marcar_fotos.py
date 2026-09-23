@@ -12,16 +12,21 @@ ficaram "Desconhecida" antes de gravar a marca d'água definitiva:
 
   1) extrair — lê cada foto da pasta (nome do arquivo + EXIF UserComment
      gravados pelo app) e gera um CSV com uma linha por foto (id, árvore,
-     espécie, talhão etc.), sem tocar nas imagens.
+     espécie, talhão etc.), sem tocar nas imagens originais. Também separa
+     CÓPIAS das fotos em duas subpastas, pra facilitar achar o que falta
+     classificar:
+       <pasta>/classificadas/     (+ classificadas/fotos_bio.csv)
+       <pasta>/sem_classificar/   (+ sem_classificar/fotos_bio.csv)
 
        python3 marcar_fotos.py extrair --pasta /caminho/das/fotos
 
-     Abra o CSV gerado (fotos_bio.csv) no Excel/Sheets e preencha a coluna
-     "especie" nas linhas que vieram como "Desconhecida".
+     Abra o CSV de "sem_classificar" no Excel/Sheets e preencha a coluna
+     "especie" nessas linhas (não precisa mover as fotos de pasta).
 
-  2) marcar — lê esse mesmo CSV (já corrigido por você) e desenha a marca
-     d'água em cada foto usando a espécie que está NA PLANILHA, não mais no
-     EXIF/nome do arquivo. O CSV vira a fonte da verdade.
+  2) marcar — lê o CSV (já corrigido por você) e desenha a marca d'água em
+     cada foto usando a espécie que está NA PLANILHA, não mais no EXIF/nome
+     do arquivo. Se as subpastas de "extrair" existirem, usa elas
+     automaticamente (soma as duas); senão, usa a pasta e o CSV informados.
 
        python3 marcar_fotos.py marcar --pasta /caminho/das/fotos
 
@@ -32,11 +37,15 @@ Instalação:
 import argparse
 import csv
 import re
+import shutil
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 EXTENSOES_VALIDAS = {".jpg", ".jpeg", ".png"}
+NOME_CSV_PADRAO = "fotos_bio.csv"
+PASTA_CLASSIFICADAS = "classificadas"
+PASTA_SEM_CLASSIFICAR = "sem_classificar"
 
 PADRAO_NOME = re.compile(
     r'^TREE_(?P<fazenda>.+?)_(?P<talhao>.+)_A(?P<amostra>[^_]+)_L(?P<linha>\d+)_P(?P<posicao>\d+)'
@@ -46,6 +55,10 @@ PADRAO_NOME = re.compile(
 
 # "E:589452 N:7398201 Zona 22S" -> (589452, 7398201)
 PADRAO_UTM = re.compile(r'E:(?P<e>-?\d+(?:\.\d+)?)\s+N:(?P<n>-?\d+(?:\.\d+)?)')
+
+# "... L:1 P:6 ..." -> (1, 6). Fica só "L:1 P:6" junto no comentário (sem "|" entre L e P),
+# por isso não dá pra usar o parsear_comentario genérico (chave:valor separado por "|") aqui.
+PADRAO_LP = re.compile(r'L:(?P<l>\d+)\s+P:(?P<p>\d+)')
 
 CAMPOS_CSV = [
     "id", "arquivo",
@@ -65,6 +78,15 @@ def extrair_easting_northing(utm_texto):
     if not m:
         return "", ""
     return m.group("e"), m.group("n")
+
+
+def extrair_linha_posicao_do_comentario(comentario):
+    if not comentario:
+        return "", ""
+    m = PADRAO_LP.search(comentario)
+    if not m:
+        return "", ""
+    return m.group("l"), m.group("p")
 
 
 # ───────────────────────────── Leitura EXIF / nome de arquivo ─────────────────────────────
@@ -162,6 +184,13 @@ def listar_fotos(pasta):
 
 # ───────────────────────────────── Etapa 1: extrair CSV ─────────────────────────────────
 
+def escrever_csv(csv_path, linhas):
+    with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=CAMPOS_CSV, delimiter=";")
+        writer.writeheader()
+        writer.writerows(linhas)
+
+
 def extrair(pasta, csv_path):
     pasta = Path(pasta)
     fotos = listar_fotos(pasta)
@@ -184,8 +213,11 @@ def extrair(pasta, csv_path):
         identificado_ia = campos_exif.get("identificado por ia") or "Desconhecido"
 
         amostra = campos_exif.get("amostra") or campos_nome.get("amostra_arquivo") or ""
-        linha = campos_nome.get("linha_arquivo") or ""
-        posicao = campos_nome.get("posicao_arquivo") or ""
+        linha_exif, posicao_exif = extrair_linha_posicao_do_comentario(comentario)
+        # EXIF primeiro — o nome do arquivo pode ter sido trocado por um app/serviço de
+        # transferência (ex.: baixou tudo renomeado pra números sequenciais).
+        linha = linha_exif or campos_nome.get("linha_arquivo") or ""
+        posicao = posicao_exif or campos_nome.get("posicao_arquivo") or ""
         # Amostra entra na chave da árvore: L1P2 se repete entre amostras diferentes do mesmo talhão.
         arvore = f"A{amostra}_L{linha}P{posicao}" if linha and posicao else ""
 
@@ -210,15 +242,39 @@ def extrair(pasta, csv_path):
         })
         print(f"  {i:>3}: {foto.name} -> {especie}")
 
-    with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=CAMPOS_CSV, delimiter=";")
-        writer.writeheader()
-        writer.writerows(linhas)
+    escrever_csv(csv_path, linhas)
 
-    pendentes = sum(1 for l in linhas if l["especie"] == "Desconhecida")
+    # Separa cópias em duas subpastas — mais fácil achar o que falta classificar
+    # sem precisar filtrar o CSV grande. Os arquivos originais na pasta-base não são
+    # tocados/movidos.
+    pasta_classificadas = pasta / PASTA_CLASSIFICADAS
+    pasta_sem_classificar = pasta / PASTA_SEM_CLASSIFICAR
+    pasta_classificadas.mkdir(exist_ok=True)
+    pasta_sem_classificar.mkdir(exist_ok=True)
+
+    linhas_classificadas = []
+    linhas_sem_classificar = []
+    for linha in linhas:
+        origem = pasta / linha["arquivo"]
+        if linha["especie"] == "Desconhecida":
+            destino_pasta, lista_destino = pasta_sem_classificar, linhas_sem_classificar
+        else:
+            destino_pasta, lista_destino = pasta_classificadas, linhas_classificadas
+        try:
+            shutil.copy2(origem, destino_pasta / linha["arquivo"])
+            lista_destino.append(linha)
+        except Exception as e:
+            print(f"  aviso: não consegui copiar {linha['arquivo']} para {destino_pasta.name}: {e}")
+
+    escrever_csv(pasta_classificadas / NOME_CSV_PADRAO, linhas_classificadas)
+    escrever_csv(pasta_sem_classificar / NOME_CSV_PADRAO, linhas_sem_classificar)
+
+    pendentes = len(linhas_sem_classificar)
     print(f"\n{len(linhas)} foto(s) listada(s) em {csv_path}")
+    print(f"{len(linhas_classificadas)} foto(s) com espécie -> {pasta_classificadas}")
+    print(f"{pendentes} foto(s) sem espécie -> {pasta_sem_classificar}")
     if pendentes:
-        print(f"{pendentes} com espécie 'Desconhecida' — abra o CSV, preencha a coluna 'especie' nessas linhas e rode o comando 'marcar' depois.")
+        print(f"\nAbra {pasta_sem_classificar / NOME_CSV_PADRAO}, preencha a coluna 'especie' e rode o comando 'marcar' depois.")
 
 
 # ───────────────────────────────── Etapa 2: marcar fotos ─────────────────────────────────
@@ -289,26 +345,43 @@ def marcar(pasta, csv_path, saida):
     saida = Path(saida)
     saida.mkdir(parents=True, exist_ok=True)
 
-    if not Path(csv_path).exists():
-        print(f"CSV não encontrado: {csv_path}\nRode 'extrair' primeiro.")
-        return
+    pasta_classificadas = pasta / PASTA_CLASSIFICADAS
+    pasta_sem_classificar = pasta / PASTA_SEM_CLASSIFICAR
+    usa_subpastas = pasta_classificadas.is_dir() and pasta_sem_classificar.is_dir()
 
-    linhas = ler_csv(csv_path)
+    if usa_subpastas:
+        print(f"Detectadas subpastas '{PASTA_CLASSIFICADAS}'/'{PASTA_SEM_CLASSIFICAR}' — usando elas (soma das duas).")
+        linhas = []
+        fontes_fotos = [pasta_classificadas, pasta_sem_classificar]
+        for fonte in fontes_fotos:
+            csv_fonte = fonte / NOME_CSV_PADRAO
+            if csv_fonte.exists():
+                linhas.extend(ler_csv(csv_fonte))
+            else:
+                print(f"  aviso: {csv_fonte} não encontrado, pulando essa subpasta.")
+    else:
+        if not Path(csv_path).exists():
+            print(f"CSV não encontrado: {csv_path}\nRode 'extrair' primeiro.")
+            return
+        linhas = ler_csv(csv_path)
+        fontes_fotos = [pasta]
+
     if not linhas:
-        print(f"CSV vazio: {csv_path}")
+        print("Nenhuma foto encontrada pra marcar.")
         return
 
     marcadas = 0
     faltando = 0
+    falhas = 0
     pendentes_sem_especie = []
 
     for row in linhas:
         arquivo = (row.get("arquivo") or "").strip()
         if not arquivo:
             continue
-        foto = pasta / arquivo
-        if not foto.exists():
-            print(f"  aviso: arquivo do CSV não encontrado na pasta: {arquivo}")
+        foto = next((f / arquivo for f in fontes_fotos if (f / arquivo).exists()), None)
+        if foto is None:
+            print(f"  aviso: arquivo do CSV não encontrado: {arquivo}")
             faltando += 1
             continue
 
@@ -330,14 +403,22 @@ def marcar(pasta, csv_path, saida):
         linha2 = " | ".join(p for p in [f"Talhão: {talhao}" if talhao else None, posicao_str] if p)
         linha3 = f"Coordenada: {utm}" if utm else None
 
-        with Image.open(foto) as img:
-            img_marcada = desenhar_marca_dagua(img, titulo, [linha1, linha2, linha3])
-            img_marcada.save(saida / arquivo, quality=90)
+        try:
+            with Image.open(foto) as img:
+                # Corrige a orientação real dos pixels a partir da tag EXIF de rotação —
+                # sem isso, foto tirada na vertical vem "deitada" e a marca sai na lateral.
+                img = ImageOps.exif_transpose(img)
+                img_marcada = desenhar_marca_dagua(img, titulo, [linha1, linha2, linha3])
+                img_marcada.save(saida / arquivo, quality=90)
+        except Exception as e:
+            print(f"  ERRO em {arquivo}, pulando: {e}")
+            falhas += 1
+            continue
 
         marcadas += 1
         print(f"  ok: {arquivo} -> {especie}")
 
-    print(f"\nConcluído: {marcadas} foto(s) marcada(s), {faltando} arquivo(s) do CSV não encontrados na pasta.")
+    print(f"\nConcluído: {marcadas} foto(s) marcada(s), {faltando} arquivo(s) do CSV não encontrados na pasta, {falhas} com erro ao processar.")
     print(f"Fotos marcadas em: {saida}")
     if pendentes_sem_especie:
         print(f"\nAtenção: {len(pendentes_sem_especie)} foto(s) ainda marcada(s) como 'Desconhecida' (espécie não preenchida no CSV):")

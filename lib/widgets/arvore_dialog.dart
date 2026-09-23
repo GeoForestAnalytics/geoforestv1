@@ -14,10 +14,8 @@ import 'package:geoforestv1/models/codigo_florestal_model.dart';
 import 'package:geoforestv1/data/repositories/codigos_repository.dart';
 import 'package:geoforestv1/services/ai_validation_service.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
-import 'package:proj4dart/proj4dart.dart' as proj4;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:geoforestv1/utils/constants.dart';
-import 'package:geoforestv1/data/datasources/local/database_helper.dart' show proj4Definitions;
+import 'package:geoforestv1/utils/utm_converter.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 
@@ -226,36 +224,12 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
     }
   }
 
-  /// Converte a coordenada da árvore pra UTM, mesma zona configurada nas amostras
-  /// (padrão SIRGAS 2000 / UTM Zona 22S). Retorna "UTM N/A" se não houver coordenada.
+  /// Converte a coordenada da árvore pra UTM, mesma zona configurada nas amostras.
+  /// Lógica real mora em utm_converter.dart (testada em test/utils/utm_converter_test.dart).
   Future<String> _coordenadaUtm() async {
-    if (_latitude == null || _longitude == null) return "UTM N/A";
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final nomeZona = prefs.getString('zona_utm_selecionada') ?? 'SIRGAS 2000 / UTM Zona 22S';
-      final codigoEpsg = zonasUtmSirgas2000[nomeZona] ?? 31982;
-
-      // Garante que a projeção está registrada — não depende só do registro global de
-      // main.dart (que já teve bug de não registrar de fato; mesmo corrigido, é mais
-      // seguro registrar aqui também, igual o export_service.dart já faz).
-      if (proj4.Projection.get('EPSG:4326') == null) {
-        proj4.Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
-      }
-      if (proj4.Projection.get('EPSG:$codigoEpsg') == null) {
-        final def = proj4Definitions[codigoEpsg];
-        if (def != null) proj4.Projection.add('EPSG:$codigoEpsg', def);
-      }
-
-      final projWGS84 = proj4.Projection.get('EPSG:4326');
-      final projUTM = proj4.Projection.get('EPSG:$codigoEpsg');
-      if (projWGS84 == null || projUTM == null) return "UTM N/A";
-
-      final pUtm = projWGS84.transform(projUTM, proj4.Point(x: _longitude!, y: _latitude!));
-      // Sem "|" aqui de propósito — é o separador usado no comentário EXIF geral (ver descricao no _submit).
-      return "E:${pUtm.x.toInt()} N:${pUtm.y.toInt()} ${nomeZona.split('/').last.trim()}";
-    } catch (e) {
-      return "UTM N/A";
-    }
+    final prefs = await SharedPreferences.getInstance();
+    final nomeZona = prefs.getString('zona_utm_selecionada') ?? zonaUtmPadrao;
+    return converterParaUtm(latitude: _latitude, longitude: _longitude, nomeZona: nomeZona);
   }
 
   Future<void> _carregarRegras() async {
