@@ -60,3 +60,4 @@ key.properties
 # Ambientes e Segredos
 .env
 .env.*
+!.env.example

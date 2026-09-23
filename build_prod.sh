@@ -1,15 +1,23 @@
 #!/bin/bash
 # Build de produção do APK GeoForest (equivalente Mac/Linux do build_prod.bat)
 #
-# Uso:
-#   export OPENWEATHER_API_KEY="sua_chave"
-#   export MAPBOX_ACCESS_TOKEN="seu_token"
+# Uso (uma vez só):
+#   cp .env.example .env
+#   # edite o .env e preencha as chaves
 #   ./build_prod.sh
 #
-# Ou tudo numa linha só:
+# Ou sem .env, passando na hora:
 #   OPENWEATHER_API_KEY="sua_chave" MAPBOX_ACCESS_TOKEN="seu_token" ./build_prod.sh
 
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  echo "Lendo chaves de .env..."
+  set -a
+  source "$SCRIPT_DIR/.env"
+  set +a
+fi
 
 echo "Iniciando Build do APK GeoForest..."
 
