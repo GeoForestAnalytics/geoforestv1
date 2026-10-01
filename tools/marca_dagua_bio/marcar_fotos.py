@@ -47,6 +47,12 @@ NOME_CSV_PADRAO = "fotos_bio.csv"
 PASTA_CLASSIFICADAS = "classificadas"
 PASTA_SEM_CLASSIFICAR = "sem_classificar"
 
+# Rótulos da empresa, impressos na coluna direita da marca d'água.
+EMPRESA_NOME = "Geo Forest Analytics"
+EMPRESA_EMAIL = "geoforestanalytics@gmail.com"
+EMPRESA_TELEFONE = "+55 15 98140-9153"
+CAMINHO_LOGO = Path(__file__).parent / "logo.png"
+
 PADRAO_NOME = re.compile(
     r'^TREE_(?P<fazenda>.+?)_(?P<talhao>.+)_A(?P<amostra>[^_]+)_L(?P<linha>\d+)_P(?P<posicao>\d+)'
     r'_(?P<timestamp>\d{10,})(?:_(?P<especie>.+))?\.\w+$',
@@ -294,7 +300,28 @@ def carregar_fonte(tamanho, negrito=False):
     return ImageFont.load_default()
 
 
-def desenhar_marca_dagua(img, titulo, linhas_subtitulo):
+_CACHE_LOGO = {}
+
+
+def carregar_logo(altura_alvo):
+    """Carrega logo.png (ícone da árvore, já recortado) e redimensiona mantendo
+    a proporção. Cacheia por altura pra não reabrir/redimensionar a cada foto."""
+    if altura_alvo in _CACHE_LOGO:
+        return _CACHE_LOGO[altura_alvo]
+    if not CAMINHO_LOGO.exists():
+        _CACHE_LOGO[altura_alvo] = None
+        return None
+    try:
+        logo = Image.open(CAMINHO_LOGO).convert("RGBA")
+        largura_alvo = int(logo.width * (altura_alvo / logo.height))
+        logo = logo.resize((max(1, largura_alvo), altura_alvo), Image.LANCZOS)
+    except Exception:
+        logo = None
+    _CACHE_LOGO[altura_alvo] = logo
+    return logo
+
+
+def desenhar_marca_dagua(img, titulo, linhas_subtitulo, linhas_direita=None):
     img = img.convert("RGB")
     largura, altura = img.size
 
@@ -304,18 +331,53 @@ def desenhar_marca_dagua(img, titulo, linhas_subtitulo):
     draw = ImageDraw.Draw(img, "RGBA")
     padding = max(10, largura // 80)
 
-    linhas = [(titulo, fonte_titulo)] if titulo else []
+    linhas_esq = [(titulo, fonte_titulo)] if titulo else []
     for texto_sub in linhas_subtitulo:
         if texto_sub:
-            linhas.append((texto_sub, fonte_subtitulo))
+            linhas_esq.append((texto_sub, fonte_subtitulo))
 
-    if not linhas:
+    textos_dir = [texto for texto in (linhas_direita or []) if texto]
+
+    if not linhas_esq and not textos_dir:
         return img
 
-    altura_barra = padding * 2
-    for texto, fonte in linhas:
-        bbox = draw.textbbox((0, 0), texto, font=fonte)
-        altura_barra += (bbox[3] - bbox[1]) + 4
+    def altura_bloco(linhas):
+        h = 0
+        for texto, fonte in linhas:
+            bbox = draw.textbbox((0, 0), texto, font=fonte)
+            h += (bbox[3] - bbox[1]) + 4
+        return h
+
+    def largura_max(linhas):
+        return max(
+            (draw.textbbox((0, 0), texto, font=fonte)[2] for texto, fonte in linhas),
+            default=0,
+        )
+
+    largura_max_esq = largura_max(linhas_esq)
+    # Espaço que sobra pra coluna da direita (logo + texto) depois do bloco
+    # esquerdo. Se o texto da esquerda for muito comprido, encolhe a fonte da
+    # direita (até um piso legível) em vez de deixar o texto cortar na borda.
+    largura_disponivel_dir = largura - padding - (padding * 3 + largura_max_esq)
+
+    tamanho_fonte_empresa = max(15, largura // 40)
+    linhas_dir = []
+    logo = None
+    logo_largura = 0
+    gap_logo = int(padding * 0.8) if textos_dir else 0
+    if textos_dir:
+        while True:
+            fonte_empresa = carregar_fonte(tamanho_fonte_empresa)
+            linhas_dir = [(texto, fonte_empresa) for texto in textos_dir]
+            altura_texto_dir = altura_bloco(linhas_dir) - 4
+            logo = carregar_logo(max(16, altura_texto_dir))
+            logo_largura = logo.width if logo else 0
+            largura_bloco_dir = logo_largura + gap_logo + largura_max(linhas_dir)
+            if largura_bloco_dir <= largura_disponivel_dir or tamanho_fonte_empresa <= 10:
+                break
+            tamanho_fonte_empresa -= 1
+
+    altura_barra = padding * 2 + max(altura_bloco(linhas_esq), altura_bloco(linhas_dir))
 
     draw.rectangle(
         [(0, altura - altura_barra), (largura, altura)],
@@ -323,10 +385,27 @@ def desenhar_marca_dagua(img, titulo, linhas_subtitulo):
     )
 
     y = altura - altura_barra + padding
-    for texto, fonte in linhas:
+    for texto, fonte in linhas_esq:
         draw.text((padding, y), texto, font=fonte, fill=(255, 255, 255, 255))
         bbox = draw.textbbox((0, 0), texto, font=fonte)
         y += (bbox[3] - bbox[1]) + 4
+
+    if linhas_dir:
+        # Coluna da direita (logo + empresa/email/telefone) — texto alinhado
+        # à esquerda dentro da própria coluna, mas a coluna fica no lado
+        # direito da barra pra não brigar com os dados da amostra. A fonte já
+        # foi ajustada acima pra caber sem cortar na borda da foto.
+        largura_bloco_dir = logo_largura + gap_logo + largura_max(linhas_dir)
+        x_dir = max(largura - padding - largura_bloco_dir, padding * 3 + largura_max_esq)
+        x_texto = x_dir + logo_largura + gap_logo
+
+        y = altura - altura_barra + padding
+        if logo:
+            img.paste(logo, (x_dir, y), logo)
+        for texto, fonte in linhas_dir:
+            draw.text((x_texto, y), texto, font=fonte, fill=(255, 255, 255, 230))
+            bbox = draw.textbbox((0, 0), texto, font=fonte)
+            y += (bbox[3] - bbox[1]) + 4
 
     return img
 
@@ -408,7 +487,8 @@ def marcar(pasta, csv_path, saida):
                 # Corrige a orientação real dos pixels a partir da tag EXIF de rotação —
                 # sem isso, foto tirada na vertical vem "deitada" e a marca sai na lateral.
                 img = ImageOps.exif_transpose(img)
-                img_marcada = desenhar_marca_dagua(img, titulo, [linha1, linha2, linha3])
+                linhas_empresa = [EMPRESA_NOME, EMPRESA_EMAIL, EMPRESA_TELEFONE]
+                img_marcada = desenhar_marca_dagua(img, titulo, [linha1, linha2, linha3], linhas_empresa)
                 img_marcada.save(saida / arquivo, quality=90)
         except Exception as e:
             print(f"  ERRO em {arquivo}, pulando: {e}")

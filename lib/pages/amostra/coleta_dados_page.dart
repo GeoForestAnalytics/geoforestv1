@@ -324,8 +324,9 @@ class _ColetaDadosPageState extends State<ColetaDadosPage> {
     }
 
     // 5. Monta a string completa para o EXIF (UserComment)
-    final String infoCompleta = 
+    final String infoCompleta =
         "Projeto: $projetoNome | "
+        "Atividade: ${_parcelaAtual.atividadeTipo ?? 'N/A'} | "
         "Fazenda: ${_parcelaAtual.nomeFazenda} | "
         "Talhao: ${_parcelaAtual.nomeTalhao} | "
         "Parcela: ${_idParcelaController.text} | "
