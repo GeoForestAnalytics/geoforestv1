@@ -39,29 +39,34 @@ class PlanejamentoCubagemImportStrategy extends BaseImportStrategy {
       if (idArvore == null) continue;
 
       final arvoreExistente = await txn.query('cubagens_arvores', where: 'talhaoId = ? AND identificador = ?', whereArgs: [talhao.id!, idArvore]);
-      if (arvoreExistente.isNotEmpty) continue;
-
-      double? latitudeFinal, longitudeFinal;
-      final eastingStr = BaseImportStrategy.getValue(row, ['long (x)']);
-      final northingStr = BaseImportStrategy.getValue(row, ['lat (y)']);
-      final zonaStr = BaseImportStrategy.getValue(row, ['zonautm']);
-
-      if (eastingStr != null && northingStr != null && zonaStr != null) {
-          final easting = double.tryParse(eastingStr.replaceAll(',', '.'));
-          final northing = double.tryParse(northingStr.replaceAll(',', '.'));
-          final zonaNum = int.tryParse(zonaStr.replaceAll(RegExp(r'[^0-9]'), ''));
-
-          if (easting != null && northing != null && zonaNum != null) {
-              final epsg = 31978 + (zonaNum - 18);
-              if (proj4Definitions.containsKey(epsg)) {
-                  final projUTM = proj4.Projection.get('EPSG:$epsg') ?? proj4.Projection.parse(proj4Definitions[epsg]!);
-                  final projWGS84 = proj4.Projection.get('EPSG:4326')!;
-                  var pontoWGS84 = projUTM.transform(projWGS84, proj4.Point(x: easting, y: northing));
-                  latitudeFinal = pontoWGS84.y;
-                  longitudeFinal = pontoWGS84.x;
-              }
-          }
+      // Já existe um registro pra esse identificador (ex.: planilha com mais de
+      // uma linha pro mesmo ponto). Se o registro salvo já tem coordenada, não
+      // há nada a fazer. Mas se ele ficou sem coordenada (a primeira linha
+      // processada veio com a célula de Long/Lat em branco) e ESTA linha trouxe
+      // uma coordenada válida, completa o registro em vez de descartar a
+      // informação — antes isso era perdido silenciosamente.
+      if (arvoreExistente.isNotEmpty) {
+        final jaTemCoordenada = arvoreExistente.first['latitude'] != null
+            && arvoreExistente.first['longitude'] != null;
+        if (jaTemCoordenada) continue;
+        final coordenadaDaLinha = _extrairCoordenada(row);
+        if (coordenadaDaLinha == null) continue;
+        await txn.update(
+          'cubagens_arvores',
+          {
+            'latitude': coordenadaDaLinha.$1,
+            'longitude': coordenadaDaLinha.$2,
+            'lastModified': now,
+          },
+          where: 'id = ?',
+          whereArgs: [arvoreExistente.first['id']],
+        );
+        continue;
       }
+
+      final coordenada = _extrairCoordenada(row);
+      final latitudeFinal = coordenada?.$1;
+      final longitudeFinal = coordenada?.$2;
 
       // Coluna O (classe): se for um número → passo fixo de seções; classe vem sempre de classe_A/classe_B
       final classeRaw = BaseImportStrategy.getValue(row, ['classe']);
@@ -101,7 +106,34 @@ class PlanejamentoCubagemImportStrategy extends BaseImportStrategy {
       map['lastModified'] = now;
       await txn.insert('cubagens_arvores', map);
       result.cubagensCriadas++;
+      if (latitudeFinal != null && longitudeFinal != null) {
+        result.cubagensComCoordenada++;
+      } else {
+        result.cubagensSemCoordenada++;
+      }
     }
     return result;
+  }
+
+  /// Lê Long(X)/Lat(Y)/ZonaUTM da linha e converte UTM -> WGS84.
+  /// Retorna null se a linha não tiver uma coordenada completa/válida.
+  (double, double)? _extrairCoordenada(Map<String, dynamic> row) {
+    final eastingStr = BaseImportStrategy.getValue(row, ['long (x)']);
+    final northingStr = BaseImportStrategy.getValue(row, ['lat (y)']);
+    final zonaStr = BaseImportStrategy.getValue(row, ['zonautm']);
+    if (eastingStr == null || northingStr == null || zonaStr == null) return null;
+
+    final easting = double.tryParse(eastingStr.replaceAll(',', '.'));
+    final northing = double.tryParse(northingStr.replaceAll(',', '.'));
+    final zonaNum = int.tryParse(zonaStr.replaceAll(RegExp(r'[^0-9]'), ''));
+    if (easting == null || northing == null || zonaNum == null) return null;
+
+    final epsg = 31978 + (zonaNum - 18);
+    if (!proj4Definitions.containsKey(epsg)) return null;
+
+    final projUTM = proj4.Projection.get('EPSG:$epsg') ?? proj4.Projection.parse(proj4Definitions[epsg]!);
+    final projWGS84 = proj4.Projection.get('EPSG:4326')!;
+    final pontoWGS84 = projUTM.transform(projWGS84, proj4.Point(x: easting, y: northing));
+    return (pontoWGS84.y, pontoWGS84.x); // (latitude, longitude)
   }
 }

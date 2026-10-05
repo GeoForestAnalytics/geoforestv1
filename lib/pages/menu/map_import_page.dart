@@ -20,6 +20,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/pilha_repository.dart';
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+import 'package:geoforestv1/pages/cubagem/cubagem_dados_page.dart';
 
 class MapImportPage extends StatefulWidget {
   const MapImportPage({super.key});
@@ -205,16 +207,75 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
     }
   }
 
+  /// Toca num ponto de cubagem no mapa. A O.S. costuma marcar um único GPS
+  /// pra várias árvores/classes de diâmetro próximas (a mesma coordenada se
+  /// repete em várias linhas da planilha) — então, se houver mais de uma
+  /// árvore de cubagem exatamente nesse ponto, mostra uma lista pra escolher
+  /// qual medir, em vez de abrir uma qualquer.
+  Future<void> _abrirCubagemNoPonto(MapProvider mapProvider, SamplePoint ponto) async {
+    const epsilon = 0.0000001;
+    final doMesmoLocal = mapProvider.samplePoints.where((p) =>
+        p.data['tipo'] == 'cubagem' &&
+        (p.position.latitude - ponto.position.latitude).abs() < epsilon &&
+        (p.position.longitude - ponto.position.longitude).abs() < epsilon
+    ).toList();
+
+    SamplePoint escolhido = ponto;
+    if (doMesmoLocal.length > 1) {
+      if (!mounted) return;
+      final selecionado = await showModalBottomSheet<SamplePoint>(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text('Várias árvores nesse ponto — escolha qual medir',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              const Divider(height: 1),
+              ...doMesmoLocal.map((p) => ListTile(
+                leading: const Icon(Icons.park_outlined),
+                title: Text('${p.data['identificador'] ?? 'Árvore ${p.id}'}'),
+                trailing: p.status == SampleStatus.completed
+                    ? const Icon(Icons.check_circle, color: Colors.green)
+                    : null,
+                onTap: () => Navigator.pop(ctx, p),
+              )),
+            ],
+          ),
+        ),
+      );
+      if (selecionado == null) return;
+      escolhido = selecionado;
+    }
+
+    final dbId = escolhido.data['dbId'] as int?;
+    if (dbId == null) return;
+    final arvore = await CubagemRepository().getCubagemById(dbId);
+    if (!mounted || arvore == null) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => CubagemDadosPage(metodo: 'Relativas', arvoreParaEditar: arvore)),
+    );
+  }
+
   /// Exibe o menu de opções ao segurar um marcador.
   void _showMarkerOptions(BuildContext context, SamplePoint samplePoint) {
     final mapProvider = context.read<MapProvider>();
+    final isCubagem = samplePoint.data['tipo'] == 'cubagem';
+    final titulo = isCubagem
+        ? 'Cubagem ${samplePoint.data['identificador'] ?? samplePoint.id}'
+        : 'Amostra ${samplePoint.id}';
 
     showModalBottomSheet(
       context: context,
       builder: (ctx) => Wrap(
         children: <Widget>[
           ListTile(
-            title: Text('Amostra ${samplePoint.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text('Lat: ${samplePoint.position.latitude.toStringAsFixed(5)}, Lon: ${samplePoint.position.longitude.toStringAsFixed(5)}'),
           ),
           const Divider(height: 1),
@@ -648,14 +709,18 @@ class _MapImportPageState extends State<MapImportPage> with RouteAware {
                     child: GestureDetector(
                       onTap: () async {
                         if (!mounted) return;
+                        if (samplePoint.data['tipo'] == 'cubagem') {
+                          await _abrirCubagemNoPonto(mapProvider, samplePoint);
+                          return;
+                        }
                         final dbId = samplePoint.data['dbId'] as int?;
                         if (dbId == null) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro: ID da parcela não encontrado.')));
                           return;
                         }
-                        
+
                         final parcela = await ParcelaRepository().getParcelaById(dbId);
-                        
+
                         if (!mounted || parcela == null) return;
 
                         await Navigator.push<bool>(

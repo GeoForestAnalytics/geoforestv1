@@ -28,6 +28,8 @@ import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:geoforestv1/data/repositories/fazenda_repository.dart';
 import 'package:geoforestv1/data/repositories/talhao_repository.dart';
 import 'package:geoforestv1/data/repositories/pilha_repository.dart';
+import 'package:geoforestv1/data/repositories/cubagem_repository.dart';
+import 'package:geoforestv1/models/cubagem_arvore_model.dart';
 import 'package:geoforestv1/data/datasources/local/database_helper.dart';
 import 'package:geoforestv1/models/pilha_madeira_model.dart';
 import 'package:geoforestv1/utils/app_config.dart';
@@ -45,6 +47,7 @@ class MapProvider with ChangeNotifier {
   final _fazendaRepository = FazendaRepository();
   final _talhaoRepository = TalhaoRepository();
   final _pilhaRepository = PilhaRepository();
+  final _cubagemRepository = CubagemRepository();
   
   static final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
@@ -1331,6 +1334,20 @@ class MapProvider with ChangeNotifier {
               data: {'dbId': p.dbId}
           ));
         }
+
+        // Árvores de cubagem (plano importado ou coletadas) também entram no
+        // mapa de planejamento — antes só parcela/silvicultura apareciam aqui,
+        // cubagem nunca tinha sido ligada a essa tela.
+        final cubagens = await _cubagemRepository.getTodasCubagensDoTalhao(talhao.id!);
+        for (final c in cubagens) {
+          if (c.latitude == null || c.longitude == null) continue;
+          _samplePoints.add(SamplePoint(
+            id: c.id ?? 0,
+            position: LatLng(c.latitude!, c.longitude!),
+            status: _getCubagemStatus(c),
+            data: {'dbId': c.id, 'tipo': 'cubagem', 'identificador': c.identificador},
+          ));
+        }
       }
     }
     _centroidesPilha = await _pilhaRepository.getCentroidesParaAtividade(_currentAtividade!.id!);
@@ -1379,6 +1396,13 @@ class MapProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  SampleStatus _getCubagemStatus(CubagemArvore arvore) {
+    if (arvore.exportada) return SampleStatus.exported;
+    // Placeholder importado ainda não medido: altura/CAP ficam zerados.
+    if (arvore.alturaTotal > 0) return SampleStatus.completed;
+    return SampleStatus.untouched;
+  }
+
   SampleStatus _getSampleStatus(Parcela parcela) {
     if (parcela.exportada) {
       return SampleStatus.exported;
@@ -1396,7 +1420,13 @@ class MapProvider with ChangeNotifier {
   }
 
   Future<void> exportarPlanoDeAmostragem(BuildContext context) async {
-    final List<int> parcelaIds = samplePoints.map((p) => p.data['dbId'] as int).toList();
+    // Exclui os pontos de cubagem — eles entraram em samplePoints só pra
+    // aparecer no mapa, mas o dbId deles é de outra tabela (cubagens_arvores),
+    // não dá pra misturar com IDs de parcela aqui.
+    final List<int> parcelaIds = samplePoints
+        .where((p) => p.data['tipo'] != 'cubagem')
+        .map((p) => p.data['dbId'] as int)
+        .toList();
 
     if (parcelaIds.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

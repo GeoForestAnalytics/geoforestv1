@@ -278,7 +278,10 @@ class ImportRepository {
                  " - Atividades: ${finalResult.atividadesCriadas}\n"
                  " - Fazendas: ${finalResult.fazendasCriadas}\n"
                  " - Talhões: ${finalResult.talhoesCriados}\n"
-                 " - Árvores de Cubagem (placeholders): ${finalResult.cubagensCriadas}";
+                 " - Árvores de Cubagem (placeholders): ${finalResult.cubagensCriadas}\n\n"
+                 "Diagnóstico de coordenada:\n"
+                 " - Com Long/Lat válida: ${finalResult.cubagensComCoordenada}\n"
+                 " - Sem coordenada: ${finalResult.cubagensSemCoordenada}";
       } else {
         report = "Importação Concluída para '${projeto.nome}'!\n\n"
                  "Linhas: ${finalResult.linhasProcessadas}\n"

@@ -143,6 +143,14 @@ class CubagemRepository {
     return List.generate(maps.length, (i) => CubagemArvore.fromMap(maps[i]));
   }
 
+  Future<CubagemArvore?> getCubagemById(int id) async {
+    final db = await _dbHelper.database;
+    final maps = await db.query(DbCubagensArvores.tableName,
+        where: '${DbCubagensArvores.id} = ?', whereArgs: [id]);
+    if (maps.isEmpty) return null;
+    return CubagemArvore.fromMap(maps.first);
+  }
+
   Future<List<CubagemArvore>> getCubagensDoDiaPorEquipe({
     required String nomeLider,
     required DateTime dataSelecionada,

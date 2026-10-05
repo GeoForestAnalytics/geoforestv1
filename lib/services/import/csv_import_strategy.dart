@@ -13,6 +13,9 @@ class ImportResult {
   int parcelasCriadas = 0, arvoresCriadas = 0, cubagensCriadas = 0, secoesCriadas = 0;
   int parcelasAtualizadas = 0, cubagensAtualizadas = 0, parcelasIgnoradas = 0;
   int centroidesCriados = 0;
+  // Diagnóstico temporário: quantas árvores de cubagem criadas vieram COM
+  // coordenada válida vs sem (Long/Lat em branco ou não convertida).
+  int cubagensComCoordenada = 0, cubagensSemCoordenada = 0;
 }
 
 abstract class CsvImportStrategy {

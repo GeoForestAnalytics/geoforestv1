@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_vertexai/firebase_vertexai.dart';
+import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 
@@ -52,7 +55,18 @@ class AiValidationService {
         return null;
       }
       return texto;
-    } catch (e) {
+    } catch (e, stack) {
+      // Best-effort mesmo no log: nunca deixa a sugestão de espécie derrubar a
+      // coleta. Mas sem isso, um erro de API/rede/permissão fica indistinguível
+      // de "a IA não reconheceu a árvore" — por isso registra no Crashlytics
+      // (não-fatal) antes de engolir o erro.
+      debugPrint('Erro ao sugerir espécie por IA: $e');
+      unawaited(FirebaseCrashlytics.instance.recordError(
+        e,
+        stack,
+        reason: 'sugerirEspeciePorFoto falhou',
+        fatal: false,
+      ));
       return null;
     }
   }
