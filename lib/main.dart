@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
@@ -45,6 +47,40 @@ void initializeProj4Definitions() {
   debugPrint("Definições Proj4 inicializadas/verificadas.");
 }
 
+/// Configura o cache de tiles do mapa (imagem de satélite/ruas) pra usar a
+/// pasta de dados persistente do app em vez da pasta de cache do sistema.
+///
+/// Sem isso, o flutter_map usa a pasta de cache padrão por baixo dos panos —
+/// e o Android pode apagar essa pasta sozinho quando o aparelho fica com
+/// pouco espaço, ou quando o usuário toca em "Limpar cache". Como o uso em
+/// campo depende de internet instável, a imagem precisa sobreviver a isso.
+///
+/// Precisa rodar ANTES de qualquer mapa carregar um tile — depois que o
+/// flutter_map cria a instância padrão (na pasta de cache do sistema), essa
+/// configuração deixa de ter efeito.
+///
+/// `overrideFreshAge` bem longo é proposital: por padrão, o flutter_map
+/// considera um tile "velho" segundo os headers HTTP do servidor de mapas
+/// (ou 7 dias, se o servidor não informar) — e se o app tentar revalidar um
+/// tile velho SEM internet, o comportamento padrão é APAGAR o tile em vez de
+/// continuar mostrando ele. Isso anularia o propósito do cache em campo (a
+/// equipe pode voltar numa fazenda depois de semanas sem conexão). Como
+/// imagem de satélite não muda com frequência, vale sempre priorizar "mostrar
+/// algo offline" sobre "imagem sempre atualizadíssima".
+Future<void> _inicializarCacheDeMapa() async {
+  try {
+    final diretorio = await getApplicationSupportDirectory();
+    BuiltInMapCachingProvider.getOrCreateInstance(
+      cacheDirectory: diretorio.path,
+      maxCacheSize: 500 * 1000 * 1000, // ~500 MB
+      overrideFreshAge: const Duration(days: 365),
+    );
+    debugPrint("Cache de tiles do mapa configurado em: ${diretorio.path}");
+  } catch (e) {
+    debugPrint("Aviso: não consegui configurar o cache persistente de tiles: $e");
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   initializeProj4Definitions();
@@ -56,6 +92,7 @@ Future<void> main() async {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
+    await _inicializarCacheDeMapa();
   } else {
     // Web não suporta sqflite_ffi direto.
     // Se for usar banco local na web, precisaria de configuração extra (sqflite_common_ffi_web).

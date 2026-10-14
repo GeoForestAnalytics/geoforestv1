@@ -27,11 +27,15 @@ fi
 if [ -z "$MAPBOX_ACCESS_TOKEN" ]; then
   echo "AVISO: variável de ambiente MAPBOX_ACCESS_TOKEN não definida (camada de satélite Mapbox vai cair no fallback)."
 fi
+if [ -z "$PLANTNET_API_KEY" ]; then
+  echo "AVISO: variável de ambiente PLANTNET_API_KEY não definida (identificação de espécie por foto não vai funcionar nesse build)."
+fi
 
 flutter build apk --release \
   --dart-define=RECAPTCHA_SITE_KEY=6LdafxgsAAAAAInBOeFOrNJR3l-4gUCzdry_XELi \
   --dart-define=OPENWEATHER_API_KEY="$OPENWEATHER_API_KEY" \
-  --dart-define=MAPBOX_ACCESS_TOKEN="$MAPBOX_ACCESS_TOKEN"
+  --dart-define=MAPBOX_ACCESS_TOKEN="$MAPBOX_ACCESS_TOKEN" \
+  --dart-define=PLANTNET_API_KEY="$PLANTNET_API_KEY"
 
 echo ""
 echo "Processo concluído! Verifique a pasta build/app/outputs/flutter-apk/"

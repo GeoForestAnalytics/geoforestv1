@@ -12,7 +12,7 @@ import 'package:geoforestv1/utils/image_utils.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geoforestv1/models/codigo_florestal_model.dart';
 import 'package:geoforestv1/data/repositories/codigos_repository.dart';
-import 'package:geoforestv1/services/ai_validation_service.dart';
+import 'package:geoforestv1/services/plantnet_service.dart';
 import 'package:geoforestv1/data/repositories/parcela_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geoforestv1/utils/utm_converter.dart';
@@ -110,8 +110,8 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
 
   static const _especieDesconhecida = 'Desconhecida';
 
-  final _aiService = AiValidationService();
-  String? _sugestaoIa;
+  final _plantNetService = PlantNetService();
+  List<SugestaoEspecie> _sugestoesIa = [];
   bool _buscandoSugestaoIa = false;
   bool _identificadoPorIa = false;
   String? _ultimaSugestaoAceitaIa;
@@ -121,31 +121,54 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
       _especieController.text = _especieDesconhecida;
       _especieFieldCtrl?.text = _especieDesconhecida;
       _identificadoPorIa = false;
-      _sugestaoIa = null;
+      _sugestoesIa = [];
     });
   }
 
-  Future<void> _buscarSugestaoIa(String caminhoFoto) async {
-    setState(() { _buscandoSugestaoIa = true; _sugestaoIa = null; });
-    final sugestao = await _aiService.sugerirEspeciePorFoto(
-      caminhoFoto,
-      especiesJaConfirmadas: _especiesConfirmadasNoProjeto,
-    );
+  /// Dispara a identificação por foto. Chamada automaticamente na primeira
+  /// foto da árvore (gasta 1 consulta da cota diária do Pl@ntNet); se o
+  /// usuário tirar mais fotos depois, não dispara de novo sozinho — ele
+  /// pode pedir manualmente (botão "reidentificar com todas as fotos") pra
+  /// juntar todas numa única consulta melhor, em vez de gastar uma por foto.
+  Future<void> _buscarSugestaoIa() async {
+    if (_fotosArvore.isEmpty) return;
+    setState(() { _buscandoSugestaoIa = true; _sugestoesIa = []; });
+    final (sugestoes, erro) = await _plantNetService.identificarPorFotos(_fotosArvore);
     if (!mounted) return;
     setState(() {
       _buscandoSugestaoIa = false;
-      _sugestaoIa = sugestao;
+      _sugestoesIa = sugestoes;
+    });
+    if (erro != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(erro), backgroundColor: Colors.red.shade700, duration: const Duration(seconds: 5)),
+      );
+    } else if (sugestoes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nenhuma espécie identificada com confiança nessas fotos. Tenta outro ângulo ou preenche manualmente.')),
+      );
+    }
+  }
+
+  void _aceitarSugestao(SugestaoEspecie sugestao) {
+    setState(() {
+      _especieController.text = sugestao.nomeExibicao;
+      _especieFieldCtrl?.text = sugestao.nomeExibicao;
+      _identificadoPorIa = true;
+      _ultimaSugestaoAceitaIa = sugestao.nomeExibicao;
+      _sugestoesIa = [];
     });
   }
 
-  void _aceitarSugestaoIa() {
-    if (_sugestaoIa == null) return;
+  /// Atalho de economia de cota: se a espécie já foi confirmada antes nesse
+  /// mesmo projeto (comum em avenida/plantio com a mesma espécie repetida),
+  /// o usuário escolhe direto na lista sem gastar nenhuma consulta da API.
+  void _usarEspecieJaConfirmada(String nomeEspecie) {
     setState(() {
-      _especieController.text = _sugestaoIa!;
-      _especieFieldCtrl?.text = _sugestaoIa!;
-      _identificadoPorIa = true;
-      _ultimaSugestaoAceitaIa = _sugestaoIa;
-      _sugestaoIa = null;
+      _especieController.text = nomeEspecie;
+      _especieFieldCtrl?.text = nomeEspecie;
+      _identificadoPorIa = false;
+      _sugestoesIa = [];
     });
   }
 
@@ -348,11 +371,11 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
       setState(() {
         _fotosArvore.add(caminhoFinal);
       });
-
-      // Dispara em segundo plano — não trava a captura de foto nem exige aguardar a IA.
-      if (widget.isBio) {
-        _buscarSugestaoIa(caminhoFinal);
-      }
+      // Identificação é manual agora (botão "Identificar espécie") — não
+      // dispara sozinha na 1ª foto. Assim o usuário tira as fotos que quiser
+      // (padrão: árvore inteira, folha, tronco, flor/fruto) e só gasta uma
+      // consulta da cota quando decidir, já com tudo reunido — em vez de
+      // arriscar gastar a identificação numa primeira foto ruim.
 
     } catch (e) {
       debugPrint("Erro: $e");
@@ -740,7 +763,25 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                       ),
                     ],
                   ),
-                  if (_buscandoSugestaoIa || _sugestaoIa != null) ...[
+                  // Atalho de economia de cota: espécies já confirmadas nesse
+                  // projeto, escolha direto sem gastar consulta nenhuma do
+                  // Pl@ntNet — útil pra avenida/plantio com espécie repetida.
+                  if (_especiesConfirmadasNoProjeto.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: _especiesConfirmadasNoProjeto.map((especie) {
+                        return ActionChip(
+                          label: Text(especie, style: const TextStyle(fontSize: 11)),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          onPressed: () => _usarEspecieJaConfirmada(especie),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  if (_buscandoSugestaoIa || _sugestoesIa.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -749,39 +790,102 @@ class _ArvoreDialogState extends State<ArvoreDialog> {
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: Colors.purple.shade200),
                       ),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.auto_awesome, size: 16, color: Colors.purple.shade400),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              _buscandoSugestaoIa
-                                  ? 'IA analisando a foto...'
-                                  : 'Sugestão IA: $_sugestaoIa',
-                              style: TextStyle(fontSize: 12, color: Colors.purple.shade700),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                          Row(
+                            children: [
+                              Icon(Icons.auto_awesome, size: 16, color: Colors.purple.shade400),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  _buscandoSugestaoIa
+                                      ? 'Identificando pela foto (Pl@ntNet)...'
+                                      : 'Sugestão: ${_sugestoesIa.first.nomeExibicao} '
+                                        '(${(_sugestoesIa.first.confianca * 100).toStringAsFixed(0)}%)',
+                                  style: TextStyle(fontSize: 12, color: Colors.purple.shade700),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (_buscandoSugestaoIa)
+                                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                              else ...[
+                                TextButton(
+                                  onPressed: () => _aceitarSugestao(_sugestoesIa.first),
+                                  style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(40, 28)),
+                                  child: const Text('Usar', style: TextStyle(fontSize: 12)),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 16),
+                                  tooltip: 'Descartar sugestão',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => setState(() => _sugestoesIa = []),
+                                ),
+                              ],
+                            ],
                           ),
-                          if (_buscandoSugestaoIa)
-                            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                          else ...[
-                            TextButton(
-                              onPressed: _aceitarSugestaoIa,
-                              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(40, 28)),
-                              child: const Text('Usar', style: TextStyle(fontSize: 12)),
+                          // Demais candidatos, se o Pl@ntNet não teve certeza
+                          // absoluta — ajuda a escolher rápido sem gastar
+                          // outra consulta.
+                          if (!_buscandoSugestaoIa && _sugestoesIa.length > 1)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4, left: 22),
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: _sugestoesIa.skip(1).take(3).map((s) {
+                                  return ActionChip(
+                                    label: Text(
+                                      '${s.nomeExibicao} (${(s.confianca * 100).toStringAsFixed(0)}%)',
+                                      style: const TextStyle(fontSize: 10.5),
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    onPressed: () => _aceitarSugestao(s),
+                                  );
+                                }).toList(),
+                              ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 16),
-                              tooltip: 'Descartar sugestão',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              onPressed: () => setState(() => _sugestaoIa = null),
-                            ),
-                          ],
                         ],
                       ),
                     ),
                   ],
+                  // Identificação é sempre manual: tira quantas fotos quiser
+                  // (padrão sugerido: árvore inteira, folha, tronco, flor/
+                  // fruto) e só gasta 1 consulta da cota quando tocar aqui,
+                  // já mandando tudo junto — evita gastar a identificação
+                  // numa foto ruim tirada por engano primeiro.
+                  if (!_buscandoSugestaoIa && _fotosArvore.isNotEmpty && _sugestoesIa.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _buscarSugestaoIa,
+                            icon: const Icon(Icons.auto_awesome, size: 14),
+                            label: Text('Identificar espécie (${_fotosArvore.length} foto${_fotosArvore.length == 1 ? '' : 's'})', style: const TextStyle(fontSize: 11)),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              minimumSize: const Size(40, 28),
+                              visualDensity: VisualDensity.compact,
+                              backgroundColor: Colors.purple.shade50,
+                              foregroundColor: Colors.purple.shade700,
+                              elevation: 0,
+                            ),
+                          ),
+                          if (_fotosArvore.length < 4)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                'Padrão recomendado: árvore inteira, folha, tronco, flor/fruto',
+                                style: TextStyle(fontSize: 10, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   if (_identificadoPorIa) ...[
                     const SizedBox(height: 4),
                     Row(

@@ -25,6 +25,12 @@ class AppConfig {
     'MAPBOX_ACCESS_TOKEN',
     defaultValue: '', // Perfeito!
   );
+
+  // Pl@ntNet API Key (identificação de espécie por foto, módulo BIO)
+  static const String plantNetApiKey = String.fromEnvironment(
+    'PLANTNET_API_KEY',
+    defaultValue: '',
+  );
   
   // Timeouts para operações de rede
   static const Duration networkTimeout = Duration(seconds: 15);

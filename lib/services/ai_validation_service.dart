@@ -1,9 +1,5 @@
-import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_vertexai/firebase_vertexai.dart';
-import 'package:flutter/foundation.dart';
 import 'package:geoforestv1/models/arvore_model.dart';
 import 'package:geoforestv1/models/parcela_model.dart';
 
@@ -14,61 +10,6 @@ class AiValidationService {
     _model = FirebaseVertexAI.instance.generativeModel(
       model: 'gemini-2.0-flash',
     );
-  }
-
-  /// Sugere a espécie de uma árvore a partir de uma foto (casca/folha/copa).
-  /// Best-effort: retorna null se não conseguir identificar, sem sinal, ou em caso de erro/timeout.
-  /// Nunca deve bloquear o fluxo de coleta — chamador decide se aguarda ou segue em paralelo.
-  Future<String?> sugerirEspeciePorFoto(String caminhoFoto, {List<String> especiesJaConfirmadas = const []}) async {
-    try {
-      final bytes = await File(caminhoFoto).readAsBytes();
-
-      final contextoProjeto = especiesJaConfirmadas.isEmpty
-          ? ''
-          : '''
-
-            Espécies já confirmadas neste mesmo projeto: ${especiesJaConfirmadas.join(', ')}.
-            Se a árvore da foto bater com uma dessas, prefira responder com o nome exatamente
-            igual ao da lista (mesma grafia), pra manter consistência. Só sugira uma espécie
-            fora dessa lista se tiver certeza de que é diferente.
-          ''';
-
-      final prompt = [
-        Content.multi([
-          TextPart('''
-            Você é um botânico especialista em flora brasileira, incluindo árvores de arborização urbana.
-            Olhe a foto e identifique a espécie da árvore (casca, folha, copa ou outro detalhe visível).
-            $contextoProjeto
-            Responda APENAS com o nome popular mais comum da espécie em português, sem explicação, sem pontuação extra.
-            Se não conseguir identificar com razoável confiança, responda exatamente: Desconhecida
-          '''),
-          InlineDataPart('image/jpeg', bytes),
-        ]),
-      ];
-
-      final response = await _model
-          .generateContent(prompt)
-          .timeout(const Duration(seconds: 20));
-
-      final texto = response.text?.trim();
-      if (texto == null || texto.isEmpty || texto.toLowerCase().contains('desconhecida')) {
-        return null;
-      }
-      return texto;
-    } catch (e, stack) {
-      // Best-effort mesmo no log: nunca deixa a sugestão de espécie derrubar a
-      // coleta. Mas sem isso, um erro de API/rede/permissão fica indistinguível
-      // de "a IA não reconheceu a árvore" — por isso registra no Crashlytics
-      // (não-fatal) antes de engolir o erro.
-      debugPrint('Erro ao sugerir espécie por IA: $e');
-      unawaited(FirebaseCrashlytics.instance.recordError(
-        e,
-        stack,
-        reason: 'sugerirEspeciePorFoto falhou',
-        fatal: false,
-      ));
-      return null;
-    }
   }
 
   /// 1. MÉTODO PARA O CHAT (Manual Técnico e Suporte ao App)
